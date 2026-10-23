@@ -1,0 +1,2618 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "两性健康服务平台 · 已实现认证 API",
+    "version": "1.1.0",
+    "description": "客户端密码认证已实现，无短信验证码。每个操作的 x-implementation-status 标注实现状态，其他模块仍为设计契约。"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000/api/v1",
+      "description": "本地开发（示例）"
+    },
+    {
+      "url": "https://api.example.com/api/v1",
+      "description": "生产域名占位，必须替换"
+    }
+  ],
+  "tags": [
+    {
+      "name": "01 登录与鉴权"
+    },
+    {
+      "name": "02 用户与地址"
+    }
+  ],
+  "components": {
+    "schemas": {
+      "ActionResult": {
+        "type": "object",
+        "description": "无业务对象的操作结果。",
+        "additionalProperties": false,
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "操作是否完成。",
+            "example": true
+          }
+        },
+        "required": [
+          "success"
+        ]
+      },
+      "FieldError": {
+        "type": "object",
+        "description": "参数校验错误。",
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "type": "string",
+            "description": "字段路径。",
+            "example": "items[0].quantity"
+          },
+          "reason": {
+            "type": "string",
+            "description": "原因。",
+            "example": "必须大于等于 1"
+          }
+        },
+        "required": [
+          "field",
+          "reason"
+        ]
+      },
+      "ApiError": {
+        "type": "object",
+        "description": "错误详情；不返回堆栈、数据库或密钥信息。",
+        "additionalProperties": false,
+        "properties": {
+          "details": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldError"
+            },
+            "description": "参数错误列表；非参数错误为 []"
+          },
+          "retryAfterSeconds": {
+            "type": "integer",
+            "description": "可选：建议重试等待秒数。",
+            "minimum": 0,
+            "example": 60
+          }
+        },
+        "required": [
+          "details"
+        ]
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "description": "失败响应；HTTP 状态与业务错误码同时有意义。",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "稳定的业务错误码。",
+            "example": "VALIDATION_ERROR"
+          },
+          "message": {
+            "type": "string",
+            "description": "可读提示；前端逻辑依据 code。",
+            "example": "请求参数不合法"
+          },
+          "data": {
+            "type": "object",
+            "nullable": true,
+            "enum": [
+              null
+            ],
+            "description": "失败固定为 null。"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "请求追踪号。",
+            "example": "req_demo_001"
+          },
+          "timestamp": {
+            "type": "string",
+            "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+            "format": "date-time",
+            "example": "2026-10-22T02:00:00Z"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "data",
+          "error",
+          "requestId",
+          "timestamp"
+        ]
+      },
+      "MembershipSummary": {
+        "type": "object",
+        "description": "会员状态以服务端当前时间判定，不依赖前端缓存。",
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "type": "boolean",
+            "description": "当前是否为有效会员。",
+            "example": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "UTC 时间；未发生时为 null。",
+            "format": "date-time",
+            "example": "2026-11-21T02:00:00Z",
+            "nullable": true
+          },
+          "benefitCodes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "权益编码。",
+              "example": "MEMBER_COURSES"
+            },
+            "description": "当前权益；过期为 []"
+          }
+        },
+        "required": [
+          "active",
+          "expiresAt",
+          "benefitCodes"
+        ]
+      },
+      "UserSummary": {
+        "type": "object",
+        "description": "用户自身资料；手机号脱敏。",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "example": "id_10001"
+          },
+          "nickname": {
+            "type": "string",
+            "description": "昵称。",
+            "minLength": 1,
+            "maxLength": 32,
+            "example": "小雨"
+          },
+          "avatarUrl": {
+            "type": "string",
+            "description": "HTTPS URL。",
+            "format": "uri",
+            "example": "https://cdn.example.com/cover.jpg",
+            "nullable": true
+          },
+          "phoneMasked": {
+            "type": "string",
+            "description": "脱敏手机。",
+            "example": "138****0000"
+          },
+          "status": {
+            "type": "string",
+            "description": "账号状态。",
+            "enum": [
+              "ACTIVE",
+              "BANNED",
+              "DEACTIVATED"
+            ],
+            "example": "ACTIVE"
+          },
+          "membership": {
+            "$ref": "#/components/schemas/MembershipSummary"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+            "format": "date-time",
+            "example": "2026-10-22T02:00:00Z"
+          }
+        },
+        "required": [
+          "id",
+          "nickname",
+          "avatarUrl",
+          "phoneMasked",
+          "status",
+          "membership",
+          "createdAt"
+        ]
+      },
+      "AuthTokens": {
+        "type": "object",
+        "description": "客户端会话；只在客户端鉴权响应中返回。",
+        "additionalProperties": false,
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "description": "JWT，aud=client；建议 15 分钟。",
+            "example": "eyJ...client.access"
+          },
+          "accessExpiresInSeconds": {
+            "type": "integer",
+            "description": "accessToken 有效秒数。",
+            "minimum": 1,
+            "example": 900
+          },
+          "refreshToken": {
+            "type": "string",
+            "description": "不透明随机令牌，每次使用轮换；建议最长 30 天。",
+            "example": "rt_client_example"
+          },
+          "refreshExpiresAt": {
+            "type": "string",
+            "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+            "format": "date-time",
+            "example": "2026-11-21T02:00:00Z"
+          },
+          "tokenType": {
+            "type": "string",
+            "description": "认证方案。",
+            "enum": [
+              "Bearer"
+            ],
+            "example": "Bearer"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserSummary"
+          }
+        },
+        "required": [
+          "accessToken",
+          "accessExpiresInSeconds",
+          "refreshToken",
+          "refreshExpiresAt",
+          "tokenType",
+          "user"
+        ]
+      },
+      "RegisterInput": {
+        "type": "object",
+        "description": "注册后直接签发客户端会话。当前不需要手机验证码，不接收 challengeId、smsCode；手机号仅作未验证的登录账号。",
+        "additionalProperties": false,
+        "properties": {
+          "phone": {
+            "type": "string",
+            "description": "E.164 手机号；默认支持 +86，其他地区由短信配置决定。",
+            "pattern": "^\\+[1-9]\\d{7,14}$",
+            "example": "+8613800000000"
+          },
+          "password": {
+            "type": "string",
+            "description": "密码；不记录明文。",
+            "minLength": 10,
+            "maxLength": 72,
+            "example": "Example#Password9"
+          },
+          "nickname": {
+            "type": "string",
+            "description": "可选昵称。",
+            "minLength": 1,
+            "maxLength": 32,
+            "example": "小雨"
+          },
+          "termsVersion": {
+            "type": "string",
+            "description": "用户确认的协议版本。",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "2026-10-01"
+          },
+          "privacyVersion": {
+            "type": "string",
+            "description": "用户确认的隐私政策版本。",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "2026-10-01"
+          }
+        },
+        "required": [
+          "phone",
+          "password",
+          "termsVersion",
+          "privacyVersion"
+        ]
+      },
+      "PasswordLoginInput": {
+        "type": "object",
+        "description": "密码登录；账号不存在与密码错误使用同一错误。",
+        "additionalProperties": false,
+        "properties": {
+          "phone": {
+            "type": "string",
+            "description": "E.164 手机号；默认支持 +86，其他地区由短信配置决定。",
+            "pattern": "^\\+[1-9]\\d{7,14}$",
+            "example": "+8613800000000"
+          },
+          "password": {
+            "type": "string",
+            "description": "原始密码。",
+            "minLength": 1,
+            "maxLength": 72,
+            "example": "Example#Password9"
+          }
+        },
+        "required": [
+          "phone",
+          "password"
+        ]
+      },
+      "RefreshInput": {
+        "type": "object",
+        "description": "必须使用对应 audience 的最新 refreshToken；旧令牌重放撤销该会话链。",
+        "additionalProperties": false,
+        "properties": {
+          "refreshToken": {
+            "type": "string",
+            "description": "当前刷新令牌。",
+            "minLength": 16,
+            "maxLength": 1024,
+            "example": "rt_client_example"
+          }
+        },
+        "required": [
+          "refreshToken"
+        ]
+      },
+      "PasswordChangeInput": {
+        "type": "object",
+        "description": "修改后撤销全部会话，客户端重新登录。",
+        "additionalProperties": false,
+        "properties": {
+          "currentPassword": {
+            "type": "string",
+            "description": "旧密码。",
+            "minLength": 1,
+            "maxLength": 72,
+            "example": "Example#Password9"
+          },
+          "newPassword": {
+            "type": "string",
+            "description": "新密码。",
+            "minLength": 10,
+            "maxLength": 72,
+            "example": "New#Password123"
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ]
+      },
+      "Session": {
+        "type": "object",
+        "description": "当前客户端设备会话。",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "example": "id_10001"
+          },
+          "deviceLabel": {
+            "type": "string",
+            "description": "服务端解析的设备信息。",
+            "example": "Chrome / Windows"
+          },
+          "isCurrent": {
+            "type": "boolean",
+            "description": "当前会话。",
+            "example": true
+          },
+          "lastActiveAt": {
+            "type": "string",
+            "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+            "format": "date-time",
+            "example": "2026-10-22T02:00:00Z"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+            "format": "date-time",
+            "example": "2026-10-22T02:00:00Z"
+          }
+        },
+        "required": [
+          "id",
+          "deviceLabel",
+          "isCurrent",
+          "lastActiveAt",
+          "createdAt"
+        ]
+      },
+      "LegalDocument": {
+        "type": "object",
+        "description": "注册页显示的当前协议；配置版本与注册记录一致。",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "协议类型。",
+            "enum": [
+              "TERMS",
+              "PRIVACY"
+            ],
+            "example": "TERMS"
+          },
+          "version": {
+            "type": "string",
+            "description": "版本。",
+            "example": "2026-10-01"
+          },
+          "contentHtml": {
+            "type": "string",
+            "description": "协议全文 HTML。",
+            "example": "<p>协议示例</p>"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+            "format": "date-time",
+            "example": "2026-10-22T02:00:00Z"
+          }
+        },
+        "required": [
+          "type",
+          "version",
+          "contentHtml",
+          "updatedAt"
+        ]
+      },
+      "PageSession": {
+        "type": "object",
+        "description": "Session 的分页结果。固定按白名单排序；同值用 id 排序。",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Session"
+            },
+            "description": "当前页数据；空页为 []"
+          },
+          "total": {
+            "type": "integer",
+            "description": "匹配记录总数",
+            "minimum": 0,
+            "example": 1
+          },
+          "page": {
+            "type": "integer",
+            "description": "页码，从 1 开始",
+            "minimum": 1,
+            "example": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "description": "每页条数",
+            "minimum": 1,
+            "example": 20,
+            "maximum": 100
+          },
+          "hasNext": {
+            "type": "boolean",
+            "description": "是否有下一页",
+            "example": false
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageSize",
+          "hasNext"
+        ]
+      }
+    },
+    "securitySchemes": {
+      "ClientBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "aud=client；管理接口不接受。"
+      }
+    }
+  },
+  "paths": {
+    "/public/legal-documents/{type}": {
+      "get": {
+        "operationId": "get_public_legal_documents_type",
+        "summary": "获取当前协议",
+        "description": "获取当前协议",
+        "tags": [
+          "01 登录与鉴权"
+        ],
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "type",
+            "required": true,
+            "description": "协议类型。",
+            "schema": {
+              "type": "string",
+              "description": "协议类型。",
+              "enum": [
+                "TERMS",
+                "PRIVACY"
+              ],
+              "example": "TERMS"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": false,
+        "x-admin-required": false,
+        "x-auth-mode": "public",
+        "x-permissions": [],
+        "x-idempotency-required": false,
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/LegalDocument"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "type": "TERMS",
+                    "version": "2026-10-01",
+                    "contentHtml": "<p>协议示例</p>",
+                    "updatedAt": "2026-10-22T02:00:00Z"
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "operationId": "post_auth_register",
+        "summary": "用户注册",
+        "description": "当前使用手机号和密码注册，无验证码。协议版本须等于当前版本；不接受 role、status、membership、smsCode、challengeId 等字段。手机号唯一，phone_verified_at 保持 NULL。",
+        "tags": [
+          "01 登录与鉴权"
+        ],
+        "security": [],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": false,
+        "x-admin-required": false,
+        "x-auth-mode": "public",
+        "x-permissions": [],
+        "x-idempotency-required": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterInput"
+              },
+              "example": {
+                "phone": "+8613800000000",
+                "password": "Example#Password9",
+                "termsVersion": "2026-10-01",
+                "privacyVersion": "2026-10-01"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AuthTokens"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "accessToken": "eyJ...client.access",
+                    "accessExpiresInSeconds": 900,
+                    "refreshToken": "rt_client_example",
+                    "refreshExpiresAt": "2026-11-21T02:00:00Z",
+                    "tokenType": "Bearer",
+                    "user": {
+                      "id": "id_10001",
+                      "nickname": "小雨",
+                      "avatarUrl": "https://cdn.example.com/cover.jpg",
+                      "phoneMasked": "138****0000",
+                      "status": "ACTIVE",
+                      "membership": {
+                        "active": true,
+                        "expiresAt": "2026-11-21T02:00:00Z",
+                        "benefitCodes": [
+                          "MEMBER_COURSES"
+                        ]
+                      },
+                      "createdAt": "2026-10-22T02:00:00Z"
+                    }
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/login/password": {
+      "post": {
+        "operationId": "post_auth_login_password",
+        "summary": "密码登录",
+        "description": "密码登录",
+        "tags": [
+          "01 登录与鉴权"
+        ],
+        "security": [],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": false,
+        "x-admin-required": false,
+        "x-auth-mode": "public",
+        "x-permissions": [],
+        "x-idempotency-required": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordLoginInput"
+              },
+              "example": {
+                "phone": "+8613800000000",
+                "password": "Example#Password9"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AuthTokens"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "accessToken": "eyJ...client.access",
+                    "accessExpiresInSeconds": 900,
+                    "refreshToken": "rt_client_example",
+                    "refreshExpiresAt": "2026-11-21T02:00:00Z",
+                    "tokenType": "Bearer",
+                    "user": {
+                      "id": "id_10001",
+                      "nickname": "小雨",
+                      "avatarUrl": "https://cdn.example.com/cover.jpg",
+                      "phoneMasked": "138****0000",
+                      "status": "ACTIVE",
+                      "membership": {
+                        "active": true,
+                        "expiresAt": "2026-11-21T02:00:00Z",
+                        "benefitCodes": [
+                          "MEMBER_COURSES"
+                        ]
+                      },
+                      "createdAt": "2026-10-22T02:00:00Z"
+                    }
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "operationId": "post_auth_refresh",
+        "summary": "轮换客户端令牌",
+        "description": "轮换客户端令牌",
+        "tags": [
+          "01 登录与鉴权"
+        ],
+        "security": [],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": false,
+        "x-admin-required": false,
+        "x-auth-mode": "refresh",
+        "x-permissions": [],
+        "x-idempotency-required": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshInput"
+              },
+              "example": {
+                "refreshToken": "rt_client_example"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AuthTokens"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "accessToken": "eyJ...client.access",
+                    "accessExpiresInSeconds": 900,
+                    "refreshToken": "rt_client_example",
+                    "refreshExpiresAt": "2026-11-21T02:00:00Z",
+                    "tokenType": "Bearer",
+                    "user": {
+                      "id": "id_10001",
+                      "nickname": "小雨",
+                      "avatarUrl": "https://cdn.example.com/cover.jpg",
+                      "phoneMasked": "138****0000",
+                      "status": "ACTIVE",
+                      "membership": {
+                        "active": true,
+                        "expiresAt": "2026-11-21T02:00:00Z",
+                        "benefitCodes": [
+                          "MEMBER_COURSES"
+                        ]
+                      },
+                      "createdAt": "2026-10-22T02:00:00Z"
+                    }
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "post_auth_logout",
+        "summary": "退出当前会话",
+        "description": "撤销当前 accessToken 所属 session 及整个 refresh 链。",
+        "tags": [
+          "01 登录与鉴权"
+        ],
+        "security": [
+          {
+            "ClientBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": false,
+        "x-auth-mode": "user",
+        "x-permissions": [],
+        "x-idempotency-required": false,
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ActionResult"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "success": true
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me": {
+      "get": {
+        "operationId": "get_me",
+        "summary": "本人资料",
+        "description": "本人资料",
+        "tags": [
+          "02 用户与地址"
+        ],
+        "security": [
+          {
+            "ClientBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": false,
+        "x-auth-mode": "user",
+        "x-permissions": [],
+        "x-idempotency-required": false,
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/UserSummary"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "id": "id_10001",
+                    "nickname": "小雨",
+                    "avatarUrl": "https://cdn.example.com/cover.jpg",
+                    "phoneMasked": "138****0000",
+                    "status": "ACTIVE",
+                    "membership": {
+                      "active": true,
+                      "expiresAt": "2026-11-21T02:00:00Z",
+                      "benefitCodes": [
+                        "MEMBER_COURSES"
+                      ]
+                    },
+                    "createdAt": "2026-10-22T02:00:00Z"
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/password": {
+      "put": {
+        "operationId": "put_me_password",
+        "summary": "修改本人密码",
+        "description": "修改本人密码",
+        "tags": [
+          "02 用户与地址"
+        ],
+        "security": [
+          {
+            "ClientBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": false,
+        "x-auth-mode": "user",
+        "x-permissions": [],
+        "x-idempotency-required": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordChangeInput"
+              },
+              "example": {
+                "currentPassword": "Example#Password9",
+                "newPassword": "New#Password123"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ActionResult"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "success": true
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/sessions": {
+      "get": {
+        "operationId": "get_me_sessions",
+        "summary": "本人设备会话",
+        "description": "本人设备会话",
+        "tags": [
+          "02 用户与地址"
+        ],
+        "security": [
+          {
+            "ClientBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "页码，默认 1。",
+              "minimum": 1,
+              "example": 1,
+              "default": 1
+            },
+            "description": "页码，默认 1。"
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "每页条数，默认 20，最多 100。",
+              "minimum": 1,
+              "example": 20,
+              "maximum": 100,
+              "default": 20
+            },
+            "description": "每页条数，默认 20，最多 100。"
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": false,
+        "x-auth-mode": "user",
+        "x-permissions": [],
+        "x-idempotency-required": false,
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PageSession"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "items": [
+                      {
+                        "id": "id_10001",
+                        "deviceLabel": "Chrome / Windows",
+                        "isCurrent": true,
+                        "lastActiveAt": "2026-10-22T02:00:00Z",
+                        "createdAt": "2026-10-22T02:00:00Z"
+                      }
+                    ],
+                    "total": 1,
+                    "page": 1,
+                    "pageSize": 20,
+                    "hasNext": false
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/sessions/{id}": {
+      "delete": {
+        "operationId": "delete_me_sessions_id",
+        "summary": "撤销本人设备会话",
+        "description": "不能撤销其他用户会话；撤销当前设备后需要重新登录。",
+        "tags": [
+          "02 用户与地址"
+        ],
+        "security": [
+          {
+            "ClientBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "schema": {
+              "type": "string",
+              "description": "不透明业务 ID；前端必须按字符串保存。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "id_10001"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": false,
+        "x-auth-mode": "user",
+        "x-permissions": [],
+        "x-idempotency-required": false,
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ActionResult"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "success": true
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

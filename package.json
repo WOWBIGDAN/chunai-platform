@@ -1,0 +1,47 @@
+{
+  "name": "chunai-platform-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NestJS and MySQL authentication API",
+  "engines": { "node": ">=22.14.0" },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/main.js",
+    "start:dev": "node --watch -r ts-node/register src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "migration:run": "typeorm-ts-node-commonjs migration:run -d src/database/data-source.ts",
+    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/database/data-source.ts",
+    "migration:run:prod": "typeorm migration:run -d dist/database/data-source.js",
+    "test": "jest --runInBand --testPathPatterns=unit",
+    "test:e2e": "jest --runInBand --testPathPatterns=e2e",
+    "docs:build": "python scripts/build_api_docs.py"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.0",
+    "@nestjs/core": "^11.1.0",
+    "@nestjs/jwt": "^11.0.0",
+    "@nestjs/platform-express": "^11.1.0",
+    "@nestjs/throttler": "^6.4.0",
+    "@nestjs/typeorm": "^11.0.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.2",
+    "dotenv": "^17.2.0",
+    "helmet": "^8.1.0",
+    "mysql2": "^3.14.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "typeorm": "^0.3.28"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "^11.1.0",
+    "@types/express": "^5.0.0",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^22.14.0",
+    "@types/supertest": "^6.0.3",
+    "jest": "^30.0.0",
+    "supertest": "^7.1.0",
+    "ts-jest": "^29.4.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.0"
+  }
+}

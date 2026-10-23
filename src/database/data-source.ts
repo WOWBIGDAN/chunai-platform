@@ -1,0 +1,33 @@
+import 'reflect-metadata';
+import 'dotenv/config';
+import { DataSource, DataSourceOptions } from 'typeorm';
+import { integerEnv } from '../config';
+import { AuthSession, RefreshToken, User } from './entities';
+import { CreateAuth1792713600000 } from './migrations/1792713600000-CreateAuth';
+
+export function databaseOptions(): DataSourceOptions {
+  if (!process.env.DB_PASSWORD) throw new Error('DB_PASSWORD is required');
+  const database = process.env.DB_NAME ?? 'chunai_platform';
+  if (!/^[A-Za-z0-9_]+$/.test(database)) throw new Error('Invalid DB_NAME');
+  return {
+    type: 'mysql',
+    host: process.env.DB_HOST ?? '127.0.0.1',
+    port: integerEnv('DB_PORT', 3306, 1, 65535),
+    username: process.env.DB_USER ?? 'chunai',
+    password: process.env.DB_PASSWORD,
+    database,
+    charset: 'utf8mb4_unicode_ci',
+    timezone: 'Z',
+    entities: [User, AuthSession, RefreshToken],
+    migrations: [CreateAuth1792713600000],
+    migrationsTableName: 'schema_migrations',
+    synchronize: false,
+    migrationsRun: false,
+    // MySQL DDL implicitly commits; do not promise transactional migrations.
+    migrationsTransactionMode: 'none',
+    logging: false,
+    extra: { connectionLimit: 10, multipleStatements: false },
+  };
+}
+
+export default new DataSource(databaseOptions());
