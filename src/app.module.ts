@@ -4,6 +4,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './auth/auth.module';
 import { databaseOptions } from './database/data-source';
+import { HealthController } from './health.controller';
 
 @Module({
   imports: [
@@ -11,6 +12,7 @@ import { databaseOptions } from './database/data-source';
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60000, limit: 120 }]),
     AuthModule,
   ],
+  controllers: [HealthController],
   providers: [ThrottlerGuard, { provide: APP_GUARD, useExisting: ThrottlerGuard }],
 })
 export class AppModule {}

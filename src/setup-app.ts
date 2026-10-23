@@ -5,6 +5,9 @@ import helmet from 'helmet';
 import { ApiExceptionFilter, ApiRequest, ResponseInterceptor, validationPipe } from './common/http';
 
 export function setupApp(app: INestApplication) {
+  if (process.env.TRUST_PROXY === 'loopback') {
+    app.getHttpAdapter().getInstance().set('trust proxy', 'loopback');
+  }
   app.setGlobalPrefix('api/v1');
   app.use(helmet());
   app.use((request: ApiRequest, response: Response, next: NextFunction) => {

@@ -8,7 +8,7 @@ async function bootstrap() {
   authConfig();
   const app = await NestFactory.create(AppModule, { bodyParser: false });
   setupApp(app);
-  await app.listen(integerEnv('PORT', 3000, 1, 65535));
+  await app.listen(integerEnv('PORT', 3000, 1, 65535), process.env.HOST ?? '0.0.0.0');
 }
 
 void bootstrap().catch(() => {

@@ -8,6 +8,7 @@
 
 | 方法 | 路径 | 登录要求 | 功能 |
 |---|---|---|---|
+| GET | `/health` | 否 | 检查 API 与数据库是否就绪 |
 | GET | `/public/legal-documents/{type}` | 否 | TERMS / PRIVACY 当前协议与版本 |
 | POST | `/auth/register` | 否 | 注册并登录，HTTP 201 |
 | POST | `/auth/login/password` | 否 | 密码登录，HTTP 200 |

@@ -7,3 +7,5 @@ coverage/
 .tmp/
 *.log
 __pycache__/
+.release/
+REVISION

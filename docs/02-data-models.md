@@ -182,6 +182,7 @@
 - [ExternalWebhookPayload](#externalwebhookpayload)
 - [ArticleBodyWrite](#articlebodywrite)
 - [VideoBodyWrite](#videobodywrite)
+- [HealthStatus](#healthstatus)
 - [LegalDocument](#legaldocument)
 - [PageSession](#pagesession)
 - [PageAddress](#pageaddress)
@@ -4086,6 +4087,24 @@ PUT 到对象存储，不经过业务 API；必须带返回 headers。
 {
   "version": 1,
   "videoMediaId": "id_10001"
+}
+```
+
+
+<a id="healthstatus"></a>
+## HealthStatus
+
+服务与数据库就绪状态；不返回内部连接信息。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `status` | string | 是 | 就绪时返回 ok。 | 枚举: `ok` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "status": "ok"
 }
 ```
 

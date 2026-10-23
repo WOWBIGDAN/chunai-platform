@@ -1,0 +1,31 @@
+[Unit]
+Description=Chunai NestJS authentication API
+After=network.target mysql.service
+Requires=mysql.service
+
+[Service]
+Type=simple
+User=chunai
+Group=chunai
+WorkingDirectory=/opt/chunai/current
+EnvironmentFile=/etc/chunai/api.env
+ExecStart=/usr/bin/node /opt/chunai/current/dist/main.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+MemoryMax=512M
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target

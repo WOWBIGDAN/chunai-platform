@@ -431,6 +431,24 @@
           "createdAt"
         ]
       },
+      "HealthStatus": {
+        "type": "object",
+        "description": "服务与数据库就绪状态；不返回内部连接信息。",
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "就绪时返回 ok。",
+            "enum": [
+              "ok"
+            ],
+            "example": "ok"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
       "LegalDocument": {
         "type": "object",
         "description": "注册页显示的当前协议；配置版本与注册记录一致。",
@@ -525,6 +543,214 @@
     }
   },
   "paths": {
+    "/health": {
+      "get": {
+        "operationId": "get_health",
+        "summary": "服务与数据库健康检查",
+        "description": "服务与数据库健康检查",
+        "tags": [
+          "01 登录与鉴权"
+        ],
+        "security": [],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": false,
+        "x-admin-required": false,
+        "x-auth-mode": "public",
+        "x-permissions": [],
+        "x-idempotency-required": false,
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/HealthStatus"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "status": "ok"
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/public/legal-documents/{type}": {
       "get": {
         "operationId": "get_public_legal_documents_type",

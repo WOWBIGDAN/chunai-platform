@@ -10,6 +10,7 @@ DOCS = ROOT / "docs"
 SCHEMAS: dict = {}
 OPERATIONS: list[dict] = []
 IMPLEMENTED = {
+    ('get', '/health'),
     ('get', '/public/legal-documents/{type}'),
     ('post', '/auth/register'), ('post', '/auth/login/password'),
     ('post', '/auth/refresh'), ('post', '/auth/logout'),
@@ -567,6 +568,9 @@ def publish_ops(tag, path, noun, output, permission):
 
 
 # 01 Authentication and profile.
+obj("HealthStatus", "服务与数据库就绪状态；不返回内部连接信息。", {
+    "status": enum("就绪时返回 ok。", "ok")})
+op("01 登录与鉴权", "get", "/health", "服务与数据库健康检查", auth="public", data="HealthStatus")
 obj("LegalDocument", "注册页显示的当前协议；配置版本与注册记录一致。", {
     "type": enum("协议类型。", "TERMS|PRIVACY"), "version": string("版本。", "2026-10-01"),
     "contentHtml": string("协议全文 HTML。", "<p>协议示例</p>"), "updatedAt": TIME})

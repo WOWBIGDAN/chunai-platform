@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 022
+
+revision=${1:-}
+checksum=${2:-}
+if [[ $# -ne 2 || ! $revision =~ ^[a-f0-9]{40}$ || ! $checksum =~ ^[a-f0-9]{64}$ ]]; then
+  echo 'Usage: chunai-release <40-character commit SHA> <archive SHA256>' >&2
+  exit 2
+fi
+
+root=/opt/chunai
+archive="$root/incoming/$revision.tar.gz"
+release="$root/releases/$revision"
+exec 9>/run/lock/chunai-release.lock
+flock -n 9 || { echo 'Another deployment is running' >&2; exit 1; }
+
+[[ -f "$archive" && ! -L "$archive" ]] || { echo 'Release archive missing or invalid' >&2; exit 1; }
+printf '%s  %s\n' "$checksum" "$archive" | sha256sum --check --status
+if [[ -e "$release" ]]; then
+  [[ -d "$release" && ! -L "$release" && -f "$release/REVISION" && $(cat "$release/REVISION") == "$revision" ]] \
+    || { echo 'Incomplete release directory requires administrator review' >&2; exit 1; }
+else
+install -d -m 0755 "$release"
+
+# Extract a CI-produced archive with traversal/link protections before running any code.
+python3 - "$archive" "$release" <<'PY'
+import pathlib
+import sys
+import tarfile
+archive, destination = sys.argv[1:]
+allowed = {'dist', 'database', 'node_modules', 'package.json', 'package-lock.json', 'REVISION'}
+with tarfile.open(archive, 'r:gz') as package:
+    for member in package.getmembers():
+        path = pathlib.PurePosixPath(member.name)
+        if not path.parts or path.parts[0] not in allowed or path.is_absolute() or '..' in path.parts:
+            raise ValueError('Unexpected release path')
+        if member.isdev() or member.isfifo():
+            raise ValueError('Special files are forbidden')
+    package.extractall(destination, filter='data')
+PY
+[[ $(cat "$release/REVISION") == "$revision" ]] || { echo 'Release revision does not match' >&2; exit 1; }
+chown -R root:root "$release"
+chmod -R go-w "$release"
+fi
+
+# Migration code runs as the application user with only its own database credentials.
+systemd-run --quiet --wait --pipe --collect \
+  --unit="chunai-migrate-${revision:0:12}" \
+  --property=User=chunai --property=Group=chunai \
+  --property=EnvironmentFile=/etc/chunai/api.env \
+  --property=NoNewPrivileges=yes --property=ProtectSystem=strict \
+  --property=ProtectHome=yes --property=PrivateTmp=yes \
+  --working-directory="$release" \
+  /usr/bin/node "$release/node_modules/typeorm/cli.js" migration:run -d "$release/dist/database/data-source.js"
+
+previous=$(readlink -f "$root/current" 2>/dev/null || true)
+ln -sfn "$release" "$root/.current-next"
+mv -Tf "$root/.current-next" "$root/current"
+systemctl restart chunai-api || true
+
+healthy=false
+for attempt in {1..30}; do
+  if curl --fail --silent --max-time 3 http://127.0.0.1:3000/api/v1/health \
+      | python3 -c 'import json,sys; assert json.load(sys.stdin)["data"]["status"] == "ok"' 2>/dev/null; then
+    healthy=true
+    break
+  fi
+  sleep 2
+done
+
+if [[ $healthy != true ]]; then
+  if [[ -n "$previous" && "$previous" == "$root/releases/"* && -d "$previous" ]]; then
+    ln -sfn "$previous" "$root/.current-rollback"
+    mv -Tf "$root/.current-rollback" "$root/current"
+    systemctl restart chunai-api
+    echo 'Health check failed; the previous application release was restored.' >&2
+  else
+    systemctl stop chunai-api
+    echo 'First deployment health check failed; application stopped.' >&2
+  fi
+  exit 1
+fi
+
+# Preserve the previous successful release as an explicit rollback target.
+if [[ -n "$previous" && "$previous" == "$root/releases/"* ]]; then
+  ln -sfn "$previous" "$root/previous"
+fi
+systemctl enable chunai-api >/dev/null
+printf '%s\n' "$revision" > "$root/DEPLOYED_REVISION"
+rm -f -- "$archive"
+echo "Deployed $revision"

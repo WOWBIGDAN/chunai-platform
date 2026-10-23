@@ -72,6 +72,11 @@ describe('authentication with real MySQL', () => {
     })).rejects.toMatchObject({ driverError: { code: 'ER_NO_REFERENCED_ROW_2' } });
   });
 
+  it('reports readiness only after querying the real database', async () => {
+    const response = await api().get('/api/v1/health').expect(200);
+    expect(response.body.data).toEqual({ status: 'ok' });
+  });
+
   it('registers without SMS, returns safe user data and stores hashes only', async () => {
     const user = await register();
     expect(user.tokenType).toBe('Bearer');
