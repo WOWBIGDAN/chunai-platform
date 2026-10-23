@@ -11,6 +11,10 @@
       "description": "本地开发（示例）"
     },
     {
+      "url": "http://47.97.46.242/api/v1",
+      "description": "已部署 staging 测试服务；仅 implemented 接口可用，协议版本以协议接口返回值为准"
+    },
+    {
       "url": "https://api.example.com/api/v1",
       "description": "生产域名占位，必须替换"
     }

@@ -2,6 +2,8 @@
 
 以下请求路径均包含 `/api/v1`。示例 ID、验证码、支付地址和令牌为占位。所有请求与响应字段以 [数据格式](02-data-models.md) 和 [OpenAPI](openapi.json) 为准。
 
+已部署的测试 API 地址为 `http://47.97.46.242/api/v1`。当前已实现认证与健康检查；本文的内容、订单、支付等其余流程为后续设计。实现范围见 [后端说明](04-backend-auth.md)，部署和运维见 [服务器说明](05-deployment.md)。
+
 ## 内容访问与发布
 
 | kind | 内容组织 | 科普正文／播放入口 | 课程正文／播放入口 |
@@ -47,6 +49,8 @@ stateDiagram-v2
 ## 注册与登录示例
 
 先 GET /public/legal-documents/TERMS 和 /PRIVACY 获取当前协议并展示，用户同意后提交版本。当前注册不需要验证码，不调用短信接口。
+
+下面的注册 JSON 使用本地 `.env.example` 默认协议版本 `2026-10-01`；调用公网测试服务时，两个版本字段当前均需使用 `2026-10-23-test`，以后以协议接口返回值为准。[HTTP 请求文件](../examples/auth.http) 默认指向公网测试环境。
 
 ```http
 POST /api/v1/auth/register

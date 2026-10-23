@@ -2,15 +2,45 @@
 
 目标仓库：`WOWBIGDAN/chunai-platform`，分支 `main`。服务器 `47.97.46.242`，Ubuntu 24.04，Node.js 22、MySQL 8.0、Nginx、systemd。此次按测试服务部署，使用公网 IP 访问。
 
+更新时间：2026-10-23。
+
+## 当前环境与部署记录
+
+| 项目 | 当前值 |
+|---|---|
+| 服务入口 | [http://47.97.46.242](http://47.97.46.242)，根路径返回后端服务说明 JSON |
+| API 基础地址 | `http://47.97.46.242/api/v1` |
+| 健康检查 | [GET /api/v1/health](http://47.97.46.242/api/v1/health) |
+| 运行环境 | `NODE_ENV=staging`，用于开发联调和功能测试 |
+| 应用账号 | `chunai`，由 systemd 启动 |
+| 自动部署账号 | `chunai-deploy`，使用专用 SSH 密钥 |
+| 管理入口 | `ssh root@47.97.46.242`，SSH 端口 22 |
+| 数据库 | `chunai_platform`，应用账号 `chunai`，仅通过本机 3306 连接 |
+| 当前协议版本 | TERMS、PRIVACY 均为 `2026-10-23-test`，后续以协议接口为准 |
+
+首次成功部署提交：[6745b62bcbc96d6d8369539d0ee8abf73e1d1637](https://github.com/WOWBIGDAN/chunai-platform/commit/6745b62bcbc96d6d8369539d0ee8abf73e1d1637)。[对应 GitHub Actions](https://github.com/WOWBIGDAN/chunai-platform/actions/runs/39931044243) 已完成测试、构建、契约校验、数据库迁移、自动发布和公网健康检查。公网注册、资料读取、密码登录、刷新、退出与令牌失效验证已通过，验证用临时账号及其会话已删除。
+
+已完成的服务器清理范围为旧 `/opt/deepseek` 项目、`deepseek-api` PM2 进程及状态、旧 Nginx 站点配置。操作系统、SSH 和阿里云系统组件保留。新应用、MySQL 和 Nginx 均已启用开机自启动。
+
 ## 发布流程
 
 [CI/CD 工作流](../.github/workflows/ci-cd.yml) 对 PR 和 main 推送运行类型检查、单元测试、真实 MySQL 端到端测试、构建和接口契约校验。只有 main 分支通过全部检查后才打包并部署。也可以在 Actions 页面手动运行。
 
 构建在 GitHub Ubuntu runner 上完成；归档包含编译后的代码、SQL、生产依赖及提交 SHA。服务器无需拉取 GitHub 仓库或安装 npm 依赖。部署使用独立 SSH 用户、固定服务器主机公钥和文件 SHA256 校验。服务器登录密码不写入仓库或工作流。
 
-部署按顺序执行：上传 → 校验和安全解包 → 以应用账号执行迁移 → 原子切换 current → 重启 → 本机和公网健康检查。并发发布通过 Actions concurrency 与服务器 flock 串行执行。数据库迁移失败时旧版本继续运行；应用健康检查失败时自动切回上一个应用版本。
+部署按顺序执行：上传 → 校验和安全解包 → 以应用账号执行迁移 → 原子切换 current → 重启 → 本机和公网健康检查。并发发布通过 Actions concurrency 与服务器 flock 串行执行。
+
+| 触发方式 | 执行结果 |
+|---|---|
+| 向 main 推送提交 | 测试、构建、打包，成功后自动部署至 staging |
+| 创建或更新目标为 main 的 PR | 只运行测试与构建校验，不部署 |
+| Actions → CI and deploy → Run workflow，选择 main | 手动运行同一条测试与部署流水线 |
+
+数据库迁移在切换版本之前执行，迁移失败时旧版本继续运行。服务器本机健康检查最多尝试 30 次，每次失败后等待 2 秒；有上一个版本时恢复原 current 并重启，首次部署无旧版本时停止新应用。工作流最后的公网健康检查失败会将部署任务标记为失败，不自动再次回滚，需要检查 Nginx、安全组和外部网络。
 
 应用回滚不撤销数据库迁移，后续迁移需要兼容上一版代码。单实例重启会有短暂切换时间。
+
+每次发布完成后，在 [Actions 列表](https://github.com/WOWBIGDAN/chunai-platform/actions) 查看 verify-build 和 deploy 两个任务，再访问公网健康检查。构建归档在 Actions 中保留 3 天；服务器历史发布目录需由管理员按磁盘用量维护。
 
 ## GitHub Secrets
 
@@ -46,6 +76,31 @@ Nginx 监听 80，应用只监听 `127.0.0.1:3000`，MySQL 只监听本机。Ngi
 
 `NODE_ENV=staging` 表示本次测试部署；用户协议和隐私政策版本为 `2026-10-23-test`。注册前先查询当前协议版本，不直接提交开发文档的旧版本。正式上线时配置正式协议、允许的前端来源和域名 HTTPS，再将运行环境改为 production。
 
+## 修改运行配置
+
+SSH 登录后，以管理员身份编辑环境文件：
+
+```bash
+sudoedit /etc/chunai/api.env
+systemctl restart chunai-api
+curl --fail http://127.0.0.1:3000/api/v1/health
+```
+
+| 配置项 | 当前设置或修改方式 |
+|---|---|
+| NODE_ENV | staging；正式协议配置完成后才能切换 production |
+| HOST / PORT | 127.0.0.1 / 3000，对应 Nginx 的本机上游 |
+| TRUST_PROXY | loopback，仅信任本机 Nginx |
+| CORS_ORIGINS | 当前允许 `http://47.97.46.242,http://localhost:5173`；新增前端来源以逗号分隔，不带路径 |
+| DB_HOST / DB_PORT / DB_NAME | 127.0.0.1 / 3306 / chunai_platform |
+| DB_PASSWORD / JWT_SECRET | 保存在服务器文件中；修改数据库口令时需同步修改 MySQL 账号 |
+| TERMS_VERSION / PRIVACY_VERSION | 当前均为 2026-10-23-test；更新协议时同时更新内容和版本 |
+| TERMS_HTML / PRIVACY_HTML / LEGAL_UPDATED_AT | 协议正文和更新时间，更新时间使用 UTC ISO 8601 |
+
+`/etc/chunai/api.env` 权限为 600、所有者 root，systemd 读取后传给应用。GitHub 发布不会覆盖该文件。服务器使用原生 MySQL 服务；仓库根目录的 Compose 配置用于本地开发。
+
+修改 [发布程序](../deploy/chunai-release)、[systemd 模板](../deploy/chunai-api.service) 或 [Nginx 模板](../deploy/nginx.conf) 后，还需要管理员将对应文件安装到上表中的服务器路径。systemd 单元更新后执行 `systemctl daemon-reload` 并重启应用；Nginx 更新后先执行 `nginx -t`，通过后再 `systemctl reload nginx`。
+
 ## 日常运维
 
 以下命令由服务器管理员执行：
@@ -55,14 +110,17 @@ systemctl status chunai-api --no-pager
 journalctl -u chunai-api -n 100 --no-pager
 curl --fail http://127.0.0.1:3000/api/v1/health
 cat /opt/chunai/DEPLOYED_REVISION
+readlink -f /opt/chunai/current
 systemctl status mysql nginx --no-pager
+systemctl is-enabled chunai-api mysql nginx
 ```
 
-修改 `/etc/chunai/api.env` 后执行 `systemctl restart chunai-api`。定期将 MySQL 备份到服务器外部，并根据磁盘用量清理旧发布目录；当前不自动删除历史成功版本。
+`DEPLOYED_REVISION` 记录最近一次自动发布成功的提交；手动回滚后，该文件仍保留发布记录，实际应用版本以 current 的指向为准。历史版本由管理员管理，清理时需保留 current 和 previous 指向的目录。
 
-手动应用回滚（先确认 previous 指向的确为所需版本）：
+手动应用回滚：首次部署还没有 previous，需要先确认已存在上一版本。以下命令只切换应用，不操作数据库：
 
 ```bash
+test -L /opt/chunai/previous
 target=$(readlink -f /opt/chunai/previous)
 case "$target" in /opt/chunai/releases/*) ;; *) exit 1 ;; esac
 test -d "$target"
@@ -71,6 +129,35 @@ mv -Tf /opt/chunai/.rollback-next /opt/chunai/current
 systemctl restart chunai-api
 curl --fail http://127.0.0.1:3000/api/v1/health
 ```
+
+## 数据库备份
+
+管理员可使用本机 MySQL 的 root Socket 认证导出数据，无需将应用数据库密码写入命令：
+
+```bash
+set -euo pipefail
+umask 077
+install -d -m 0700 /var/backups/chunai
+backup_file="/var/backups/chunai/chunai-$(date -u +%Y%m%d-%H%M%S).sql.gz"
+mysqldump --protocol=socket -uroot --single-transaction --no-tablespaces \
+  --databases chunai_platform | gzip > "$backup_file"
+gzip --test "$backup_file"
+```
+
+将验证通过的备份复制到服务器外部；仓库当前没有配置定时备份任务。恢复备份前，应核对目标库和备份时间，并先备份当前数据，因为 SQL 导入可能替换同名表。当前数据库包括 users、auth_sessions、refresh_tokens 和 schema_migrations。
+
+## 常见联调与部署问题
+
+| 现象 | 检查方法 |
+|---|---|
+| 根路径显示 JSON | 当前提供后端 API；使用 `/api/v1` 调用接口，导入 [认证 OpenAPI](openapi-auth.json) 查看已实现功能 |
+| 注册返回 409 PROTOCOL_VERSION_CHANGED | 重新读取 TERMS 和 PRIVACY，提交同一环境返回的当前版本 |
+| 浏览器报告 CORS 错误 | 检查前端来源是否在 CORS_ORIGINS 中，修改后重启应用 |
+| 访问尚未开发的业务接口返回 404 | 查看 OpenAPI 的 x-implementation-status，只调用 implemented 接口 |
+| 公网返回 502 | 检查 `systemctl status chunai-api` 和应用日志，再请求本机 3000 端口的健康接口 |
+| 健康接口返回 500 | 检查 MySQL 服务、应用数据库连接和迁移日志 |
+| 旧令牌返回 401 | 退出、改密或刷新令牌重放后重新登录；刷新请求须单飞并保存新令牌 |
+| Actions 上传或登录失败 | 检查部署账号的 authorized_keys、SSH 22 端口、四项 Secrets 和服务器主机公钥是否匹配 |
 
 部署私钥轮换时，更新 `chunai-deploy` 的 authorized_keys 和 GitHub 的 DEPLOY_SSH_KEY；服务器主机密钥变化时，核实新指纹后更新 DEPLOY_KNOWN_HOSTS。
 

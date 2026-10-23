@@ -2,7 +2,27 @@
 
 已实现客户端手机号＋密码注册登录，使用 **NestJS + TypeORM + MySQL**。当前不需要手机验证码；支持令牌刷新、退出、本人资料、修改密码和设备会话管理。管理员认证与其他业务仍为设计契约，短信相关功能暂缓。
 
-## 启动
+## 已部署的测试环境
+
+更新时间：2026-10-23。
+
+| 项目 | 地址或说明 |
+|---|---|
+| 服务入口 | [http://47.97.46.242](http://47.97.46.242)，根路径返回后端服务说明 |
+| API 基础地址 | `http://47.97.46.242/api/v1` |
+| 健康检查 | [GET /api/v1/health](http://47.97.46.242/api/v1/health)，同时检查数据库连接 |
+| 用户协议 | [GET /public/legal-documents/TERMS](http://47.97.46.242/api/v1/public/legal-documents/TERMS) |
+| 隐私政策 | [GET /public/legal-documents/PRIVACY](http://47.97.46.242/api/v1/public/legal-documents/PRIVACY) |
+| 自动部署 | [GitHub Actions](https://github.com/WOWBIGDAN/chunai-platform/actions)：推送 main 后自动测试、构建、迁移并发布 |
+| 首次成功部署 | [6745b62](https://github.com/WOWBIGDAN/chunai-platform/commit/6745b62bcbc96d6d8369539d0ee8abf73e1d1637) · [成功流水线](https://github.com/WOWBIGDAN/chunai-platform/actions/runs/39931044243) |
+
+当前为 `staging` 测试服务，协议版本为 `2026-10-23-test`。注册前读取最新协议版本；手机号按 `+8613800000000` 这样的 E.164 格式提交，不传验证码字段。
+
+联调可使用 [HTTP 请求示例](examples/auth.http)，或将 [已实现接口 OpenAPI](docs/openapi-auth.json) 导入 Apifox / Swagger 后选择测试服务器。现有 10 个认证与健康检查接口已实现；完整文档中的其余接口带有“设计中”或“暂缓实现”标记。
+
+服务器使用 Nginx + systemd + MySQL，运行配置位于 `/etc/chunai/api.env`。更新、日志、回滚和数据库备份见 [部署与运维说明](docs/05-deployment.md)。
+
+## 本地启动
 
 要求 Node.js 22.14+、MySQL 8.0.16+。Windows PowerShell 使用 `npm.cmd`，其他终端可用 `npm`。
 

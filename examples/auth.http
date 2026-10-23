@@ -1,6 +1,14 @@
-@baseUrl = http://localhost:3000/api/v1
+# 默认使用已部署的测试环境。
+# 本地开发改为 http://localhost:3000/api/v1，并使用目标环境协议接口返回的版本。
+@baseUrl = http://47.97.46.242/api/v1
+@termsVersion = 2026-10-23-test
+@privacyVersion = 2026-10-23-test
 @accessToken = replace-with-returned-access-token
 @refreshToken = replace-with-returned-refresh-token
+@sessionId = replace-with-returned-session-id
+
+### 服务与数据库健康检查
+GET {{baseUrl}}/health
 
 ### 当前用户协议
 GET {{baseUrl}}/public/legal-documents/TERMS
@@ -8,7 +16,7 @@ GET {{baseUrl}}/public/legal-documents/TERMS
 ### 当前隐私政策
 GET {{baseUrl}}/public/legal-documents/PRIVACY
 
-### 注册（无需验证码）
+### 注册（先读取上面两份协议，核对版本；无需验证码）
 POST {{baseUrl}}/auth/register
 Content-Type: application/json
 
@@ -16,8 +24,8 @@ Content-Type: application/json
   "phone": "+8613800000000",
   "password": "Example#Password9",
   "nickname": "小雨",
-  "termsVersion": "2026-10-01",
-  "privacyVersion": "2026-10-01"
+  "termsVersion": "{{termsVersion}}",
+  "privacyVersion": "{{privacyVersion}}"
 }
 
 ### 密码登录
@@ -38,6 +46,10 @@ Content-Type: application/json
 
 ### 本人有效会话
 GET {{baseUrl}}/me/sessions?page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+
+### 撤销指定的本人会话（将列表中的 id 填入 sessionId）
+DELETE {{baseUrl}}/me/sessions/{{sessionId}}
 Authorization: Bearer {{accessToken}}
 
 ### 修改密码（完成后所有设备须重新登录）

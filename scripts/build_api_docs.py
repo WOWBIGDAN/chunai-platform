@@ -940,6 +940,7 @@ def make_spec():
         "info": {"title": "两性健康服务平台 API", "version": "1.1.0",
                  "description": "客户端密码认证已实现，无短信验证码。每个操作的 x-implementation-status 标注实现状态，其他模块仍为设计契约。"},
         "servers": [{"url": "http://localhost:3000/api/v1", "description": "本地开发（示例）"},
+                    {"url": "http://47.97.46.242/api/v1", "description": "已部署 staging 测试服务；仅 implemented 接口可用，协议版本以协议接口返回值为准"},
                     {"url": "https://api.example.com/api/v1", "description": "生产域名占位，必须替换"}],
         "tags": [{"name": t} for t in dict.fromkeys(o["tag"] for o in OPERATIONS)],
         "components": {"schemas": SCHEMAS, "securitySchemes": {
@@ -1047,6 +1048,8 @@ def schema_link(name):
 def build_api_markdown():
     lines = ["# 接口文档", "", "> 更新：2026-10-23。客户端密码认证已实现，其余接口保留设计契约；每个接口下方标注实现状态。短信功能暂缓。",
              "", "已实现接口的运行方法见 [后端启动与数据库](04-backend-auth.md)。",
+             "", "已部署测试 API：`http://47.97.46.242/api/v1`。服务器运行、CI/CD 和运维见 [部署说明](05-deployment.md)。",
+             "注册示例采用本地默认协议版本 `2026-10-01`；公网测试环境当前为 `2026-10-23-test`，提交前须读取当前环境的协议接口。",
              "", "所有下列 URL 统一加前缀 `/api/v1`。请求默认 `application/json`；返回默认使用统一响应结构，表中的响应类型指 `data`。",
              "请求及响应对象的全部字段见 [数据格式文档](02-data-models.md)，状态与联调步骤见 [业务流程文档](03-business-flows.md)。",
              "", "“可选登录”表示可不传 token；如已传入，则必须有效。管理员接口必须使用独立管理员 token 并具备表中权限。`Path` 参数均为必填字符串，特殊枚举已在参数说明中列出。",

@@ -1,6 +1,6 @@
 # 对接总则与业务边界
 
-版本：`1.0.0-design` · 设计日期：2026-10-22 · 框架：NestJS。
+版本：`1.1.0` · 初始设计：2026-10-22 · 更新：2026-10-23 · 框架：NestJS。
 
 这是一份新项目的接口设计基线。2026-10-23 已实现 NestJS + MySQL 客户端密码认证；运行说明和准确范围见 [后端启动与数据库](04-backend-auth.md)。其他业务及管理员接口仍是设计契约，OpenAPI 的 `x-implementation-status` 标注每个接口的状态。当前注册、密码登录均不使用短信验证码，短信登录及忘记密码重置暂缓。域名、支付商户、短信、模型、快递与对象存储供应商需要后续配置。
 
@@ -11,6 +11,8 @@
 3. [数据格式文档](02-data-models.md)：查全部对象、字段、必填项、类型、枚举、约束和 JSON 示例。
 4. [业务流程文档](03-business-flows.md)：查下单、支付、售后、会员、内容发布、AI 流式问答和验收场景。
 5. [openapi.json](openapi.json)：导入 Swagger Editor、Swagger UI、Apifox 或其他支持 OpenAPI 3.0 的工具。
+6. [后端启动与数据库](04-backend-auth.md)：运行已实现的 10 个认证与健康检查接口，创建 MySQL 表。
+7. [CI/CD 与服务器部署](05-deployment.md)：查看测试环境地址、发布记录、运行配置、日志、回滚和备份。只联调当前服务时可导入 [openapi-auth.json](openapi-auth.json)。
 
 ## 业务默认规则
 
@@ -45,9 +47,12 @@
 
 ```text
 本地示例：http://localhost:3000/api/v1
+已部署测试：http://47.97.46.242/api/v1
 生产占位：https://api.example.com/api/v1
 管理接口：https://api.example.com/api/v1/admin/...
 ```
+
+测试环境已于 2026-10-23 完成首次 GitHub Actions 部署，运行环境为 staging。生产域名仍为占位。注册协议版本按目标环境的 `/public/legal-documents/TERMS` 和 `/PRIVACY` 返回值提交；当前测试版本为 `2026-10-23-test`，本地 `.env.example` 默认版本为 `2026-10-01`。
 
 | 请求头 | 使用方式 |
 |---|---|

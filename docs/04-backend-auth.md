@@ -25,6 +25,17 @@
 
 手机号遵循已有 E.164 契约，例如 `+8613800000000`，当前仅为登录标识；`phone_verified_at` 为 NULL，不代表已核验联系号码。未来短信接入须补充用途绑定、有效期、尝试次数和一次性消费。本实现没有万能验证码或短信绕过开关。
 
+## 访问环境
+
+| 环境 | API 基础地址 | 协议版本 |
+|---|---|---|
+| 已部署测试服务 | `http://47.97.46.242/api/v1` | 当前为 `2026-10-23-test` |
+| 本地开发 | `http://localhost:3000/api/v1` | `.env.example` 默认 `2026-10-01` |
+
+首次部署与公网注册、登录、刷新、退出验证已于 2026-10-23 完成。测试服务器使用 Ubuntu 24.04、Node.js 22、MySQL 8.0、Nginx 和 systemd；发布和配置管理见 [部署说明](05-deployment.md)。本地开发可继续使用下文的独立数据库或 Docker Compose。
+
+健康检查无需登录：`GET /health` 成功时 HTTP 200，返回统一响应，其中 `data.status=ok`。健康检查会实际查询数据库，不只检查 Node.js 进程是否存在。
+
 ## 本地启动与建表
 
 要求 Node.js 22.14+、npm、MySQL 8.0.16+。Windows PowerShell 若阻止 npm.ps1，使用 `npm.cmd`。
@@ -79,7 +90,7 @@ npm.cmd start
 
 先 GET `/public/legal-documents/TERMS` 和 `/public/legal-documents/PRIVACY` 展示当前协议，用户同意后提交版本。
 
-注册请求：
+以下注册请求使用本地默认协议版本；公网测试环境当前两个版本均为 `2026-10-23-test`。应先读取所连接环境的协议，再提交返回的版本：
 
 ```json
 {
@@ -104,6 +115,10 @@ npm.cmd start
 刷新提交 `{"refreshToken":"当前刷新令牌"}`。前端必须单飞刷新，成功后替换两个令牌；旧令牌重放会撤销整个会话，包括并发刷新中刚获得的新令牌。退出仅撤销当前设备，改密撤销全部设备。前端使用安全凭证存储，不把令牌写入 URL 或日志；当前采用 JSON 令牌，无 Cookie 会话。
 
 可直接使用 [REST Client 请求示例](../examples/auth.http)。
+
+请求文件默认指向公网测试地址，通过文件开头的 `baseUrl`、`termsVersion` 和 `privacyVersion` 切换环境。注册或登录成功后，将响应中的两个令牌填写到对应变量；刷新成功后更新令牌再发送后续请求。
+
+浏览器联调需要来源地址被服务器 `CORS_ORIGINS` 允许。测试服务当前允许 `http://47.97.46.242` 和 `http://localhost:5173`；使用其他开发端口时，由管理员更新 `/etc/chunai/api.env` 并重启 `chunai-api`。CORS 来源填写协议、主机和端口，不填写 `/api/v1` 路径。
 
 | HTTP | code | 含义 |
 |---|---|---|
