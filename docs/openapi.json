@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "两性健康服务平台 API",
-    "version": "1.1.0",
-    "description": "客户端密码认证已实现，无短信验证码。每个操作的 x-implementation-status 标注实现状态，其他模块仍为设计契约。"
+    "version": "1.2.0",
+    "description": "已实现用户与管理员认证、产品、实物订单、人工物流、售后和测试收付款。x-implementation-status 表示仓库实现状态；线上可用范围以部署版本为准。短信及外部支付／物流暂未接入。"
   },
   "servers": [
     {
@@ -12,7 +12,7 @@
     },
     {
       "url": "http://47.97.46.242/api/v1",
-      "description": "已部署 staging 测试服务；仅 implemented 接口可用，协议版本以协议接口返回值为准"
+      "description": "staging 测试服务；本次交易模块需部署此版本后可用，协议版本以接口返回值为准"
     },
     {
       "url": "https://api.example.com/api/v1",
@@ -780,7 +780,7 @@
       },
       "AdminAuthTokens": {
         "type": "object",
-        "description": "管理员会话；accessToken aud=admin。",
+        "description": "独立管理员会话，aud=admin；访问令牌默认 15 分钟，刷新会话绝对期限 24 小时。",
         "additionalProperties": false,
         "properties": {
           "accessToken": {
@@ -906,12 +906,11 @@
           },
           "scope": {
             "type": "string",
-            "description": "作用域。",
+            "description": "当前仅支持产品分类。",
             "enum": [
-              "CONTENT",
               "PRODUCT"
             ],
-            "example": "CONTENT"
+            "example": "PRODUCT"
           },
           "parentId": {
             "type": "string",
@@ -2380,7 +2379,7 @@
             "description": "金额，单位为人民币分；由服务端计算，禁止浮点。",
             "minimum": 1,
             "example": 9900,
-            "maximum": 9007199254740991
+            "maximum": 100000000
           },
           "availableStock": {
             "type": "integer",
@@ -2681,15 +2680,15 @@
           },
           "minPriceCents": {
             "type": "integer",
-            "description": "金额，单位为人民币分；由服务端计算，禁止浮点。",
-            "minimum": 1,
+            "description": "启用 SKU 价格范围；无启用 SKU 的草稿返回 0。",
+            "minimum": 0,
             "example": 9900,
             "maximum": 9007199254740991
           },
           "maxPriceCents": {
             "type": "integer",
-            "description": "金额，单位为人民币分；由服务端计算，禁止浮点。",
-            "minimum": 1,
+            "description": "启用 SKU 价格范围；无启用 SKU 的草稿返回 0。",
+            "minimum": 0,
             "example": 9900,
             "maximum": 9007199254740991
           },
@@ -2722,9 +2721,9 @@
           "skus": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Sku"
+              "$ref": "#/components/schemas/AdminSku"
             },
-            "description": "可售 SKU"
+            "description": "含停用 SKU 和管理库存字段"
           },
           "afterSalePolicy": {
             "type": "string",
@@ -2805,7 +2804,7 @@
             "description": "金额，单位为人民币分；由服务端计算，禁止浮点。",
             "minimum": 1,
             "example": 9900,
-            "maximum": 9007199254740991
+            "maximum": 100000000
           },
           "enabled": {
             "type": "boolean",
@@ -2844,7 +2843,7 @@
             "description": "金额，单位为人民币分；由服务端计算，禁止浮点。",
             "minimum": 1,
             "example": 9900,
-            "maximum": 9007199254740991
+            "maximum": 100000000
           },
           "enabled": {
             "type": "boolean",
@@ -2903,7 +2902,7 @@
             "description": "金额，单位为人民币分；由服务端计算，禁止浮点。",
             "minimum": 1,
             "example": 9900,
-            "maximum": 9007199254740991
+            "maximum": 100000000
           },
           "availableStock": {
             "type": "integer",
@@ -3040,6 +3039,20 @@
             "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
             "format": "date-time",
             "example": "2026-10-22T02:00:00Z"
+          },
+          "reservedDelta": {
+            "type": "integer",
+            "description": "预占变化；业务自动预占／释放也记流水。",
+            "example": 0
+          },
+          "orderId": {
+            "type": "string",
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "example": null,
+            "nullable": true
           }
         },
         "required": [
@@ -3050,7 +3063,9 @@
           "reservedStockAfter",
           "reason",
           "operatorId",
-          "createdAt"
+          "createdAt",
+          "reservedDelta",
+          "orderId"
         ]
       },
       "AddressSnapshot": {
@@ -4394,12 +4409,21 @@
             "description": "位置。",
             "example": "上海",
             "nullable": true
+          },
+          "source": {
+            "type": "string",
+            "description": "人工记录来源。",
+            "enum": [
+              "MANUAL"
+            ],
+            "example": "MANUAL"
           }
         },
         "required": [
           "time",
           "description",
-          "location"
+          "location",
+          "source"
         ]
       },
       "Shipment": {
@@ -4479,6 +4503,13 @@
             "description": "乐观锁版本；写操作必须提交最近读取的版本。",
             "minimum": 1,
             "example": 1
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShipmentLine"
+            },
+            "description": "实际发货行与数量"
           }
         },
         "required": [
@@ -4491,7 +4522,8 @@
           "shippedAt",
           "deliveredAt",
           "lastSyncedAt",
-          "version"
+          "version",
+          "items"
         ]
       },
       "LogisticsResult": {
@@ -4561,14 +4593,14 @@
                 "type": "string",
                 "description": "UTC 时间；未发生时为 null。",
                 "format": "date-time",
-                "example": "2026-10-22T02:00:00Z",
+                "example": null,
                 "nullable": true
               },
               "lastSyncedAt": {
                 "type": "string",
                 "description": "UTC 时间；未发生时为 null。",
                 "format": "date-time",
-                "example": "2026-10-22T02:00:00Z",
+                "example": null,
                 "nullable": true
               },
               "version": {
@@ -4576,6 +4608,13 @@
                 "description": "乐观锁版本；写操作必须提交最近读取的版本。",
                 "minimum": 1,
                 "example": 1
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ShipmentLine"
+                },
+                "description": "实际发货行与数量"
               }
             },
             "required": [
@@ -4588,7 +4627,8 @@
               "shippedAt",
               "deliveredAt",
               "lastSyncedAt",
-              "version"
+              "version",
+              "items"
             ],
             "nullable": true
           },
@@ -4601,9 +4641,10 @@
           },
           "syncStatus": {
             "type": "string",
-            "description": "同步状态；失败时保留上次数据。",
+            "description": "当前未发货为 NOT_SHIPPED，发货后为 MANUAL；其他值预留外部物流适配器。",
             "enum": [
               "NOT_SHIPPED",
+              "MANUAL",
               "UP_TO_DATE",
               "PENDING",
               "FAILED"
@@ -4779,7 +4820,7 @@
               "pattern": "^[A-Za-z0-9_-]{1,64}$",
               "example": "id_10001"
             },
-            "description": "本人上传、用途 AFTERSALE_EVIDENCE 的 READY 图片",
+            "description": "当前私有存储未配置，仅允许省略或空数组；非空返回 503 EVIDENCE_STORAGE_UNAVAILABLE。",
             "maxItems": 9,
             "uniqueItems": true
           }
@@ -8508,6 +8549,265 @@
           "target"
         ]
       },
+      "ProductImageCreate": {
+        "type": "object",
+        "description": "登记管理员已托管的公开 HTTPS 产品图片；不抓取远程文件、不提供文件上传或私有凭证存储。",
+        "additionalProperties": false,
+        "properties": {
+          "publicUrl": {
+            "type": "string",
+            "description": "HTTPS 公开图片地址，不得含用户名或密码。",
+            "format": "uri",
+            "maxLength": 2048,
+            "example": "https://example.com/product.jpg"
+          },
+          "mimeType": {
+            "type": "string",
+            "description": "管理员登记的图片 MIME。",
+            "enum": [
+              "image/jpeg",
+              "image/png",
+              "image/webp"
+            ],
+            "example": "image/jpeg"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "description": "管理员登记的文件大小。",
+            "minimum": 1,
+            "example": 1024,
+            "maximum": 20971520
+          }
+        },
+        "required": [
+          "publicUrl",
+          "mimeType",
+          "sizeBytes"
+        ]
+      },
+      "TestPaymentInput": {
+        "type": "object",
+        "description": "仅测试环境且 COMMERCE_TEST_PAYMENTS=true；金额取订单，不发生真实扣款。",
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "type": "integer",
+            "description": "乐观锁版本；写操作必须提交最近读取的版本。",
+            "minimum": 1,
+            "example": 1
+          },
+          "transactionNo": {
+            "type": "string",
+            "description": "测试流水号，全局唯一。",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "example": "test_payment_001"
+          }
+        },
+        "required": [
+          "version",
+          "transactionNo"
+        ]
+      },
+      "TestRefundInput": {
+        "type": "object",
+        "description": "管理员模拟退款结果；version 为售后单当前版本，不发生真实转账。",
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "type": "integer",
+            "description": "乐观锁版本；写操作必须提交最近读取的版本。",
+            "minimum": 1,
+            "example": 1
+          },
+          "result": {
+            "type": "string",
+            "description": "测试结果。",
+            "enum": [
+              "SUCCEEDED",
+              "FAILED"
+            ],
+            "example": "SUCCEEDED"
+          }
+        },
+        "required": [
+          "version",
+          "result"
+        ]
+      },
+      "ManualLogisticsInput": {
+        "type": "object",
+        "description": "人工登记物流事件，记录操作者；不是快递平台的自动查询结果。",
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "type": "integer",
+            "description": "乐观锁版本；写操作必须提交最近读取的版本。",
+            "minimum": 1,
+            "example": 1
+          },
+          "status": {
+            "type": "string",
+            "description": "物流状态。",
+            "enum": [
+              "IN_TRANSIT",
+              "OUT_FOR_DELIVERY",
+              "DELIVERED",
+              "EXCEPTION"
+            ],
+            "example": "IN_TRANSIT"
+          },
+          "time": {
+            "type": "string",
+            "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+            "format": "date-time",
+            "example": "2026-10-22T02:00:00Z"
+          },
+          "description": {
+            "type": "string",
+            "description": "人工确认的物流说明。",
+            "minLength": 1,
+            "maxLength": 500,
+            "example": "管理员登记揽收"
+          },
+          "location": {
+            "type": "string",
+            "description": "位置。",
+            "minLength": 1,
+            "maxLength": 100,
+            "example": "上海"
+          }
+        },
+        "required": [
+          "version",
+          "status",
+          "time",
+          "description"
+        ]
+      },
+      "ShipmentLine": {
+        "type": "object",
+        "description": "发出的剩余未退款商品快照。",
+        "additionalProperties": false,
+        "properties": {
+          "orderItemId": {
+            "type": "string",
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "example": "id_10001"
+          },
+          "quantity": {
+            "type": "integer",
+            "description": "件数。",
+            "minimum": 1,
+            "example": 1,
+            "maximum": 99
+          }
+        },
+        "required": [
+          "orderItemId",
+          "quantity"
+        ]
+      },
+      "CommerceAuditLog": {
+        "type": "object",
+        "description": "交易变更及敏感详情读取的审计记录；不含密码和令牌。",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "example": "id_10001"
+          },
+          "actorKey": {
+            "type": "string",
+            "description": "user/admin/system 前缀和操作者 ID。",
+            "example": "admin:id_10001"
+          },
+          "action": {
+            "type": "string",
+            "description": "操作。",
+            "example": "order.ship"
+          },
+          "resourceId": {
+            "type": "string",
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "example": "id_10001"
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "最小必要操作信息。",
+            "example": {}
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+            "format": "date-time",
+            "example": "2026-10-22T02:00:00Z"
+          }
+        },
+        "required": [
+          "id",
+          "actorKey",
+          "action",
+          "resourceId",
+          "details",
+          "createdAt"
+        ]
+      },
+      "PageCommerceAuditLog": {
+        "type": "object",
+        "description": "CommerceAuditLog 的分页结果。固定按白名单排序；同值用 id 排序。",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommerceAuditLog"
+            },
+            "description": "当前页数据；空页为 []"
+          },
+          "total": {
+            "type": "integer",
+            "description": "匹配记录总数",
+            "minimum": 0,
+            "example": 1
+          },
+          "page": {
+            "type": "integer",
+            "description": "页码，从 1 开始",
+            "minimum": 1,
+            "example": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "description": "每页条数",
+            "minimum": 1,
+            "example": 20,
+            "maximum": 100
+          },
+          "hasNext": {
+            "type": "boolean",
+            "description": "是否有下一页",
+            "example": false
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageSize",
+          "hasNext"
+        ]
+      },
       "ContentCategory": {
         "type": "object",
         "description": "作用域固定为 CONTENT 的分类。",
@@ -12037,7 +12337,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "user",
@@ -12266,7 +12566,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "user",
@@ -12524,7 +12824,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "user",
@@ -12759,7 +13059,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "user",
@@ -13029,7 +13329,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "user",
@@ -13217,7 +13517,7 @@
       "get": {
         "operationId": "get_categories",
         "summary": "查询启用分类",
-        "description": "查询启用分类",
+        "description": "当前仅 PRODUCT 分类，parentId 可过滤直接子分类。",
         "tags": [
           "03 视频、图文与专栏"
         ],
@@ -13253,15 +13553,14 @@
           {
             "name": "scope",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
               "type": "string",
-              "description": "分类域。",
+              "description": "当前仅产品分类。",
               "enum": [
-                "CONTENT",
                 "PRODUCT"
               ],
-              "example": "CONTENT"
+              "example": "PRODUCT"
             },
             "description": "分类域。"
           },
@@ -13293,7 +13592,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": false,
         "x-admin-required": false,
         "x-auth-mode": "public",
@@ -16868,7 +17167,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": false,
         "x-admin-required": false,
         "x-auth-mode": "public",
@@ -17121,7 +17420,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": false,
         "x-admin-required": false,
         "x-auth-mode": "public",
@@ -17359,8 +17658,8 @@
     "/order-quotes": {
       "post": {
         "operationId": "post_order_quotes",
-        "summary": "商品／课程／会员下单试算",
-        "description": "绑定当前用户，10 分钟有效；实物需本人有效地址。只试算不占库存。金额与运费完全由服务端计算。",
+        "summary": "实物商品下单试算",
+        "description": "当前仅 PRODUCT，10 分钟有效，不占库存；服务端计算价格，当前免运费。快照绑定用户，数字商品后续接入。",
         "tags": [
           "05 订单、支付与物流"
         ],
@@ -17384,7 +17683,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "user",
@@ -17395,7 +17694,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/QuoteCreate"
+                "$ref": "#/components/schemas/ProductPurchase"
               },
               "example": {
                 "type": "PRODUCT",
@@ -17630,7 +17929,7 @@
       "post": {
         "operationId": "post_orders",
         "summary": "创建订单",
-        "description": "一个 quoteId 仅建一单；事务检查可售状态和库存后预占。试算期内按报价成交，不接受前端金额。待支付 30 分钟超时关闭。",
+        "description": "一份报价最多一单。下单重查产品状态、SKU 价格和规格、库存；价格或规格改变返回 QUOTE_CHANGED，须重新试算。事务预占库存，待付款 30 分钟到期释放。",
         "tags": [
           "05 订单、支付与物流"
         ],
@@ -17659,15 +17958,15 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "同一业务意图重试复用；保存至少 24h。",
+              "description": "同一业务意图重试复用；当前持久保存，同键不同路径或请求体返回 409。",
               "minLength": 16,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9_-]{16,128}$",
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{16,64}$",
               "example": "74ed8e82-ce32-4bc6-baf4-1fbfe691ae4a"
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "user",
@@ -18052,6 +18351,23 @@
             "description": "白名单排序，默认 createdAt:desc；同值用 id 排序。"
           },
           {
+            "name": "afterSaleStatus",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "售后汇总。",
+              "enum": [
+                "NONE",
+                "PROCESSING",
+                "PARTIALLY_COMPLETED",
+                "COMPLETED"
+              ],
+              "example": "NONE"
+            },
+            "description": "售后汇总。"
+          },
+          {
             "in": "header",
             "name": "X-Request-ID",
             "required": false,
@@ -18065,7 +18381,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "user",
@@ -18334,7 +18650,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "user",
@@ -18579,7 +18895,7 @@
       "post": {
         "operationId": "post_orders_id_cancel",
         "summary": "取消待支付订单",
-        "description": "与支付入账抢同一订单锁；只允许 PENDING_PAYMENT。释放预占并异步关闭渠道支付单。",
+        "description": "仅本人待付款订单，与测试付款抢同一订单锁；取消成功释放预占。当前无外部支付单。",
         "tags": [
           "05 订单、支付与物流"
         ],
@@ -18622,15 +18938,15 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "同一业务意图重试复用；保存至少 24h。",
+              "description": "同一业务意图重试复用；当前持久保存，同键不同路径或请求体返回 409。",
               "minLength": 16,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9_-]{16,128}$",
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{16,64}$",
               "example": "74ed8e82-ce32-4bc6-baf4-1fbfe691ae4a"
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "user",
@@ -18932,10 +19248,10 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "同一业务意图重试复用；保存至少 24h。",
+              "description": "同一业务意图重试复用；当前持久保存，同键不同路径或请求体返回 409。",
               "minLength": 16,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9_-]{16,128}$",
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{16,64}$",
               "example": "74ed8e82-ce32-4bc6-baf4-1fbfe691ae4a"
             }
           }
@@ -19620,7 +19936,7 @@
       "get": {
         "operationId": "get_orders_id_logistics",
         "summary": "本人订单物流",
-        "description": "仅实物订单；未发货也返回 200。后台定时查快递渠道；同步失败保留最后成功快照。",
+        "description": "未发货返回空包裹；已发货返回人工登记物流，syncStatus=MANUAL，lastSyncedAt=null。尚未接入第三方快递查询。",
         "tags": [
           "05 订单、支付与物流"
         ],
@@ -19658,7 +19974,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "user",
@@ -19891,15 +20207,15 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "同一业务意图重试复用；保存至少 24h。",
+              "description": "同一业务意图重试复用；当前持久保存，同键不同路径或请求体返回 409。",
               "minLength": 16,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9_-]{16,128}$",
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{16,64}$",
               "example": "74ed8e82-ce32-4bc6-baf4-1fbfe691ae4a"
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "user",
@@ -20222,7 +20538,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "user",
@@ -21607,15 +21923,15 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "同一业务意图重试复用；保存至少 24h。",
+              "description": "同一业务意图重试复用；当前持久保存，同键不同路径或请求体返回 409。",
               "minLength": 16,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9_-]{16,128}$",
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{16,64}$",
               "example": "74ed8e82-ce32-4bc6-baf4-1fbfe691ae4a"
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "user",
@@ -21942,7 +22258,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "user",
@@ -22208,7 +22524,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "user",
@@ -22471,15 +22787,15 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "同一业务意图重试复用；保存至少 24h。",
+              "description": "同一业务意图重试复用；当前持久保存，同键不同路径或请求体返回 409。",
               "minLength": 16,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9_-]{16,128}$",
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{16,64}$",
               "example": "74ed8e82-ce32-4bc6-baf4-1fbfe691ae4a"
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "user",
@@ -22755,15 +23071,15 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "同一业务意图重试复用；保存至少 24h。",
+              "description": "同一业务意图重试复用；当前持久保存，同键不同路径或请求体返回 409。",
               "minLength": 16,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9_-]{16,128}$",
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{16,64}$",
               "example": "74ed8e82-ce32-4bc6-baf4-1fbfe691ae4a"
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "user",
@@ -24702,10 +25018,10 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "同一业务意图重试复用；保存至少 24h。",
+              "description": "同一业务意图重试复用；当前持久保存，同键不同路径或请求体返回 409。",
               "minLength": 16,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9_-]{16,128}$",
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{16,64}$",
               "example": "74ed8e82-ce32-4bc6-baf4-1fbfe691ae4a"
             }
           }
@@ -25387,10 +25703,10 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "同一业务意图重试复用；保存至少 24h。",
+              "description": "同一业务意图重试复用；当前持久保存，同键不同路径或请求体返回 409。",
               "minLength": 16,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9_-]{16,128}$",
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{16,64}$",
               "example": "74ed8e82-ce32-4bc6-baf4-1fbfe691ae4a"
             }
           }
@@ -28220,7 +28536,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": false,
         "x-admin-required": true,
         "x-auth-mode": "admin_login",
@@ -28454,7 +28770,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": false,
         "x-admin-required": true,
         "x-auth-mode": "admin_refresh",
@@ -28691,7 +29007,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -28903,7 +29219,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -29174,7 +29490,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -29400,7 +29716,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -29417,7 +29733,7 @@
               },
               "example": {
                 "name": "健康科普",
-                "scope": "CONTENT"
+                "scope": "PRODUCT"
               }
             }
           }
@@ -29648,7 +29964,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -29880,7 +30196,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -30138,7 +30454,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -38247,7 +38563,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -38362,7 +38678,10 @@
                             ],
                             "priceCents": 9900,
                             "availableStock": 100,
-                            "enabled": true
+                            "enabled": true,
+                            "onHandStock": 102,
+                            "reservedStock": 2,
+                            "version": 1
                           }
                         ],
                         "afterSalePolicy": "符合平台售后规则可申请售后。",
@@ -38522,7 +38841,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -38653,7 +38972,10 @@
                         ],
                         "priceCents": 9900,
                         "availableStock": 100,
-                        "enabled": true
+                        "enabled": true,
+                        "onHandStock": 102,
+                        "reservedStock": 2,
+                        "version": 1
                       }
                     ],
                     "afterSalePolicy": "符合平台售后规则可申请售后。",
@@ -38823,7 +39145,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -38936,7 +39258,10 @@
                         ],
                         "priceCents": 9900,
                         "availableStock": 100,
-                        "enabled": true
+                        "enabled": true,
+                        "onHandStock": 102,
+                        "reservedStock": 2,
+                        "version": 1
                       }
                     ],
                     "afterSalePolicy": "符合平台售后规则可申请售后。",
@@ -39104,7 +39429,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -39231,7 +39556,10 @@
                         ],
                         "priceCents": 9900,
                         "availableStock": 100,
-                        "enabled": true
+                        "enabled": true,
+                        "onHandStock": 102,
+                        "reservedStock": 2,
+                        "version": 1
                       }
                     ],
                     "afterSalePolicy": "符合平台售后规则可申请售后。",
@@ -39361,7 +39689,7 @@
       "delete": {
         "operationId": "delete_admin_products_id",
         "summary": "删除产品",
-        "description": "软删除。仅未被订单、权益或其他资源引用的草稿可删除；其他情况先下架。",
+        "description": "禁止删除有历史库存、报价或订单引用的 SKU；产品仅可删除无 SKU 的草稿。业务历史保留，已使用资源改为下架或停用。",
         "tags": [
           "15 产品与库存管理"
         ],
@@ -39411,7 +39739,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -39639,7 +39967,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -39765,7 +40093,10 @@
                         ],
                         "priceCents": 9900,
                         "availableStock": 100,
-                        "enabled": true
+                        "enabled": true,
+                        "onHandStock": 102,
+                        "reservedStock": 2,
+                        "version": 1
                       }
                     ],
                     "afterSalePolicy": "符合平台售后规则可申请售后。",
@@ -39935,7 +40266,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -40061,7 +40392,10 @@
                         ],
                         "priceCents": 9900,
                         "availableStock": 100,
-                        "enabled": true
+                        "enabled": true,
+                        "onHandStock": 102,
+                        "reservedStock": 2,
+                        "version": 1
                       }
                     ],
                     "afterSalePolicy": "符合平台售后规则可申请售后。",
@@ -40258,7 +40592,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -40506,7 +40840,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -40768,7 +41102,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -41008,7 +41342,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -41224,7 +41558,7 @@
       "delete": {
         "operationId": "delete_admin_skus_id",
         "summary": "删除未引用 SKU",
-        "description": "有库存、预占或订单引用则拒绝；历史使用过的 SKU 只能停用。",
+        "description": "禁止删除有历史库存、报价或订单引用的 SKU；产品仅可删除无 SKU 的草稿。业务历史保留，已使用资源改为下架或停用。",
         "tags": [
           "15 产品与库存管理"
         ],
@@ -41274,7 +41608,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -41507,15 +41841,15 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "同一业务意图重试复用；保存至少 24h。",
+              "description": "同一业务意图重试复用；当前持久保存，同键不同路径或请求体返回 409。",
               "minLength": 16,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9_-]{16,128}$",
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{16,64}$",
               "example": "74ed8e82-ce32-4bc6-baf4-1fbfe691ae4a"
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -41602,7 +41936,9 @@
                     "reservedStockAfter": 2,
                     "reason": "示例内容",
                     "operatorId": "id_10001",
-                    "createdAt": "2026-10-22T02:00:00Z"
+                    "createdAt": "2026-10-22T02:00:00Z",
+                    "reservedDelta": 0,
+                    "orderId": null
                   },
                   "requestId": "req_demo_001",
                   "timestamp": "2026-10-22T02:00:00Z"
@@ -41814,7 +42150,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -41888,13 +42224,249 @@
                         "reservedStockAfter": 2,
                         "reason": "示例内容",
                         "operatorId": "id_10001",
-                        "createdAt": "2026-10-22T02:00:00Z"
+                        "createdAt": "2026-10-22T02:00:00Z",
+                        "reservedDelta": 0,
+                        "orderId": null
                       }
                     ],
                     "total": 1,
                     "page": 1,
                     "pageSize": 20,
                     "hasNext": false
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/product-images": {
+      "post": {
+        "operationId": "post_admin_product_images",
+        "summary": "登记公开产品图片",
+        "description": "登记公开产品图片",
+        "tags": [
+          "15 产品与库存管理"
+        ],
+        "security": [
+          {
+            "AdminBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": true,
+        "x-auth-mode": "admin",
+        "x-permissions": [
+          "products:write"
+        ],
+        "x-idempotency-required": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductImageCreate"
+              },
+              "example": {
+                "publicUrl": "https://example.com/product.jpg",
+                "mimeType": "image/jpeg",
+                "sizeBytes": 1024
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/MediaSummary"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "id": "id_10001",
+                    "kind": "IMAGE",
+                    "status": "READY",
+                    "mimeType": "image/jpeg",
+                    "sizeBytes": 102400,
+                    "publicUrl": "https://cdn.example.com/cover.jpg"
                   },
                   "requestId": "req_demo_001",
                   "timestamp": "2026-10-22T02:00:00Z"
@@ -42173,6 +42745,23 @@
             "description": "白名单排序，默认 createdAt:desc；同值用 id 排序。"
           },
           {
+            "name": "afterSaleStatus",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "售后汇总。",
+              "enum": [
+                "NONE",
+                "PROCESSING",
+                "PARTIALLY_COMPLETED",
+                "COMPLETED"
+              ],
+              "example": "NONE"
+            },
+            "description": "售后汇总。"
+          },
+          {
             "in": "header",
             "name": "X-Request-ID",
             "required": false,
@@ -42186,7 +42775,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -42472,7 +43061,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -42734,7 +43323,7 @@
       "get": {
         "operationId": "get_admin_orders_id_logistics",
         "summary": "查询订单物流",
-        "description": "查询订单物流",
+        "description": "未发货返回空包裹；已发货返回人工登记物流，syncStatus=MANUAL，lastSyncedAt=null。尚未接入第三方快递查询。",
         "tags": [
           "16 订单、物流与售后管理"
         ],
@@ -42772,7 +43361,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -43007,15 +43596,15 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "同一业务意图重试复用；保存至少 24h。",
+              "description": "同一业务意图重试复用；当前持久保存，同键不同路径或请求体返回 409。",
               "minLength": 16,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9_-]{16,128}$",
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{16,64}$",
               "example": "74ed8e82-ce32-4bc6-baf4-1fbfe691ae4a"
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -43104,7 +43693,13 @@
                     "shippedAt": "2026-10-22T02:00:00Z",
                     "deliveredAt": null,
                     "lastSyncedAt": null,
-                    "version": 1
+                    "version": 1,
+                    "items": [
+                      {
+                        "orderItemId": "id_10001",
+                        "quantity": 1
+                      }
+                    ]
                   },
                   "requestId": "req_demo_001",
                   "timestamp": "2026-10-22T02:00:00Z"
@@ -43267,7 +43862,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -43357,7 +43952,13 @@
                     "shippedAt": "2026-10-22T02:00:00Z",
                     "deliveredAt": null,
                     "lastSyncedAt": null,
-                    "version": 1
+                    "version": 1,
+                    "items": [
+                      {
+                        "orderItemId": "id_10001",
+                        "quantity": 1
+                      }
+                    ]
                   },
                   "requestId": "req_demo_001",
                   "timestamp": "2026-10-22T02:00:00Z"
@@ -43607,7 +44208,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -43875,7 +44476,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -44140,15 +44741,15 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "同一业务意图重试复用；保存至少 24h。",
+              "description": "同一业务意图重试复用；当前持久保存，同键不同路径或请求体返回 409。",
               "minLength": 16,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9_-]{16,128}$",
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{16,64}$",
               "example": "74ed8e82-ce32-4bc6-baf4-1fbfe691ae4a"
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -44428,15 +45029,15 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "同一业务意图重试复用；保存至少 24h。",
+              "description": "同一业务意图重试复用；当前持久保存，同键不同路径或请求体返回 409。",
               "minLength": 16,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9_-]{16,128}$",
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{16,64}$",
               "example": "74ed8e82-ce32-4bc6-baf4-1fbfe691ae4a"
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -44672,7 +45273,7 @@
       "post": {
         "operationId": "post_admin_aftersales_id_retry_refund",
         "summary": "重试失败退款",
-        "description": "仅 REFUND_FAILED；重用原 refund.id／渠道退款号并先查单，避免重复退款。",
+        "description": "仅 REFUND_FAILED，重用原 refund.id。当前 TEST 支付不调用外部渠道；接入真实退款时必须先查单。",
         "tags": [
           "16 订单、物流与售后管理"
         ],
@@ -44715,15 +45316,15 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "同一业务意图重试复用；保存至少 24h。",
+              "description": "同一业务意图重试复用；当前持久保存，同键不同路径或请求体返回 409。",
               "minLength": 16,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9_-]{16,128}$",
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{16,64}$",
               "example": "74ed8e82-ce32-4bc6-baf4-1fbfe691ae4a"
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -45064,7 +45665,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -45313,10 +45914,10 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "同一业务意图重试复用；保存至少 24h。",
+              "description": "同一业务意图重试复用；当前持久保存，同键不同路径或请求体返回 409。",
               "minLength": 16,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9_-]{16,128}$",
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{16,64}$",
               "example": "74ed8e82-ce32-4bc6-baf4-1fbfe691ae4a"
             }
           }
@@ -45409,6 +46010,1122 @@
                     "failureCode": null,
                     "createdAt": "2026-10-22T02:00:00Z",
                     "completedAt": null
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/orders/{id}/test-payment": {
+      "post": {
+        "operationId": "post_admin_orders_id_test_payment",
+        "summary": "测试确认订单付款",
+        "description": "仅显式启用的 development/test/staging 环境。生产环境总是拒绝。订单须未过期且待支付；测试流水唯一，无真实资金流。",
+        "tags": [
+          "16 订单、物流与售后管理"
+        ],
+        "security": [
+          {
+            "AdminBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "schema": {
+              "type": "string",
+              "description": "不透明业务 ID；前端必须按字符串保存。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "id_10001"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "同一业务意图重试复用；当前持久保存，同键不同路径或请求体返回 409。",
+              "minLength": 16,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{16,64}$",
+              "example": "74ed8e82-ce32-4bc6-baf4-1fbfe691ae4a"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": true,
+        "x-auth-mode": "admin",
+        "x-permissions": [
+          "payments:test"
+        ],
+        "x-idempotency-required": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestPaymentInput"
+              },
+              "example": {
+                "version": 1,
+                "transactionNo": "test_payment_001"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AdminOrder"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "id": "id_10001",
+                    "orderNo": "20261022000001",
+                    "type": "PRODUCT",
+                    "status": "PENDING_PAYMENT",
+                    "paymentStatus": "UNPAID",
+                    "afterSaleStatus": "NONE",
+                    "items": [
+                      {
+                        "id": "id_10001",
+                        "resourceId": "id_10001",
+                        "resourceType": "SKU",
+                        "productId": "id_10001",
+                        "title": "健康护理用品",
+                        "skuAttributes": [
+                          {
+                            "name": "规格",
+                            "value": "标准装"
+                          }
+                        ],
+                        "coverUrl": "https://cdn.example.com/cover.jpg",
+                        "quantity": 1,
+                        "unitPriceCents": 9900,
+                        "subtotalCents": 9900,
+                        "refundedQuantity": 0,
+                        "refundedAmountCents": 0
+                      }
+                    ],
+                    "itemsAmountCents": 9900,
+                    "shippingFeeCents": 0,
+                    "payableAmountCents": 9900,
+                    "paidAmountCents": 0,
+                    "refundedAmountCents": 0,
+                    "currency": "CNY",
+                    "paymentDeadlineAt": "2026-10-22T02:30:00Z",
+                    "paidAt": null,
+                    "createdAt": "2026-10-22T02:30:00Z",
+                    "actions": {
+                      "canPay": true,
+                      "canCancel": true,
+                      "canConfirmReceipt": false,
+                      "canApplyAfterSale": false
+                    },
+                    "cancelReason": null,
+                    "cancelledAt": null,
+                    "completedAt": null,
+                    "closedReason": null,
+                    "version": 1,
+                    "user": {
+                      "id": "id_10001",
+                      "nickname": "小雨",
+                      "avatarUrl": "https://cdn.example.com/cover.jpg",
+                      "phoneMasked": "138****0000",
+                      "status": "ACTIVE",
+                      "membership": {
+                        "active": true,
+                        "expiresAt": "2026-11-21T02:00:00Z",
+                        "benefitCodes": [
+                          "MEMBER_COURSES"
+                        ]
+                      },
+                      "createdAt": "2026-10-22T02:00:00Z"
+                    },
+                    "address": {
+                      "recipient": "张女士",
+                      "phone": "+8613800000000",
+                      "provinceCode": "310000",
+                      "province": "上海市",
+                      "cityCode": "310100",
+                      "city": "上海市",
+                      "districtCode": "310101",
+                      "district": "黄浦区",
+                      "detail": "示例路 100 号"
+                    }
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/refunds/{id}/test-result": {
+      "post": {
+        "operationId": "post_admin_refunds_id_test_result",
+        "summary": "测试确认退款结果",
+        "description": "version 为售后单版本。只允许 TEST 支付的 PROCESSING 退款。成功才更新金额、售后数量和未发货预占库存；失败维持冻结。",
+        "tags": [
+          "16 订单、物流与售后管理"
+        ],
+        "security": [
+          {
+            "AdminBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "schema": {
+              "type": "string",
+              "description": "不透明业务 ID；前端必须按字符串保存。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "id_10001"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "同一业务意图重试复用；当前持久保存，同键不同路径或请求体返回 409。",
+              "minLength": 16,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{16,64}$",
+              "example": "74ed8e82-ce32-4bc6-baf4-1fbfe691ae4a"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": true,
+        "x-auth-mode": "admin",
+        "x-permissions": [
+          "payments:test"
+        ],
+        "x-idempotency-required": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestRefundInput"
+              },
+              "example": {
+                "version": 1,
+                "result": "SUCCEEDED"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Refund"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "id": "id_10001",
+                    "orderId": "id_10001",
+                    "afterSaleId": "id_10001",
+                    "reasonType": "AFTERSALE",
+                    "amountCents": 9900,
+                    "status": "PENDING",
+                    "failureCode": null,
+                    "createdAt": "2026-10-22T02:00:00Z",
+                    "completedAt": null
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/shipments/{id}/events": {
+      "post": {
+        "operationId": "post_admin_shipments_id_events",
+        "summary": "登记人工物流轨迹",
+        "description": "必须遵守物流状态顺序，时间不得早于发货或已有最新事件。签收不等于用户确认收货；人工记录不更新 lastSyncedAt。",
+        "tags": [
+          "16 订单、物流与售后管理"
+        ],
+        "security": [
+          {
+            "AdminBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "schema": {
+              "type": "string",
+              "description": "不透明业务 ID；前端必须按字符串保存。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "id_10001"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "同一业务意图重试复用；当前持久保存，同键不同路径或请求体返回 409。",
+              "minLength": 16,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{16,64}$",
+              "example": "74ed8e82-ce32-4bc6-baf4-1fbfe691ae4a"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": true,
+        "x-auth-mode": "admin",
+        "x-permissions": [
+          "orders:ship"
+        ],
+        "x-idempotency-required": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualLogisticsInput"
+              },
+              "example": {
+                "version": 1,
+                "status": "IN_TRANSIT",
+                "time": "2026-10-22T02:00:00Z",
+                "description": "管理员登记揽收"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Shipment"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "id": "id_10001",
+                    "orderId": "id_10001",
+                    "carrierCode": "SF",
+                    "carrierName": "顺丰速运",
+                    "trackingNo": "SF1234567890",
+                    "status": "PENDING_PICKUP",
+                    "shippedAt": "2026-10-22T02:00:00Z",
+                    "deliveredAt": null,
+                    "lastSyncedAt": null,
+                    "version": 1,
+                    "items": [
+                      {
+                        "orderItemId": "id_10001",
+                        "quantity": 1
+                      }
+                    ]
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/commerce-audit-logs": {
+      "get": {
+        "operationId": "get_admin_commerce_audit_logs",
+        "summary": "交易审计日志",
+        "description": "交易审计日志",
+        "tags": [
+          "16 订单、物流与售后管理"
+        ],
+        "security": [
+          {
+            "AdminBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "页码，默认 1。",
+              "minimum": 1,
+              "example": 1,
+              "default": 1
+            },
+            "description": "页码，默认 1。"
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "每页条数，默认 20，最多 100。",
+              "minimum": 1,
+              "example": 20,
+              "maximum": 100,
+              "default": 20
+            },
+            "description": "每页条数，默认 20，最多 100。"
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": true,
+        "x-auth-mode": "admin",
+        "x-permissions": [
+          "audit:read"
+        ],
+        "x-idempotency-required": false,
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PageCommerceAuditLog"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "items": [
+                      {
+                        "id": "id_10001",
+                        "actorKey": "admin:id_10001",
+                        "action": "order.ship",
+                        "resourceId": "id_10001",
+                        "details": {},
+                        "createdAt": "2026-10-22T02:00:00Z"
+                      }
+                    ],
+                    "total": 1,
+                    "page": 1,
+                    "pageSize": 20,
+                    "hasNext": false
                   },
                   "requestId": "req_demo_001",
                   "timestamp": "2026-10-22T02:00:00Z"
@@ -46397,10 +48114,10 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "同一业务意图重试复用；保存至少 24h。",
+              "description": "同一业务意图重试复用；当前持久保存，同键不同路径或请求体返回 409。",
               "minLength": 16,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9_-]{16,128}$",
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{16,64}$",
               "example": "74ed8e82-ce32-4bc6-baf4-1fbfe691ae4a"
             }
           }
@@ -46669,10 +48386,10 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "同一业务意图重试复用；保存至少 24h。",
+              "description": "同一业务意图重试复用；当前持久保存，同键不同路径或请求体返回 409。",
               "minLength": 16,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9_-]{16,128}$",
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{16,64}$",
               "example": "74ed8e82-ce32-4bc6-baf4-1fbfe691ae4a"
             }
           }
@@ -48187,10 +49904,10 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "同一业务意图重试复用；保存至少 24h。",
+              "description": "同一业务意图重试复用；当前持久保存，同键不同路径或请求体返回 409。",
               "minLength": 16,
-              "maxLength": 128,
-              "pattern": "^[A-Za-z0-9_-]{16,128}$",
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{16,64}$",
               "example": "74ed8e82-ce32-4bc6-baf4-1fbfe691ae4a"
             }
           }

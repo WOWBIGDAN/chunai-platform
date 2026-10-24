@@ -823,6 +823,99 @@ obj("NotificationAllInput", "任务创建时对活跃用户取接收者快照；
     **{k: v for k, v in task_fields.items() if k != "userIds"}, "audience": enum("全部活跃用户。", "ALL_ACTIVE")})
 union("NotificationTaskInput", "通知范围二选一。", ["NotificationUsersInput", "NotificationAllInput"], "audience")
 
+# Implemented physical-commerce contract. Digital goods and external providers remain planned.
+for _path, _methods in {
+    '/admin/auth/login': ['post'], '/admin/auth/refresh': ['post'], '/admin/auth/logout': ['post'], '/admin/me': ['get'],
+    '/me/addresses': ['get', 'post'], '/me/addresses/{id}': ['get', 'put', 'delete'],
+    '/categories': ['get'], '/products': ['get'], '/products/{id}': ['get'],
+    '/admin/categories': ['get', 'post'], '/admin/categories/{id}': ['get', 'patch', 'delete'],
+    '/admin/products': ['get', 'post'], '/admin/products/{id}': ['get', 'patch', 'delete'],
+    '/admin/products/{id}/publish': ['post'], '/admin/products/{id}/unpublish': ['post'],
+    '/admin/products/{id}/skus': ['get', 'post'], '/admin/skus/{id}': ['get', 'patch', 'delete'],
+    '/admin/skus/{id}/stock-adjustments': ['get', 'post'],
+    '/order-quotes': ['post'], '/orders': ['get', 'post'], '/orders/{id}': ['get'],
+    '/orders/{id}/cancel': ['post'], '/orders/{id}/confirm-receipt': ['post'],
+    '/orders/{id}/logistics': ['get'], '/orders/{id}/refunds': ['get'],
+    '/aftersales': ['get', 'post'], '/aftersales/{id}': ['get'],
+    '/aftersales/{id}/cancel': ['post'], '/aftersales/{id}/return-shipment': ['post'],
+    '/admin/orders': ['get'], '/admin/orders/{id}': ['get'], '/admin/orders/{id}/logistics': ['get'],
+    '/admin/orders/{id}/shipment': ['post'], '/admin/shipments/{id}': ['patch'],
+    '/admin/aftersales': ['get'], '/admin/aftersales/{id}': ['get'],
+    '/admin/aftersales/{id}/review': ['post'], '/admin/aftersales/{id}/confirm-return': ['post'],
+    '/admin/aftersales/{id}/retry-refund': ['post'], '/admin/refunds': ['get'],
+}.items():
+    IMPLEMENTED.update((_method, _path) for _method in _methods)
+
+obj('ProductImageCreate', '登记管理员已托管的公开 HTTPS 产品图片；不抓取远程文件、不提供文件上传或私有凭证存储。', {
+    'publicUrl': string('HTTPS 公开图片地址，不得含用户名或密码。', 'https://example.com/product.jpg', format='uri', maxLength=2048),
+    'mimeType': enum('管理员登记的图片 MIME。', 'image/jpeg|image/png|image/webp'),
+    'sizeBytes': integer('管理员登记的文件大小。', 1024, 1, maximum=20971520)})
+obj('TestPaymentInput', '仅测试环境且 COMMERCE_TEST_PAYMENTS=true；金额取订单，不发生真实扣款。', {
+    'version': VERSION, 'transactionNo': string('测试流水号，全局唯一。', 'test_payment_001', pattern=r'^[A-Za-z0-9_-]{1,64}$')})
+obj('TestRefundInput', '管理员模拟退款结果；version 为售后单当前版本，不发生真实转账。', {
+    'version': VERSION, 'result': enum('测试结果。', 'SUCCEEDED|FAILED')})
+obj('ManualLogisticsInput', '人工登记物流事件，记录操作者；不是快递平台的自动查询结果。', {
+    'version': VERSION, 'status': enum('物流状态。', 'IN_TRANSIT|OUT_FOR_DELIVERY|DELIVERED|EXCEPTION'),
+    'time': TIME, 'description': string('人工确认的物流说明。', '管理员登记揽收', minLength=1, maxLength=500),
+    'location': string('位置。', '上海', minLength=1, maxLength=100)}, ['version', 'status', 'time', 'description'])
+obj('ShipmentLine', '发出的剩余未退款商品快照。', {'orderItemId': ID, 'quantity': QTY})
+obj('CommerceAuditLog', '交易变更及敏感详情读取的审计记录；不含密码和令牌。', {
+    'id': ID, 'actorKey': string('user/admin/system 前缀和操作者 ID。', 'admin:id_10001'),
+    'action': string('操作。', 'order.ship'), 'resourceId': ID,
+    'details': {'type': 'object', 'additionalProperties': True, 'description': '最小必要操作信息。', 'example': {}}, 'createdAt': TIME})
+
+op('15 产品与库存管理', 'post', '/admin/product-images', '登记公开产品图片', auth='admin', permission='products:write', body='ProductImageCreate', data='MediaSummary', status=201)
+op('16 订单、物流与售后管理', 'post', '/admin/orders/{id}/test-payment', '测试确认订单付款', auth='admin', permission='payments:test', body='TestPaymentInput', data='AdminOrder', idem=True,
+   note='仅显式启用的 development/test/staging 环境。生产环境总是拒绝。订单须未过期且待支付；测试流水唯一，无真实资金流。')
+op('16 订单、物流与售后管理', 'post', '/admin/refunds/{id}/test-result', '测试确认退款结果', auth='admin', permission='payments:test', body='TestRefundInput', data='Refund', idem=True,
+   note='version 为售后单版本。只允许 TEST 支付的 PROCESSING 退款。成功才更新金额、售后数量和未发货预占库存；失败维持冻结。')
+op('16 订单、物流与售后管理', 'post', '/admin/shipments/{id}/events', '登记人工物流轨迹', auth='admin', permission='orders:ship', body='ManualLogisticsInput', data='Shipment', idem=True,
+   note='必须遵守物流状态顺序，时间不得早于发货或已有最新事件。签收不等于用户确认收货；人工记录不更新 lastSyncedAt。')
+paged('16 订单、物流与售后管理', '/admin/commerce-audit-logs', '交易审计日志', 'CommerceAuditLog', auth='admin', permission='audit:read')
+for _method, _path in [('post', '/admin/product-images'), ('post', '/admin/orders/{id}/test-payment'),
+                      ('post', '/admin/refunds/{id}/test-result'), ('post', '/admin/shipments/{id}/events'), ('get', '/admin/commerce-audit-logs')]:
+    IMPLEMENTED.add((_method, _path))
+
+SCHEMAS['CategoryCreate']['properties']['scope'] = enum('当前仅支持产品分类。', 'PRODUCT')
+SCHEMAS['AdminProduct']['properties']['skus'] = array('AdminSku', '含停用 SKU 和管理库存字段')
+for _field in ('minPriceCents', 'maxPriceCents'):
+    SCHEMAS['AdminProduct']['properties'][_field] = {**MONEY, 'minimum': 0, 'description': '启用 SKU 价格范围；无启用 SKU 的草稿返回 0。'}
+for _name in ('SkuCreate', 'SkuPatch', 'Sku', 'AdminSku'):
+    SCHEMAS[_name]['properties']['priceCents'] = {**MONEY, 'minimum': 1, 'maximum': 100000000}
+SCHEMAS['StockAdjustment']['properties'].update({
+    'reservedDelta': {'type': 'integer', 'description': '预占变化；业务自动预占／释放也记流水。', 'example': 0},
+    'orderId': {**ID, 'nullable': True, 'example': None}})
+SCHEMAS['StockAdjustment']['required'] += ['reservedDelta', 'orderId']
+SCHEMAS['Shipment']['properties']['items'] = array('ShipmentLine', '实际发货行与数量')
+SCHEMAS['Shipment']['required'].append('items')
+SCHEMAS['LogisticsEvent']['properties']['source'] = enum('人工记录来源。', 'MANUAL')
+SCHEMAS['LogisticsEvent']['required'].append('source')
+SCHEMAS['LogisticsResult']['properties']['syncStatus'] = enum('当前未发货为 NOT_SHIPPED，发货后为 MANUAL；其他值预留外部物流适配器。', 'NOT_SHIPPED|MANUAL|UP_TO_DATE|PENDING|FAILED')
+SCHEMAS['LogisticsResult']['properties']['shipment'] = {**copy.deepcopy(SCHEMAS['Shipment']), 'nullable': True}
+SCHEMAS['AfterSaleCreate']['properties']['evidenceMediaIds']['description'] = '当前私有存储未配置，仅允许省略或空数组；非空返回 503 EVIDENCE_STORAGE_UNAVAILABLE。'
+SCHEMAS['AdminAuthTokens']['description'] = '独立管理员会话，aud=admin；访问令牌默认 15 分钟，刷新会话绝对期限 24 小时。'
+for _operation in OPERATIONS:
+    if _operation['path'] == '/order-quotes':
+        _operation['body'] = 'ProductPurchase'
+        _operation['title'] = '实物商品下单试算'
+        _operation['note'] = '当前仅 PRODUCT，10 分钟有效，不占库存；服务端计算价格，当前免运费。快照绑定用户，数字商品后续接入。'
+    if _operation['path'] == '/orders' and _operation['method'] == 'post':
+        _operation['note'] = '一份报价最多一单。下单重查产品状态、SKU 价格和规格、库存；价格或规格改变返回 QUOTE_CHANGED，须重新试算。事务预占库存，待付款 30 分钟到期释放。'
+    if _operation['path'] == '/categories':
+        _operation['params'][2]['schema'] = enum('当前仅产品分类。', 'PRODUCT')
+        _operation['params'][2]['required'] = False
+        _operation['note'] = '当前仅 PRODUCT 分类，parentId 可过滤直接子分类。'
+    if _operation['path'] in ('/orders', '/admin/orders') and _operation['method'] == 'get':
+        _operation['params'].append(query('afterSaleStatus', enum('售后汇总。', 'NONE|PROCESSING|PARTIALLY_COMPLETED|COMPLETED')))
+    if _operation['path'] in ('/orders/{id}/logistics', '/admin/orders/{id}/logistics'):
+        _operation['note'] = '未发货返回空包裹；已发货返回人工登记物流，syncStatus=MANUAL，lastSyncedAt=null。尚未接入第三方快递查询。'
+    if _operation['path'] == '/admin/aftersales/{id}/retry-refund':
+        _operation['note'] = '仅 REFUND_FAILED，重用原 refund.id。当前 TEST 支付不调用外部渠道；接入真实退款时必须先查单。'
+    if _operation['path'] == '/orders/{id}/cancel':
+        _operation['note'] = '仅本人待付款订单，与测试付款抢同一订单锁；取消成功释放预占。当前无外部支付单。'
+    if _operation['path'] in ('/admin/products/{id}', '/admin/skus/{id}') and _operation['method'] == 'delete':
+        _operation['note'] = '禁止删除有历史库存、报价或订单引用的 SKU；产品仅可删除无 SKU 的草稿。业务历史保留，已使用资源改为下架或停用。'
+
 AUTH_LABELS = {
     "public": ("否", "否"), "optional": ("可选", "否"), "user": ("是", "否"),
     "admin": ("是", "是"), "admin_login": ("否", "是（管理员凭证）"), "authenticated": ("是（用户或管理员）", "按操作与素材用途"),
@@ -937,10 +1030,10 @@ def operation_id(operation):
 def make_spec():
     spec = {
         "openapi": "3.0.3",
-        "info": {"title": "两性健康服务平台 API", "version": "1.1.0",
-                 "description": "客户端密码认证已实现，无短信验证码。每个操作的 x-implementation-status 标注实现状态，其他模块仍为设计契约。"},
+        "info": {"title": "两性健康服务平台 API", "version": "1.2.0",
+                 "description": "已实现用户与管理员认证、产品、实物订单、人工物流、售后和测试收付款。x-implementation-status 表示仓库实现状态；线上可用范围以部署版本为准。短信及外部支付／物流暂未接入。"},
         "servers": [{"url": "http://localhost:3000/api/v1", "description": "本地开发（示例）"},
-                    {"url": "http://47.97.46.242/api/v1", "description": "已部署 staging 测试服务；仅 implemented 接口可用，协议版本以协议接口返回值为准"},
+                    {"url": "http://47.97.46.242/api/v1", "description": "staging 测试服务；本次交易模块需部署此版本后可用，协议版本以接口返回值为准"},
                     {"url": "https://api.example.com/api/v1", "description": "生产域名占位，必须替换"}],
         "tags": [{"name": t} for t in dict.fromkeys(o["tag"] for o in OPERATIONS)],
         "components": {"schemas": SCHEMAS, "securitySchemes": {
@@ -965,7 +1058,7 @@ def make_spec():
                                "schema": string("追踪号；服务端校验后回传或重新生成。", "req_demo_001", minLength=1, maxLength=64, pattern=r"^[A-Za-z0-9_-]{1,64}$")})
         if operation["idem"]:
             parameters.append({"in": "header", "name": "Idempotency-Key", "required": True,
-                               "schema": string("同一业务意图重试复用；保存至少 24h。", "74ed8e82-ce32-4bc6-baf4-1fbfe691ae4a", minLength=16, maxLength=128, pattern=r"^[A-Za-z0-9_-]{16,128}$")})
+                               "schema": string("同一业务意图重试复用；当前持久保存，同键不同路径或请求体返回 409。", "74ed8e82-ce32-4bc6-baf4-1fbfe691ae4a", minLength=16, maxLength=64, pattern=r"^[A-Za-z0-9_-]{16,64}$")})
         if operation["response_kind"] == "sse":
             parameters.append({"in": "header", "name": "Last-Event-ID", "required": False,
                                "schema": string("同 generation 内上次已消费事件序号。", "2", pattern=r"^\d+$")})
@@ -1046,9 +1139,9 @@ def schema_link(name):
 
 
 def build_api_markdown():
-    lines = ["# 接口文档", "", "> 更新：2026-10-23。客户端密码认证已实现，其余接口保留设计契约；每个接口下方标注实现状态。短信功能暂缓。",
+    lines = ["# 接口文档", "", "> 更新：2026-10-24。认证与实物交易模块已实现；每个接口标注仓库实现状态，线上范围以部署版本为准。短信及第三方服务暂缓。",
              "", "已实现接口的运行方法见 [后端启动与数据库](04-backend-auth.md)。",
-             "", "已部署测试 API：`http://47.97.46.242/api/v1`。服务器运行、CI/CD 和运维见 [部署说明](05-deployment.md)。",
+             "", "测试 API：`http://47.97.46.242/api/v1`。本次交易模块尚需发布此版本，详见 [交易模块](06-commerce.md) 与 [部署说明](05-deployment.md)。",
              "注册示例采用本地默认协议版本 `2026-10-01`；公网测试环境当前为 `2026-10-23-test`，提交前须读取当前环境的协议接口。",
              "", "所有下列 URL 统一加前缀 `/api/v1`。请求默认 `application/json`；返回默认使用统一响应结构，表中的响应类型指 `data`。",
              "请求及响应对象的全部字段见 [数据格式文档](02-data-models.md)，状态与联调步骤见 [业务流程文档](03-business-flows.md)。",
@@ -1373,16 +1466,20 @@ def validate_flow_examples():
     return checked
 
 
-def implemented_spec(spec):
+def implemented_spec(spec, auth_only=False):
     """Produce an importable contract containing only running endpoints and their schemas."""
     result = copy.deepcopy(spec)
-    result['info']['title'] = '两性健康服务平台 · 已实现认证 API'
+    result['info']['title'] = '两性健康服务平台 · 已实现认证 API' if auth_only else '两性健康服务平台 · 已实现认证与交易 API'
     result['paths'] = {
         path: {method: operation for method, operation in methods.items()
                if operation.get('x-implementation-status') == 'implemented'}
         for path, methods in result['paths'].items()
         if any(operation.get('x-implementation-status') == 'implemented' for operation in methods.values())
     }
+    if auth_only:
+        result['paths'] = {path: methods for path, methods in result['paths'].items()
+                           if path in ('/health', '/me', '/me/password', '/me/sessions', '/me/sessions/{id}')
+                           or path.startswith('/auth/') or path.startswith('/public/legal-documents/')}
     used_tags = {tag for methods in result['paths'].values() for operation in methods.values()
                  for tag in operation['tags']}
     result['tags'] = [tag for tag in result['tags'] if tag['name'] in used_tags]
@@ -1405,7 +1502,8 @@ def implemented_spec(spec):
     visit(result['paths'])
     result['components']['schemas'] = {name: schema for name, schema in result['components']['schemas'].items()
                                         if name in names}
-    result['components']['securitySchemes'].pop('AdminBearer', None)
+    if auth_only:
+        result['components']['securitySchemes'].pop('AdminBearer', None)
     return result
 
 
@@ -1416,7 +1514,8 @@ def main():
     report = validate_contract(spec)
     DOCS.mkdir(parents=True, exist_ok=True)
     (DOCS / "openapi.json").write_text(json.dumps(spec, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    (DOCS / "openapi-auth.json").write_text(json.dumps(implemented_spec(spec), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (DOCS / "openapi-auth.json").write_text(json.dumps(implemented_spec(spec, auth_only=True), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (DOCS / "openapi-implemented.json").write_text(json.dumps(implemented_spec(spec), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (DOCS / "01-api-reference.md").write_text(build_api_markdown() + "\n", encoding="utf-8")
     (DOCS / "02-data-models.md").write_text(build_data_markdown() + "\n", encoding="utf-8")
     # README is maintained with runnable backend instructions, independently of generated contracts.

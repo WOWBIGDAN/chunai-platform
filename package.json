@@ -2,8 +2,10 @@
   "name": "chunai-platform-api",
   "version": "0.1.0",
   "private": true,
-  "description": "NestJS and MySQL authentication API",
-  "engines": { "node": ">=22.14.0" },
+  "description": "NestJS and MySQL authentication and commerce API",
+  "engines": {
+    "node": ">=22.14.0"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
@@ -12,6 +14,7 @@
     "migration:run": "typeorm-ts-node-commonjs migration:run -d src/database/data-source.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/database/data-source.ts",
     "migration:run:prod": "typeorm migration:run -d dist/database/data-source.js",
+    "admin": "ts-node src/commerce/admin-cli.ts",
     "test": "jest --runInBand --testPathPatterns=unit",
     "test:e2e": "jest --runInBand --testPathPatterns=e2e",
     "docs:build": "python scripts/build_api_docs.py"
@@ -30,13 +33,18 @@
     "mysql2": "^3.14.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
+    "sanitize-html": "^2.18.1",
     "typeorm": "^0.3.28"
+  },
+  "overrides": {
+    "multer": "^2.5.0"
   },
   "devDependencies": {
     "@nestjs/testing": "^11.1.0",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.14.0",
+    "@types/sanitize-html": "^2.16.2",
     "@types/supertest": "^6.0.3",
     "jest": "^30.0.0",
     "supertest": "^7.1.0",

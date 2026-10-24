@@ -51,10 +51,12 @@ jobs:
           TEST_DB_PASSWORD: ci-only-test-password
           TEST_DB_NAME: chunai_auth_test
       - run: npm run build
+      - name: Validate real commerce responses against the API contract
+        run: python3 scripts/validate_commerce_responses.py
       - name: Validate generated API contracts
         run: |
           python3 scripts/build_api_docs.py
-          git diff --exit-code -- docs/01-api-reference.md docs/02-data-models.md docs/openapi.json docs/openapi-auth.json
+          git diff --exit-code -- docs/01-api-reference.md docs/02-data-models.md docs/openapi.json docs/openapi-auth.json docs/openapi-implemented.json
       - name: Package Linux application and production dependencies
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         run: bash scripts/package-release.sh "$GITHUB_SHA"

@@ -2,7 +2,7 @@
 
 以下请求路径均包含 `/api/v1`。示例 ID、验证码、支付地址和令牌为占位。所有请求与响应字段以 [数据格式](02-data-models.md) 和 [OpenAPI](openapi.json) 为准。
 
-已部署的测试 API 地址为 `http://47.97.46.242/api/v1`。当前已实现认证与健康检查；本文的内容、订单、支付等其余流程为后续设计。实现范围见 [后端说明](04-backend-auth.md)，部署和运维见 [服务器说明](05-deployment.md)。
+测试 API 地址为 `http://47.97.46.242/api/v1`。仓库已实现认证、产品、实物订单、人工物流与售后，新增模块须发布本次代码后才可在公网使用。用户确认本次采用测试收付款，不接入第三方服务。本文的真实支付回调、对账、通知、数字权益与对象存储仍为后续设计；当前可运行流程见 [交易后端说明](06-commerce.md)，部署和运维见 [服务器说明](05-deployment.md)。
 
 ## 内容访问与发布
 
@@ -113,7 +113,7 @@ Content-Type: application/json
 }
 ```
 
-若 SKU 单价 4900 分、运费 0 分，data.payableAmountCents=9800。报价保存商品、价格和地址快照，绑定当前用户；修改地址簿不会改变已有报价，想用新地址应重新试算。
+若 SKU 单价 4900 分、运费 0 分，data.payableAmountCents=9800。报价保存商品、价格和地址快照，绑定当前用户；修改地址簿不会改变已有报价，想用新地址应重新试算。当前下单会重新核对 SKU 价格及规格，发生变化时返回 QUOTE_CHANGED，需重新试算。
 
 ```http
 POST /api/v1/orders
@@ -206,7 +206,7 @@ Content-Type: application/json
 
 服务端仅发出“原购买数量－已退款数量”的商品；整单已退款不允许发货。发货后为 PENDING_RECEIPT，系统产生物流通知。快递代码的允许值由物流适配器配置，示例 SF 不代表固定只接一家。
 
-客户端 GET /orders/{id}/logistics。未发货时返回 shipment=null、events=[]、syncStatus=NOT_SHIPPED。已发货且第三方临时不可用时保留最后事件，syncStatus=FAILED；前端显示最近同步时间。
+客户端 GET /orders/{id}/logistics。未发货时返回 shipment=null、events=[]、syncStatus=NOT_SHIPPED。当前发货后返回人工事件，syncStatus=MANUAL、lastSyncedAt=null；外部查询的 UP_TO_DATE／FAILED 为后续适配器设计。
 
 确认收货 POST /orders/{id}/confirm-receipt，请求体带最新 version，幂等头必填。已确认或售后并发导致状态变化时重新获取订单，不用前端强制覆盖状态。
 
@@ -259,7 +259,7 @@ Content-Type: application/json
 | 部分退款 | 订单继续履约剩余商品；客户可在原申请时限内对剩余数量再次申请 |
 | 全额退款 | 订单 status=CLOSED，paymentStatus=REFUNDED，不可发货或确认收货 |
 
-证据图片使用 AFTERSALE_EVIDENCE 用途上传，始终私有。GET 售后详情只给媒体 ID；查看时 POST /media/{id}/read-grant 获取短时图片地址。其他用户和无售后权限的管理员不能获取。
+未来证据图片使用 AFTERSALE_EVIDENCE 用途私有上传，并通过短时 read-grant 查看。当前尚未配置私有存储，售后以文字说明提交，evidenceMediaIds 省略或传 []；非空返回 503 EVIDENCE_STORAGE_UNAVAILABLE，上面的非空证据示例属于后续接入设计。
 
 ## 课程与会员购买
 

@@ -21,7 +21,7 @@
 
 导入 [认证 OpenAPI](openapi-auth.json) 即可仅查看已实现接口。[完整 OpenAPI](openapi.json) 保留业务设计，每个操作以 `x-implementation-status` 标注 implemented / planned / deferred。
 
-管理员认证、短信发送、短信登录、忘记密码重置、资料编辑、订单、会员等未实现，当前路由返回 404。头像和会员模块接入前，`UserSummary.avatarUrl` 为 null，membership 返回非会员空权益。
+管理员认证、产品、订单、物流及售后已在本次代码中实现，见 [交易后端说明](06-commerce.md)。短信发送、短信登录、忘记密码重置、资料编辑、会员等仍未实现。头像和会员模块接入前，`UserSummary.avatarUrl` 为 null，membership 返回非会员空权益。
 
 手机号遵循已有 E.164 契约，例如 `+8613800000000`，当前仅为登录标识；`phone_verified_at` 为 NULL，不代表已核验联系号码。未来短信接入须补充用途绑定、有效期、尝试次数和一次性消费。本实现没有万能验证码或短信绕过开关。
 
@@ -171,7 +171,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES
   ON chunai_auth_test.* TO 'chunai_test'@'localhost';
 ```
 
-在 `.env` 配置 `TEST_DB_*`，运行 `npm.cmd run test:e2e`。测试执行迁移，结束时仅删除本次测试用户及其级联会话，不删除数据库。覆盖 MySQL 唯一约束、外键、注册登录、并发刷新、重放撤销、退出、改密、会话归属、封禁、过期、参数和 HTTP 限流。
+在 `.env` 配置 `TEST_DB_*`，运行 `npm.cmd run test:e2e`。测试执行全部迁移，结束时按外键顺序清理本次创建的用户、管理员及交易测试记录，不清空数据库。认证部分覆盖唯一约束、外键、注册登录、并发刷新、重放撤销、退出、改密、会话归属、封禁、过期、参数和 HTTP 限流；交易部分覆盖权限与并发业务规则，见 [交易说明](06-commerce.md)。
 
 限流采用 NestJS 进程内存存储，适用于单实例：注册 5 次/分钟、登录 10 次/分钟、刷新 30 次/分钟、改密 5 次/分钟，均按 IP 计数。多实例部署需改用共享存储。默认不信任 X-Forwarded-For；经过反向代理时需明确可信代理范围和真实来源 IP。
 

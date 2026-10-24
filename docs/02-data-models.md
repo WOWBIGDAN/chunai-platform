@@ -212,6 +212,13 @@
 - [PrivateEvidenceMedia](#privateevidencemedia)
 - [NotificationUsersInput](#notificationusersinput)
 - [NotificationAllInput](#notificationallinput)
+- [ProductImageCreate](#productimagecreate)
+- [TestPaymentInput](#testpaymentinput)
+- [TestRefundInput](#testrefundinput)
+- [ManualLogisticsInput](#manuallogisticsinput)
+- [ShipmentLine](#shipmentline)
+- [CommerceAuditLog](#commerceauditlog)
+- [PageCommerceAuditLog](#pagecommerceauditlog)
 - [ContentCategory](#contentcategory)
 - [ProductCategory](#productcategory)
 - [CourseSummary](#coursesummary)
@@ -713,7 +720,7 @@
 <a id="adminauthtokens"></a>
 ## AdminAuthTokens
 
-管理员会话；accessToken aud=admin。
+独立管理员会话，aud=admin；访问令牌默认 15 分钟，刷新会话绝对期限 24 小时。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
@@ -783,7 +790,7 @@
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
 | `name` | string | 是 | 名称。 | 最短: `1`；最长: `32` |
-| `scope` | string | 是 | 作用域。 | 枚举: `CONTENT, PRODUCT` |
+| `scope` | string | 是 | 当前仅支持产品分类。 | 枚举: `PRODUCT` |
 | `parentId` | string / null | 否 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 | `sortOrder` | integer | 否 | 排序。 | 最小: `0` |
 | `enabled` | boolean | 否 | 启用。 |  |
@@ -793,7 +800,7 @@
 ```json
 {
   "name": "健康科普",
-  "scope": "CONTENT"
+  "scope": "PRODUCT"
 }
 ```
 
@@ -1564,7 +1571,7 @@ SKU 的规格维度。
 | `productId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 | `skuCode` | string | 是 | 商家 SKU 编号，全局唯一。 | 最长: `64` |
 | `attributes` | [SkuAttribute[]](#skuattribute) | 是 | 规格列表 | 最多项: `10` |
-| `priceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `1`；最大: `9007199254740991` |
+| `priceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `1`；最大: `100000000` |
 | `availableStock` | integer | 是 | 可用库存 = 实物库存 - 预占库存。 | 最小: `0` |
 | `enabled` | boolean | 是 | 可售。 |  |
 
@@ -1738,13 +1745,13 @@ SKU 的规格维度。
 | `summary` | string | 是 | 文本。 | 最长: `2000` |
 | `cover` | [MediaSummary](#mediasummary) | 是 | 见关联对象。 |  |
 | `category` | [ProductCategory](#productcategory) | 是 | 见关联对象。 |  |
-| `minPriceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `1`；最大: `9007199254740991` |
-| `maxPriceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `1`；最大: `9007199254740991` |
+| `minPriceCents` | integer | 是 | 启用 SKU 价格范围；无启用 SKU 的草稿返回 0。 | 最小: `0`；最大: `9007199254740991` |
+| `maxPriceCents` | integer | 是 | 启用 SKU 价格范围；无启用 SKU 的草稿返回 0。 | 最小: `0`；最大: `9007199254740991` |
 | `currency` | string | 是 | 币种。 | 枚举: `CNY` |
 | `inStock` | boolean | 是 | 至少一个可售 SKU 有可用库存。 |  |
 | `detailHtml` | string | 是 | 已清洗的详情 HTML。 | 最长: `100000` |
 | `gallery` | [MediaSummary[]](#mediasummary) | 是 | 图片列表 |  |
-| `skus` | [Sku[]](#sku) | 是 | 可售 SKU |  |
+| `skus` | [AdminSku[]](#adminsku) | 是 | 含停用 SKU 和管理库存字段 |  |
 | `afterSalePolicy` | string | 是 | 售后政策展示文本；实际申请资格以服务端为准。 |  |
 | `status` | string | 是 | 发布状态。 | 枚举: `DRAFT, PUBLISHED, OFFLINE` |
 | `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1` |
@@ -1803,7 +1810,10 @@ SKU 的规格维度。
       ],
       "priceCents": 9900,
       "availableStock": 100,
-      "enabled": true
+      "enabled": true,
+      "onHandStock": 102,
+      "reservedStock": 2,
+      "version": 1
     }
   ],
   "afterSalePolicy": "符合平台售后规则可申请售后。",
@@ -1824,7 +1834,7 @@ SKU 的规格维度。
 |---|---|---|---|---|
 | `skuCode` | string | 是 | 商家 SKU 编号。 | 最短: `1`；最长: `64` |
 | `attributes` | [SkuAttribute[]](#skuattribute) | 是 | 同一产品内规格组合必须唯一 | 最多项: `10` |
-| `priceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `1`；最大: `9007199254740991` |
+| `priceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `1`；最大: `100000000` |
 | `enabled` | boolean | 否 | 可售。 |  |
 
 示例（仅结构示意，不作为可用业务 ID）：
@@ -1852,7 +1862,7 @@ SKU 的规格维度。
 |---|---|---|---|---|
 | `skuCode` | string | 否 | 商家 SKU 编号。 | 最短: `1`；最长: `64` |
 | `attributes` | [SkuAttribute[]](#skuattribute) | 否 | 同一产品内规格组合必须唯一 | 最多项: `10` |
-| `priceCents` | integer | 否 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `1`；最大: `9007199254740991` |
+| `priceCents` | integer | 否 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `1`；最大: `100000000` |
 | `enabled` | boolean | 否 | 可售。 |  |
 | `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1` |
 
@@ -1879,7 +1889,7 @@ SKU 的规格维度。
 | `productId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 | `skuCode` | string | 是 | 商家 SKU 编号，全局唯一。 | 最长: `64` |
 | `attributes` | [SkuAttribute[]](#skuattribute) | 是 | 规格列表 | 最多项: `10` |
-| `priceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `1`；最大: `9007199254740991` |
+| `priceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `1`；最大: `100000000` |
 | `availableStock` | integer | 是 | 可用库存 = 实物库存 - 预占库存。 | 最小: `0` |
 | `enabled` | boolean | 是 | 可售。 |  |
 | `onHandStock` | integer | 是 | 实物库存，发货时扣减。 | 最小: `0` |
@@ -1946,6 +1956,8 @@ SKU 的规格维度。
 | `reason` | string | 是 | 文本。 | 最长: `2000` |
 | `operatorId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 | `createdAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
+| `reservedDelta` | integer | 是 | 预占变化；业务自动预占／释放也记流水。 |  |
+| `orderId` | string / null | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
@@ -1958,7 +1970,9 @@ SKU 的规格维度。
   "reservedStockAfter": 2,
   "reason": "示例内容",
   "operatorId": "id_10001",
-  "createdAt": "2026-10-22T02:00:00Z"
+  "createdAt": "2026-10-22T02:00:00Z",
+  "reservedDelta": 0,
+  "orderId": null
 }
 ```
 
@@ -2609,6 +2623,7 @@ SKU 的规格维度。
 | `time` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
 | `description` | string | 是 | 物流描述。 |  |
 | `location` | string / null | 是 | 位置。 |  |
+| `source` | string | 是 | 人工记录来源。 | 枚举: `MANUAL` |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
@@ -2616,7 +2631,8 @@ SKU 的规格维度。
 {
   "time": "2026-10-22T02:00:00Z",
   "description": "快件已由收件人签收",
-  "location": "上海"
+  "location": "上海",
+  "source": "MANUAL"
 }
 ```
 
@@ -2638,6 +2654,7 @@ SKU 的规格维度。
 | `deliveredAt` | string / null | 是 | UTC 时间；未发生时为 null。 | 格式: `date-time` |
 | `lastSyncedAt` | string / null | 是 | UTC 时间；未发生时为 null。 | 格式: `date-time` |
 | `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1` |
+| `items` | [ShipmentLine[]](#shipmentline) | 是 | 实际发货行与数量 |  |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
@@ -2652,7 +2669,13 @@ SKU 的规格维度。
   "shippedAt": "2026-10-22T02:00:00Z",
   "deliveredAt": null,
   "lastSyncedAt": null,
-  "version": 1
+  "version": 1,
+  "items": [
+    {
+      "orderItemId": "id_10001",
+      "quantity": 1
+    }
+  ]
 }
 ```
 
@@ -2666,7 +2689,7 @@ SKU 的规格维度。
 |---|---|---|---|---|
 | `shipment` | object / null | 是 | 一期每笔实物订单一个包裹，全部行一次性发货。 |  |
 | `events` | [LogisticsEvent[]](#logisticsevent) | 是 | 最近物流事件 |  |
-| `syncStatus` | string | 是 | 同步状态；失败时保留上次数据。 | 枚举: `NOT_SHIPPED, UP_TO_DATE, PENDING, FAILED` |
+| `syncStatus` | string | 是 | 当前未发货为 NOT_SHIPPED，发货后为 MANUAL；其他值预留外部物流适配器。 | 枚举: `NOT_SHIPPED, MANUAL, UP_TO_DATE, PENDING, FAILED` |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
@@ -2757,7 +2780,7 @@ SKU 的规格维度。
 | `items` | [AfterSaleLineInput[]](#aftersalelineinput) | 是 | 行 ID 不重复；数量不超过剩余可售后量 | 最少项: `1`；最多项: `50` |
 | `reasonCode` | string | 是 | 申请原因。 | 枚举: `NOT_NEEDED, QUALITY_ISSUE, WRONG_ITEM, OTHER` |
 | `description` | string | 是 | 申请说明。 | 最短: `1`；最长: `2000` |
-| `evidenceMediaIds` | string[] | 否 | 本人上传、用途 AFTERSALE_EVIDENCE 的 READY 图片 | 最多项: `9`；元素不重复 |
+| `evidenceMediaIds` | string[] | 否 | 当前私有存储未配置，仅允许省略或空数组；非空返回 503 EVIDENCE_STORAGE_UNAVAILABLE。 | 最多项: `9`；元素不重复 |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
@@ -5005,7 +5028,10 @@ AdminProduct 的分页结果。固定按白名单排序；同值用 id 排序。
           ],
           "priceCents": 9900,
           "availableStock": 100,
-          "enabled": true
+          "enabled": true,
+          "onHandStock": 102,
+          "reservedStock": 2,
+          "version": 1
         }
       ],
       "afterSalePolicy": "符合平台售后规则可申请售后。",
@@ -5093,7 +5119,9 @@ StockAdjustment 的分页结果。固定按白名单排序；同值用 id 排序
       "reservedStockAfter": 2,
       "reason": "示例内容",
       "operatorId": "id_10001",
-      "createdAt": "2026-10-22T02:00:00Z"
+      "createdAt": "2026-10-22T02:00:00Z",
+      "reservedDelta": 0,
+      "orderId": null
     }
   ],
   "total": 1,
@@ -5427,6 +5455,176 @@ AuditLog 的分页结果。固定按白名单排序；同值用 id 排序。
     "type": "ORDER",
     "resourceId": "id_10001"
   }
+}
+```
+
+
+<a id="productimagecreate"></a>
+## ProductImageCreate
+
+登记管理员已托管的公开 HTTPS 产品图片；不抓取远程文件、不提供文件上传或私有凭证存储。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `publicUrl` | string | 是 | HTTPS 公开图片地址，不得含用户名或密码。 | 格式: `uri`；最长: `2048` |
+| `mimeType` | string | 是 | 管理员登记的图片 MIME。 | 枚举: `image/jpeg, image/png, image/webp` |
+| `sizeBytes` | integer | 是 | 管理员登记的文件大小。 | 最小: `1`；最大: `20971520` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "publicUrl": "https://example.com/product.jpg",
+  "mimeType": "image/jpeg",
+  "sizeBytes": 1024
+}
+```
+
+
+<a id="testpaymentinput"></a>
+## TestPaymentInput
+
+仅测试环境且 COMMERCE_TEST_PAYMENTS=true；金额取订单，不发生真实扣款。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1` |
+| `transactionNo` | string | 是 | 测试流水号，全局唯一。 | 正则: `^[A-Za-z0-9_-]{1,64}$` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "version": 1,
+  "transactionNo": "test_payment_001"
+}
+```
+
+
+<a id="testrefundinput"></a>
+## TestRefundInput
+
+管理员模拟退款结果；version 为售后单当前版本，不发生真实转账。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1` |
+| `result` | string | 是 | 测试结果。 | 枚举: `SUCCEEDED, FAILED` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "version": 1,
+  "result": "SUCCEEDED"
+}
+```
+
+
+<a id="manuallogisticsinput"></a>
+## ManualLogisticsInput
+
+人工登记物流事件，记录操作者；不是快递平台的自动查询结果。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1` |
+| `status` | string | 是 | 物流状态。 | 枚举: `IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, EXCEPTION` |
+| `time` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
+| `description` | string | 是 | 人工确认的物流说明。 | 最短: `1`；最长: `500` |
+| `location` | string | 否 | 位置。 | 最短: `1`；最长: `100` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "version": 1,
+  "status": "IN_TRANSIT",
+  "time": "2026-10-22T02:00:00Z",
+  "description": "管理员登记揽收"
+}
+```
+
+
+<a id="shipmentline"></a>
+## ShipmentLine
+
+发出的剩余未退款商品快照。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `orderItemId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+| `quantity` | integer | 是 | 件数。 | 最小: `1`；最大: `99` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "orderItemId": "id_10001",
+  "quantity": 1
+}
+```
+
+
+<a id="commerceauditlog"></a>
+## CommerceAuditLog
+
+交易变更及敏感详情读取的审计记录；不含密码和令牌。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `id` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+| `actorKey` | string | 是 | user/admin/system 前缀和操作者 ID。 |  |
+| `action` | string | 是 | 操作。 |  |
+| `resourceId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+| `details` | object | 是 | 最小必要操作信息。 |  |
+| `createdAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "id": "id_10001",
+  "actorKey": "admin:id_10001",
+  "action": "order.ship",
+  "resourceId": "id_10001",
+  "details": {},
+  "createdAt": "2026-10-22T02:00:00Z"
+}
+```
+
+
+<a id="pagecommerceauditlog"></a>
+## PageCommerceAuditLog
+
+CommerceAuditLog 的分页结果。固定按白名单排序；同值用 id 排序。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `items` | [CommerceAuditLog[]](#commerceauditlog) | 是 | 当前页数据；空页为 [] |  |
+| `total` | integer | 是 | 匹配记录总数 | 最小: `0` |
+| `page` | integer | 是 | 页码，从 1 开始 | 最小: `1` |
+| `pageSize` | integer | 是 | 每页条数 | 最小: `1`；最大: `100` |
+| `hasNext` | boolean | 是 | 是否有下一页 |  |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "items": [
+    {
+      "id": "id_10001",
+      "actorKey": "admin:id_10001",
+      "action": "order.ship",
+      "resourceId": "id_10001",
+      "details": {},
+      "createdAt": "2026-10-22T02:00:00Z"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "pageSize": 20,
+  "hasNext": false
 }
 ```
 

@@ -17,11 +17,13 @@ export function setupApp(app: INestApplication) {
     response.setHeader('Cache-Control', 'private, no-store');
     next();
   });
+  // Rich product descriptions need a larger, still bounded body than auth inputs.
+  app.use('/api/v1/admin/products', json({ limit: '256kb' }));
   app.use(json({ limit: '16kb' }));
   app.enableCors({
     origin: (process.env.CORS_ORIGINS ?? 'http://localhost:5173').split(',').map((value) => value.trim()),
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'Idempotency-Key'],
     exposedHeaders: ['X-Request-ID', 'Retry-After'],
   });
   app.useGlobalPipes(validationPipe());

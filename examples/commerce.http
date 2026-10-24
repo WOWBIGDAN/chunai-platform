@@ -1,0 +1,146 @@
+@baseUrl = http://localhost:3000/api/v1
+@adminToken = replace-after-admin-login
+@clientToken = replace-after-client-login
+@categoryId = replace-with-response-id
+@imageId = replace-with-response-id
+@productId = replace-with-response-id
+@skuId = replace-with-response-id
+@addressId = replace-with-response-id
+@quoteId = replace-with-response-quoteId
+@orderId = replace-with-response-id
+@orderItemId = replace-with-response-items-id
+@afterSaleId = replace-with-response-id
+@refundId = replace-with-response-refundId
+@shipmentId = replace-with-response-id
+
+# 先执行数据库迁移、CLI 创建管理员。测试付款需 COMMERCE_TEST_PAYMENTS=true。
+# 用户注册登录参见 auth.http；普通用户和管理员令牌不能混用。
+# 以下 version 为结构示例，每次操作必须读取资源最新 version。
+# 每个业务请求使用独立幂等键；仅重试原请求时复用同键。
+
+### 管理员登录
+POST {{baseUrl}}/admin/auth/login
+Content-Type: application/json
+
+{"username":"commerce_admin","password":"replace-with-your-password"}
+
+### 分类
+POST {{baseUrl}}/admin/categories
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"name":"护理用品","scope":"PRODUCT"}
+
+### 登记已经托管的公开 HTTPS 商品图片（示例 URL 需替换）
+POST {{baseUrl}}/admin/product-images
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"publicUrl":"https://example.com/product.jpg","mimeType":"image/jpeg","sizeBytes":1024}
+
+### 商品草稿
+POST {{baseUrl}}/admin/products
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"name":"测试商品","summary":"商品说明","coverMediaId":"{{imageId}}","categoryId":"{{categoryId}}","detailHtml":"<p>产品介绍</p>","afterSalePolicy":"确认收货后七天内可申请售后"}
+
+### SKU
+POST {{baseUrl}}/admin/products/{{productId}}/skus
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"skuCode":"DEMO-001","attributes":[{"name":"规格","value":"标准装"}],"priceCents":4900}
+
+### 入库
+POST {{baseUrl}}/admin/skus/{{skuId}}/stock-adjustments
+Authorization: Bearer {{adminToken}}
+Idempotency-Key: demo-stock-adjustment-001
+Content-Type: application/json
+
+{"version":1,"delta":100,"reason":"测试入库"}
+
+### 获取商品最新 version 后发布
+GET {{baseUrl}}/admin/products/{{productId}}
+Authorization: Bearer {{adminToken}}
+
+### 发布，创建 SKU 已使产品版本增加
+POST {{baseUrl}}/admin/products/{{productId}}/publish
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"version":2}
+
+### 普通用户添加地址
+POST {{baseUrl}}/me/addresses
+Authorization: Bearer {{clientToken}}
+Content-Type: application/json
+
+{"recipient":"测试用户","phone":"+8613800000000","provinceCode":"310000","province":"上海市","cityCode":"310100","city":"上海市","districtCode":"310101","district":"黄浦区","detail":"测试路100号","isDefault":true}
+
+### 试算
+POST {{baseUrl}}/order-quotes
+Authorization: Bearer {{clientToken}}
+Content-Type: application/json
+
+{"type":"PRODUCT","addressId":"{{addressId}}","items":[{"skuId":"{{skuId}}","quantity":2}]}
+
+### 下单
+POST {{baseUrl}}/orders
+Authorization: Bearer {{clientToken}}
+Idempotency-Key: demo-create-order-001
+Content-Type: application/json
+
+{"quoteId":"{{quoteId}}"}
+
+### 管理员确认测试付款，没有真实扣款
+POST {{baseUrl}}/admin/orders/{{orderId}}/test-payment
+Authorization: Bearer {{adminToken}}
+Idempotency-Key: demo-test-payment-001
+Content-Type: application/json
+
+{"version":1,"transactionNo":"demo-payment-001"}
+
+### 本人订单详情
+GET {{baseUrl}}/orders/{{orderId}}
+Authorization: Bearer {{clientToken}}
+
+### 路径 A：发货（与下面未发货仅退款示例是不同分支）
+POST {{baseUrl}}/admin/orders/{{orderId}}/shipment
+Authorization: Bearer {{adminToken}}
+Idempotency-Key: demo-order-shipment-001
+Content-Type: application/json
+
+{"carrierCode":"SF","trackingNo":"SF1234567890","orderVersion":2}
+
+### 查询本人物流
+GET {{baseUrl}}/orders/{{orderId}}/logistics
+Authorization: Bearer {{clientToken}}
+
+### 路径 B：未发货时申请部分退款；已发货应改为 RETURN_REFUND
+POST {{baseUrl}}/aftersales
+Authorization: Bearer {{clientToken}}
+Idempotency-Key: demo-create-aftersale-001
+Content-Type: application/json
+
+{"orderId":"{{orderId}}","type":"REFUND_ONLY","items":[{"orderItemId":"{{orderItemId}}","quantity":1}],"reasonCode":"NOT_NEEDED","description":"测试退款","evidenceMediaIds":[]}
+
+### 审核仅退款，返回 refundId；退货退款审核还需 returnAddress
+POST {{baseUrl}}/admin/aftersales/{{afterSaleId}}/review
+Authorization: Bearer {{adminToken}}
+Idempotency-Key: demo-review-aftersale-001
+Content-Type: application/json
+
+{"version":1,"decision":"APPROVE","note":"同意退款"}
+
+### 测试退款完成：version 是售后单版本
+POST {{baseUrl}}/admin/refunds/{{refundId}}/test-result
+Authorization: Bearer {{adminToken}}
+Idempotency-Key: demo-test-refund-001
+Content-Type: application/json
+
+{"version":2,"result":"SUCCEEDED"}
+
+### 本人退款记录
+GET {{baseUrl}}/orders/{{orderId}}/refunds
+Authorization: Bearer {{clientToken}}

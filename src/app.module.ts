@@ -5,12 +5,14 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './auth/auth.module';
 import { databaseOptions } from './database/data-source';
 import { HealthController } from './health.controller';
+import { CommerceModule } from './commerce/commerce.module';
 
 @Module({
   imports: [
     TypeOrmModule.forRootAsync({ useFactory: () => ({ ...databaseOptions(), retryAttempts: 2 }) }),
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60000, limit: 120 }]),
     AuthModule,
+    CommerceModule,
   ],
   controllers: [HealthController],
   providers: [ThrottlerGuard, { provide: APP_GUARD, useExisting: ThrottlerGuard }],
