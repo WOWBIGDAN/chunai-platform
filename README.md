@@ -53,6 +53,7 @@ npm.cmd run start:dev
 | [认证 OpenAPI](docs/openapi-auth.json) | 已实现的认证与健康检查接口，可导入 Apifox / Swagger |
 | [交易后端说明](docs/06-commerce.md) | 管理员权限、库存／订单／售后联动、测试付款退款和发布步骤 |
 | [已实现业务 OpenAPI](docs/openapi-implemented.json) | 已实现的用户认证、管理员与交易接口 |
+| [cs 产品测试样本](docs/07-product-samples.md) | 已写入服务器的测试商品、重复导入命令、产品 CRUD 请求示例 |
 | [CI/CD 与服务器部署](docs/05-deployment.md) | GitHub Actions、服务器布局、更新、回滚与运维 |
 | [HTTP 请求示例](examples/auth.http) | 注册、登录、刷新、资料、改密、退出 |
 | [建表 SQL](database/schema.sql) | MySQL 字段、索引和外键 |

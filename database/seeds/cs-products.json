@@ -1,0 +1,83 @@
+{
+  "version": "cs-products-v1",
+  "categories": [
+    { "key": "daily", "name": "cs日常护理", "sortOrder": 10 },
+    { "key": "travel", "name": "cs出行便携", "sortOrder": 20 },
+    { "key": "crud", "name": "cs接口测试", "sortOrder": 30 }
+  ],
+  "products": [
+    {
+      "key": "care-kit", "name": "cs基础护理套装", "category": "daily", "status": "PUBLISHED",
+      "summary": "cs测试样本：上架商品，包含两种价格和规格，适合查询、修改及下单测试。",
+      "skus": [
+        { "key": "standard", "label": "标准装", "priceCents": 2990, "stock": 100, "enabled": true },
+        { "key": "double", "label": "双份装", "priceCents": 4990, "stock": 50, "enabled": true }
+      ]
+    },
+    {
+      "key": "wipes", "name": "cs便携湿巾", "category": "travel", "status": "PUBLISHED",
+      "summary": "cs测试样本：低价商品，适合价格筛选、排序和多规格查询。",
+      "skus": [
+        { "key": "small", "label": "小包装", "priceCents": 990, "stock": 120, "enabled": true },
+        { "key": "large", "label": "大包装", "priceCents": 1990, "stock": 80, "enabled": true }
+      ]
+    },
+    {
+      "key": "cotton-towel", "name": "cs柔棉护理巾", "category": "daily", "status": "PUBLISHED",
+      "summary": "cs测试样本：单规格常规库存商品，适合商品详情和库存调整测试。",
+      "skus": [
+        { "key": "standard", "label": "标准装", "priceCents": 1590, "stock": 60, "enabled": true }
+      ]
+    },
+    {
+      "key": "travel-bag", "name": "cs旅行收纳包", "category": "travel", "status": "PUBLISHED",
+      "summary": "cs测试样本：同价不同规格商品，适合规格组合和 SKU 维护测试。",
+      "skus": [
+        { "key": "blue", "label": "蓝色", "priceCents": 3990, "stock": 20, "enabled": true },
+        { "key": "gray", "label": "灰色", "priceCents": 3990, "stock": 20, "enabled": true }
+      ]
+    },
+    {
+      "key": "low-stock", "name": "cs低库存体验装", "category": "crud", "status": "PUBLISHED",
+      "summary": "cs测试样本：仅剩一件，可测试库存不足、预占、取消订单和补货。",
+      "skus": [
+        { "key": "trial", "label": "体验装", "priceCents": 990, "stock": 1, "enabled": true }
+      ]
+    },
+    {
+      "key": "sold-out", "name": "cs售罄补货样品", "category": "crud", "status": "PUBLISHED",
+      "summary": "cs测试样本：已上架但库存为零，列表可见，inStock=false，下单应提示库存不足。",
+      "skus": [
+        { "key": "standard", "label": "标准装", "priceCents": 2900, "stock": 0, "enabled": true }
+      ]
+    },
+    {
+      "key": "multi-sku", "name": "cs多规格组合样品", "category": "crud", "status": "PUBLISHED",
+      "summary": "cs测试样本：两个启用 SKU 和一个停用 SKU，可比较普通用户和管理员查询结果。",
+      "skus": [
+        { "key": "small", "label": "小号", "priceCents": 1990, "stock": 30, "enabled": true },
+        { "key": "large", "label": "大号", "priceCents": 2990, "stock": 20, "enabled": true },
+        { "key": "disabled", "label": "cs停用规格", "priceCents": 3990, "stock": 0, "enabled": false }
+      ]
+    },
+    {
+      "key": "draft", "name": "cs待上架测试商品", "category": "crud", "status": "DRAFT",
+      "summary": "cs测试样本：含 SKU 的草稿，可测试编辑、上架和权限控制，普通用户不能查询。",
+      "skus": [
+        { "key": "standard", "label": "标准装", "priceCents": 1230, "stock": 10, "enabled": true }
+      ]
+    },
+    {
+      "key": "offline", "name": "cs已下架测试商品", "category": "crud", "status": "OFFLINE",
+      "summary": "cs测试样本：下架商品，可测试管理员查询、重新上架，以及普通用户访问返回 404。",
+      "skus": [
+        { "key": "standard", "label": "标准装", "priceCents": 4200, "stock": 25, "enabled": true }
+      ]
+    },
+    {
+      "key": "deletable-draft", "name": "cs可删除草稿样品", "category": "crud", "status": "DRAFT",
+      "summary": "cs测试样本：没有 SKU、库存和订单关联，可直接用最新 version 测试删除接口。",
+      "skus": []
+    }
+  ]
+}

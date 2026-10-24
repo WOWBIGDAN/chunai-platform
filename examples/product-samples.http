@@ -1,0 +1,59 @@
+@baseUrl = http://47.97.46.242/api/v1
+@adminToken = replace-with-admin-access-token
+@productVersion = 1
+@deletableVersion = 1
+@createdProductId = replace-with-created-product-id
+
+# adminToken 必须是具有 products:write 权限的管理员令牌。
+# 修改、删除前先获取当前 version；以下初始值仅用于首次测试。
+# 新增或修改的测试名称继续保留 cs 前缀。
+
+### 公开查询：初始 7 个上架商品
+GET {{baseUrl}}/products?keyword=cs&page=1&pageSize=20
+
+### 有库存商品：初始 6 个
+GET {{baseUrl}}/products?keyword=cs&inStock=true
+
+### 售罄商品：初始 1 个
+GET {{baseUrl}}/products?keyword=cs&inStock=false
+
+### 价格排序
+GET {{baseUrl}}/products?keyword=cs&sort=priceCents:asc
+
+### 管理员查询全部状态：初始 10 个商品
+GET {{baseUrl}}/admin/products?keyword=cs&page=1&pageSize=20
+Authorization: Bearer {{adminToken}}
+
+### 查询待修改商品的最新 version
+GET {{baseUrl}}/admin/products/79aaf179-bb70-4364-8c25-0540d21fa8c9
+Authorization: Bearer {{adminToken}}
+
+### 修改名称和简介；先将 productVersion 设置为上一响应的 version
+PATCH {{baseUrl}}/admin/products/79aaf179-bb70-4364-8c25-0540d21fa8c9
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"version":{{productVersion}},"name":"cs柔棉护理巾（修改测试）","summary":"cs测试样本：验证修改接口，名称仍保留 cs 前缀。"}
+
+### 新增草稿，复用现有 cs 分类与图片
+POST {{baseUrl}}/admin/products
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"name":"cs新增接口验证商品","summary":"cs测试样本：用于测试新增接口。","categoryId":"776d26a6-ca3e-4497-bb92-6e2ea9201251","coverMediaId":"c6135f19-e12f-4c3a-83f8-7cb99c335764","detailHtml":"<p>cs新增测试说明</p>","afterSalePolicy":"cs测试售后规则"}
+
+### 查询新建商品，把 createdProductId 替换为新增返回的 id
+GET {{baseUrl}}/admin/products/{{createdProductId}}
+Authorization: Bearer {{adminToken}}
+
+### 查询专门准备的可删除草稿
+GET {{baseUrl}}/admin/products/eac04038-bd24-487f-acfe-92fda8060eb9
+Authorization: Bearer {{adminToken}}
+
+### 删除无 SKU 草稿；先确认最新版本
+DELETE {{baseUrl}}/admin/products/eac04038-bd24-487f-acfe-92fda8060eb9?version={{deletableVersion}}
+Authorization: Bearer {{adminToken}}
+
+### 验证有 SKU 的产品不能直接删除：应返回 409
+DELETE {{baseUrl}}/admin/products/3e20af5c-82c4-4f6c-9835-f93883ecc869?version=1
+Authorization: Bearer {{adminToken}}
