@@ -5,5 +5,5 @@ revision=${1:?Commit SHA required}
 mkdir -p .release
 printf '%s\n' "$revision" > REVISION
 npm prune --omit=dev --ignore-scripts --no-audit --no-fund
-tar -czf .release/release.tar.gz dist database/schema.sql database/commerce.sql node_modules package.json package-lock.json REVISION
+tar -czf .release/release.tar.gz dist database/schema.sql database/commerce.sql database/content.sql database/seeds node_modules package.json package-lock.json REVISION
 sha256sum .release/release.tar.gz > .release/release.tar.gz.sha256

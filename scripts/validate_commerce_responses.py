@@ -7,6 +7,9 @@ import build_api_docs as contract
 contract.finish_examples()
 spec = contract.make_spec()
 samples = json.loads((Path(__file__).resolve().parents[1] / '.tmp/commerce-contract-responses.json').read_text(encoding='utf-8'))
+content_samples = Path(__file__).resolve().parents[1] / '.tmp/content-contract-responses.json'
+assert content_samples.exists(), 'Run content E2E tests before validating response contracts'
+samples += json.loads(content_samples.read_text(encoding='utf-8'))
 assert samples, 'Run the commerce E2E suite before checking response contracts'
 checked = set()
 for sample in samples:

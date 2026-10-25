@@ -1,12 +1,12 @@
 # 两性健康服务平台 · NestJS 后端
 
-已实现 **NestJS + TypeORM + MySQL** 用户认证、独立管理员认证、产品与 SKU、库存、实物订单、人工物流和售后退款。注册登录不需要手机验证码。支付、退款按测试模式完成流程，暂不接第三方服务。
+已实现 **NestJS + TypeORM + MySQL** 用户认证、独立管理员认证、产品与 SKU、库存、实物订单、人工物流、售后退款、图文／视频科普、付费课程访问和专栏管理。注册登录不需要手机验证码。支付、退款按测试模式完成流程，暂不接第三方服务。
 
-2026-10-24 新增的交易模块已写入本地仓库，尚未发布到公网服务器。使用方法、管理员初始化和业务约束见 [交易后端说明](docs/06-commerce.md)。
+使用方法、管理员权限和业务约束见 [交易后端说明](docs/06-commerce.md) 与 [科普／课程后端说明](docs/08-content-courses.md)。内容模块附 50 条以 `cs` 开头的样本、40 个章节和 4 个专栏，支持手动重复导入。
 
 ## 已部署的测试环境
 
-更新时间：2026-10-23。
+更新时间：2026-10-25。
 
 | 项目 | 地址或说明 |
 |---|---|
@@ -20,7 +20,7 @@
 
 当前为 `staging` 测试服务，协议版本为 `2026-10-23-test`。注册前读取最新协议版本；手机号按 `+8613800000000` 这样的 E.164 格式提交，不传验证码字段。
 
-用户认证可使用 [认证 HTTP 示例](examples/auth.http)。新增业务使用 [交易 HTTP 示例](examples/commerce.http) 和 [已实现接口 OpenAPI](docs/openapi-implemented.json)，先选择本地环境；公网新增接口以部署后的版本为准。完整文档为每个接口标注实现状态。
+用户认证可使用 [认证 HTTP 示例](examples/auth.http)。交易和内容对接使用 [交易 HTTP 示例](examples/commerce.http)、[科普／课程 HTTP 示例](examples/content-courses.http) 与 [已实现接口 OpenAPI](docs/openapi-implemented.json)。完整文档为每个接口标注实现状态；公网接口以当前部署版本为准。
 
 服务器使用 Nginx + systemd + MySQL，运行配置位于 `/etc/chunai/api.env`。更新、日志、回滚和数据库备份见 [部署与运维说明](docs/05-deployment.md)。
 
@@ -41,7 +41,7 @@ npm.cmd run migration:run
 npm.cmd run start:dev
 ```
 
-默认地址：`http://localhost:3000/api/v1`。迁移创建三张用户认证表、20 张管理员与交易业务表，以及迁移记录表；已有认证库只执行新增迁移。
+默认地址：`http://localhost:3000/api/v1`。迁移创建 3 张认证表、20 张管理员与交易表、6 张内容与权益表，以及迁移记录表；已有库只执行新增迁移，不清除业务数据。
 
 本地测试交易时显式配置 `COMMERCE_TEST_PAYMENTS=true`，并按 [管理员初始化](docs/06-commerce.md#管理员初始化与权限) 创建管理员；生产环境始终禁用测试结算。
 
@@ -54,10 +54,12 @@ npm.cmd run start:dev
 | [交易后端说明](docs/06-commerce.md) | 管理员权限、库存／订单／售后联动、测试付款退款和发布步骤 |
 | [已实现业务 OpenAPI](docs/openapi-implemented.json) | 已实现的用户认证、管理员与交易接口 |
 | [cs 产品测试样本](docs/07-product-samples.md) | 已写入服务器的测试商品、重复导入命令、产品 CRUD 请求示例 |
+| [科普／课程与专栏](docs/08-content-courses.md) | 内容 CRUD、付费访问、视频上传播放、课程订单退款、50 条 cs 样本 |
 | [CI/CD 与服务器部署](docs/05-deployment.md) | GitHub Actions、服务器布局、更新、回滚与运维 |
 | [HTTP 请求示例](examples/auth.http) | 注册、登录、刷新、资料、改密、退出 |
 | [建表 SQL](database/schema.sql) | MySQL 字段、索引和外键 |
 | [交易建表 SQL](database/commerce.sql) | 20 张新增表、外键、唯一索引与库存／退款约束 |
+| [内容建表 SQL](database/content.sql) | 6 张内容与购买权益表；交易字段升级通过 TypeORM 迁移执行 |
 | [对接总则](docs/00-conventions.md) | 业务默认规则、角色权限、登录、响应、幂等和模块划分 |
 | [接口文档](docs/01-api-reference.md) | 全部接口的实现状态、方法、URL、权限、请求与响应 |
 | [数据格式](docs/02-data-models.md) | 输入输出 DTO、枚举、字段约束和示例 |
@@ -66,7 +68,7 @@ npm.cmd run start:dev
 
 文档覆盖注册登录、用户与地址、视频图文、课程章节、专栏、产品与 SKU、订单、支付、物流、售后退款、会员、问答、消息、素材、封禁和管理审计。
 
-默认科普免费，课程按购买或会员策略授权；实物订单一单一包裹。支付渠道回调明确采用外部协议，商户及供应商配置需在实现阶段落实。
+科普免费；课程现支持免费或单独购买，会员策略尚未接入。实物订单一单一包裹；课程订单付款成功直接完成并授权。真实支付、退款回调及第三方物流仍待服务商配置。
 
 ## 验证
 

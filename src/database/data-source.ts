@@ -6,6 +6,8 @@ import { AuthSession, RefreshToken, User } from './entities';
 import { CreateAuth1792713600000 } from './migrations/1792713600000-CreateAuth';
 import { CreateCommerce1792800000000 } from './migrations/1792800000000-CreateCommerce';
 import { commerceEntities } from '../commerce/entities';
+import { contentEntities } from '../content/entities';
+import { CreateContent1792886400000 } from './migrations/1792886400000-CreateContent';
 
 export function databaseOptions(): DataSourceOptions {
   if (!process.env.DB_PASSWORD) throw new Error('DB_PASSWORD is required');
@@ -20,8 +22,8 @@ export function databaseOptions(): DataSourceOptions {
     database,
     charset: 'utf8mb4_unicode_ci',
     timezone: 'Z',
-    entities: [User, AuthSession, RefreshToken, ...commerceEntities],
-    migrations: [CreateAuth1792713600000, CreateCommerce1792800000000],
+    entities: [User, AuthSession, RefreshToken, ...commerceEntities, ...contentEntities],
+    migrations: [CreateAuth1792713600000, CreateCommerce1792800000000, CreateContent1792886400000],
     migrationsTableName: 'schema_migrations',
     synchronize: false,
     migrationsRun: false,

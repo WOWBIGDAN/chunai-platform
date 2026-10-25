@@ -1,0 +1,1165 @@
+{
+  "version": "cs-content-v1",
+  "contents": [
+    {
+      "key": "cs-content-001",
+      "title": "cs001健康知识入门图文科普",
+      "kind": "SCIENCE_ARTICLE",
+      "summary": "cs 接口测试样本 001，用于验证图文科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs001测试介绍：健康知识入门。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs001健康知识入门</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-002",
+      "title": "cs002身体认知图文科普",
+      "kind": "SCIENCE_ARTICLE",
+      "summary": "cs 接口测试样本 002，用于验证图文科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs002测试介绍：身体认知。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs002身体认知</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-003",
+      "title": "cs003日常沟通图文科普",
+      "kind": "SCIENCE_ARTICLE",
+      "summary": "cs 接口测试样本 003，用于验证图文科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs003测试介绍：日常沟通。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs003日常沟通</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-004",
+      "title": "cs004个人边界图文科普",
+      "kind": "SCIENCE_ARTICLE",
+      "summary": "cs 接口测试样本 004，用于验证图文科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs004测试介绍：个人边界。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs004个人边界</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-005",
+      "title": "cs005情绪表达图文科普",
+      "kind": "SCIENCE_ARTICLE",
+      "summary": "cs 接口测试样本 005，用于验证图文科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs005测试介绍：情绪表达。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs005情绪表达</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-006",
+      "title": "cs006信息辨别图文科普",
+      "kind": "SCIENCE_ARTICLE",
+      "summary": "cs 接口测试样本 006，用于验证图文科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs006测试介绍：信息辨别。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs006信息辨别</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-007",
+      "title": "cs007营养标签阅读图文科普",
+      "kind": "SCIENCE_ARTICLE",
+      "summary": "cs 接口测试样本 007，用于验证图文科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs007测试介绍：营养标签阅读。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs007营养标签阅读</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-008",
+      "title": "cs008睡眠知识图文科普",
+      "kind": "SCIENCE_ARTICLE",
+      "summary": "cs 接口测试样本 008，用于验证图文科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs008测试介绍：睡眠知识。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs008睡眠知识</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-009",
+      "title": "cs009运动常识图文科普",
+      "kind": "SCIENCE_ARTICLE",
+      "summary": "cs 接口测试样本 009，用于验证图文科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs009测试介绍：运动常识。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs009运动常识</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-010",
+      "title": "cs010卫生习惯图文科普",
+      "kind": "SCIENCE_ARTICLE",
+      "summary": "cs 接口测试样本 010，用于验证图文科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs010测试介绍：卫生习惯。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs010卫生习惯</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-011",
+      "title": "cs011关系沟通图文科普",
+      "kind": "SCIENCE_ARTICLE",
+      "summary": "cs 接口测试样本 011，用于验证图文科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs011测试介绍：关系沟通。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs011关系沟通</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-012",
+      "title": "cs012尊重与理解图文科普",
+      "kind": "SCIENCE_ARTICLE",
+      "summary": "cs 接口测试样本 012，用于验证图文科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs012测试介绍：尊重与理解。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs012尊重与理解</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-013",
+      "title": "cs013自我关怀图文科普",
+      "kind": "SCIENCE_ARTICLE",
+      "summary": "cs 接口测试样本 013，用于验证图文科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs013测试介绍：自我关怀。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs013自我关怀</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-014",
+      "title": "cs014知识问答图文科普",
+      "kind": "SCIENCE_ARTICLE",
+      "summary": "cs 接口测试样本 014，用于验证图文科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs014测试介绍：知识问答。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文科普"
+      ],
+      "status": "DRAFT",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs014知识问答</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-015",
+      "title": "cs015学习回顾图文科普",
+      "kind": "SCIENCE_ARTICLE",
+      "summary": "cs 接口测试样本 015，用于验证图文科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs015测试介绍：学习回顾。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文科普"
+      ],
+      "status": "OFFLINE",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs015学习回顾</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-016",
+      "title": "cs016健康知识入门视频科普",
+      "kind": "SCIENCE_VIDEO",
+      "summary": "cs 接口测试样本 016，用于验证视频科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs016测试介绍：健康知识入门。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs016健康知识入门</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-017",
+      "title": "cs017身体认知视频科普",
+      "kind": "SCIENCE_VIDEO",
+      "summary": "cs 接口测试样本 017，用于验证视频科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs017测试介绍：身体认知。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs017身体认知</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-018",
+      "title": "cs018日常沟通视频科普",
+      "kind": "SCIENCE_VIDEO",
+      "summary": "cs 接口测试样本 018，用于验证视频科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs018测试介绍：日常沟通。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs018日常沟通</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-019",
+      "title": "cs019个人边界视频科普",
+      "kind": "SCIENCE_VIDEO",
+      "summary": "cs 接口测试样本 019，用于验证视频科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs019测试介绍：个人边界。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs019个人边界</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-020",
+      "title": "cs020情绪表达视频科普",
+      "kind": "SCIENCE_VIDEO",
+      "summary": "cs 接口测试样本 020，用于验证视频科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs020测试介绍：情绪表达。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs020情绪表达</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-021",
+      "title": "cs021信息辨别视频科普",
+      "kind": "SCIENCE_VIDEO",
+      "summary": "cs 接口测试样本 021，用于验证视频科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs021测试介绍：信息辨别。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs021信息辨别</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-022",
+      "title": "cs022营养标签阅读视频科普",
+      "kind": "SCIENCE_VIDEO",
+      "summary": "cs 接口测试样本 022，用于验证视频科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs022测试介绍：营养标签阅读。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs022营养标签阅读</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-023",
+      "title": "cs023睡眠知识视频科普",
+      "kind": "SCIENCE_VIDEO",
+      "summary": "cs 接口测试样本 023，用于验证视频科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs023测试介绍：睡眠知识。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs023睡眠知识</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-024",
+      "title": "cs024运动常识视频科普",
+      "kind": "SCIENCE_VIDEO",
+      "summary": "cs 接口测试样本 024，用于验证视频科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs024测试介绍：运动常识。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs024运动常识</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-025",
+      "title": "cs025卫生习惯视频科普",
+      "kind": "SCIENCE_VIDEO",
+      "summary": "cs 接口测试样本 025，用于验证视频科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs025测试介绍：卫生习惯。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs025卫生习惯</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-026",
+      "title": "cs026关系沟通视频科普",
+      "kind": "SCIENCE_VIDEO",
+      "summary": "cs 接口测试样本 026，用于验证视频科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs026测试介绍：关系沟通。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs026关系沟通</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-027",
+      "title": "cs027尊重与理解视频科普",
+      "kind": "SCIENCE_VIDEO",
+      "summary": "cs 接口测试样本 027，用于验证视频科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs027测试介绍：尊重与理解。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs027尊重与理解</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-028",
+      "title": "cs028自我关怀视频科普",
+      "kind": "SCIENCE_VIDEO",
+      "summary": "cs 接口测试样本 028，用于验证视频科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs028测试介绍：自我关怀。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频科普"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs028自我关怀</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-029",
+      "title": "cs029知识问答视频科普",
+      "kind": "SCIENCE_VIDEO",
+      "summary": "cs 接口测试样本 029，用于验证视频科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs029测试介绍：知识问答。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频科普"
+      ],
+      "status": "DRAFT",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs029知识问答</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-030",
+      "title": "cs030学习回顾视频科普",
+      "kind": "SCIENCE_VIDEO",
+      "summary": "cs 接口测试样本 030，用于验证视频科普的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs030测试介绍：学习回顾。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频科普"
+      ],
+      "status": "OFFLINE",
+      "accessPolicy": "FREE",
+      "priceCents": 0,
+      "bodyHtml": "<h2>cs030学习回顾</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": []
+    },
+    {
+      "key": "cs-content-031",
+      "title": "cs031健康知识入门图文课程",
+      "kind": "ARTICLE_COURSE",
+      "summary": "cs 接口测试样本 031，用于验证图文课程的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs031测试介绍：健康知识入门。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文课程"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "PURCHASE",
+      "priceCents": 990,
+      "bodyHtml": "<h2>cs031健康知识入门</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": [
+        {
+          "title": "cs031第1章免费预览",
+          "sortOrder": 1,
+          "isPreview": true,
+          "bodyHtml": "<p>cs031免费预览章，用于测试匿名阅读。</p>"
+        },
+        {
+          "title": "cs031第2章付费正文",
+          "sortOrder": 2,
+          "isPreview": false,
+          "bodyHtml": "<p>cs031受保护课程正文，仅购买成功后可读。</p>"
+        }
+      ]
+    },
+    {
+      "key": "cs-content-032",
+      "title": "cs032身体认知图文课程",
+      "kind": "ARTICLE_COURSE",
+      "summary": "cs 接口测试样本 032，用于验证图文课程的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs032测试介绍：身体认知。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文课程"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "PURCHASE",
+      "priceCents": 1490,
+      "bodyHtml": "<h2>cs032身体认知</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": [
+        {
+          "title": "cs032第1章免费预览",
+          "sortOrder": 1,
+          "isPreview": true,
+          "bodyHtml": "<p>cs032免费预览章，用于测试匿名阅读。</p>"
+        },
+        {
+          "title": "cs032第2章付费正文",
+          "sortOrder": 2,
+          "isPreview": false,
+          "bodyHtml": "<p>cs032受保护课程正文，仅购买成功后可读。</p>"
+        }
+      ]
+    },
+    {
+      "key": "cs-content-033",
+      "title": "cs033日常沟通图文课程",
+      "kind": "ARTICLE_COURSE",
+      "summary": "cs 接口测试样本 033，用于验证图文课程的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs033测试介绍：日常沟通。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文课程"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "PURCHASE",
+      "priceCents": 1990,
+      "bodyHtml": "<h2>cs033日常沟通</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": [
+        {
+          "title": "cs033第1章免费预览",
+          "sortOrder": 1,
+          "isPreview": true,
+          "bodyHtml": "<p>cs033免费预览章，用于测试匿名阅读。</p>"
+        },
+        {
+          "title": "cs033第2章付费正文",
+          "sortOrder": 2,
+          "isPreview": false,
+          "bodyHtml": "<p>cs033受保护课程正文，仅购买成功后可读。</p>"
+        }
+      ]
+    },
+    {
+      "key": "cs-content-034",
+      "title": "cs034个人边界图文课程",
+      "kind": "ARTICLE_COURSE",
+      "summary": "cs 接口测试样本 034，用于验证图文课程的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs034测试介绍：个人边界。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文课程"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "PURCHASE",
+      "priceCents": 2490,
+      "bodyHtml": "<h2>cs034个人边界</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": [
+        {
+          "title": "cs034第1章免费预览",
+          "sortOrder": 1,
+          "isPreview": true,
+          "bodyHtml": "<p>cs034免费预览章，用于测试匿名阅读。</p>"
+        },
+        {
+          "title": "cs034第2章付费正文",
+          "sortOrder": 2,
+          "isPreview": false,
+          "bodyHtml": "<p>cs034受保护课程正文，仅购买成功后可读。</p>"
+        }
+      ]
+    },
+    {
+      "key": "cs-content-035",
+      "title": "cs035情绪表达图文课程",
+      "kind": "ARTICLE_COURSE",
+      "summary": "cs 接口测试样本 035，用于验证图文课程的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs035测试介绍：情绪表达。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文课程"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "PURCHASE",
+      "priceCents": 2990,
+      "bodyHtml": "<h2>cs035情绪表达</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": [
+        {
+          "title": "cs035第1章免费预览",
+          "sortOrder": 1,
+          "isPreview": true,
+          "bodyHtml": "<p>cs035免费预览章，用于测试匿名阅读。</p>"
+        },
+        {
+          "title": "cs035第2章付费正文",
+          "sortOrder": 2,
+          "isPreview": false,
+          "bodyHtml": "<p>cs035受保护课程正文，仅购买成功后可读。</p>"
+        }
+      ]
+    },
+    {
+      "key": "cs-content-036",
+      "title": "cs036信息辨别图文课程",
+      "kind": "ARTICLE_COURSE",
+      "summary": "cs 接口测试样本 036，用于验证图文课程的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs036测试介绍：信息辨别。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文课程"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "PURCHASE",
+      "priceCents": 3490,
+      "bodyHtml": "<h2>cs036信息辨别</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": [
+        {
+          "title": "cs036第1章免费预览",
+          "sortOrder": 1,
+          "isPreview": true,
+          "bodyHtml": "<p>cs036免费预览章，用于测试匿名阅读。</p>"
+        },
+        {
+          "title": "cs036第2章付费正文",
+          "sortOrder": 2,
+          "isPreview": false,
+          "bodyHtml": "<p>cs036受保护课程正文，仅购买成功后可读。</p>"
+        }
+      ]
+    },
+    {
+      "key": "cs-content-037",
+      "title": "cs037营养标签阅读图文课程",
+      "kind": "ARTICLE_COURSE",
+      "summary": "cs 接口测试样本 037，用于验证图文课程的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs037测试介绍：营养标签阅读。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文课程"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "PURCHASE",
+      "priceCents": 3990,
+      "bodyHtml": "<h2>cs037营养标签阅读</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": [
+        {
+          "title": "cs037第1章免费预览",
+          "sortOrder": 1,
+          "isPreview": true,
+          "bodyHtml": "<p>cs037免费预览章，用于测试匿名阅读。</p>"
+        },
+        {
+          "title": "cs037第2章付费正文",
+          "sortOrder": 2,
+          "isPreview": false,
+          "bodyHtml": "<p>cs037受保护课程正文，仅购买成功后可读。</p>"
+        }
+      ]
+    },
+    {
+      "key": "cs-content-038",
+      "title": "cs038睡眠知识图文课程",
+      "kind": "ARTICLE_COURSE",
+      "summary": "cs 接口测试样本 038，用于验证图文课程的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs038测试介绍：睡眠知识。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文课程"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "PURCHASE",
+      "priceCents": 4490,
+      "bodyHtml": "<h2>cs038睡眠知识</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": [
+        {
+          "title": "cs038第1章免费预览",
+          "sortOrder": 1,
+          "isPreview": true,
+          "bodyHtml": "<p>cs038免费预览章，用于测试匿名阅读。</p>"
+        },
+        {
+          "title": "cs038第2章付费正文",
+          "sortOrder": 2,
+          "isPreview": false,
+          "bodyHtml": "<p>cs038受保护课程正文，仅购买成功后可读。</p>"
+        }
+      ]
+    },
+    {
+      "key": "cs-content-039",
+      "title": "cs039运动常识图文课程",
+      "kind": "ARTICLE_COURSE",
+      "summary": "cs 接口测试样本 039，用于验证图文课程的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs039测试介绍：运动常识。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文课程"
+      ],
+      "status": "DRAFT",
+      "accessPolicy": "PURCHASE",
+      "priceCents": 4990,
+      "bodyHtml": "<h2>cs039运动常识</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": [
+        {
+          "title": "cs039第1章免费预览",
+          "sortOrder": 1,
+          "isPreview": true,
+          "bodyHtml": "<p>cs039免费预览章，用于测试匿名阅读。</p>"
+        },
+        {
+          "title": "cs039第2章付费正文",
+          "sortOrder": 2,
+          "isPreview": false,
+          "bodyHtml": "<p>cs039受保护课程正文，仅购买成功后可读。</p>"
+        }
+      ]
+    },
+    {
+      "key": "cs-content-040",
+      "title": "cs040卫生习惯图文课程",
+      "kind": "ARTICLE_COURSE",
+      "summary": "cs 接口测试样本 040，用于验证图文课程的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs040测试介绍：卫生习惯。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "图文课程"
+      ],
+      "status": "OFFLINE",
+      "accessPolicy": "PURCHASE",
+      "priceCents": 5490,
+      "bodyHtml": "<h2>cs040卫生习惯</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": [
+        {
+          "title": "cs040第1章免费预览",
+          "sortOrder": 1,
+          "isPreview": true,
+          "bodyHtml": "<p>cs040免费预览章，用于测试匿名阅读。</p>"
+        },
+        {
+          "title": "cs040第2章付费正文",
+          "sortOrder": 2,
+          "isPreview": false,
+          "bodyHtml": "<p>cs040受保护课程正文，仅购买成功后可读。</p>"
+        }
+      ]
+    },
+    {
+      "key": "cs-content-041",
+      "title": "cs041健康知识入门视频课程",
+      "kind": "VIDEO_COURSE",
+      "summary": "cs 接口测试样本 041，用于验证视频课程的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs041测试介绍：健康知识入门。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频课程"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "PURCHASE",
+      "priceCents": 990,
+      "bodyHtml": "<h2>cs041健康知识入门</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": [
+        {
+          "title": "cs041第1章免费预览",
+          "sortOrder": 1,
+          "isPreview": true,
+          "bodyHtml": "<p>cs041免费预览章，用于测试匿名阅读。</p>"
+        },
+        {
+          "title": "cs041第2章付费正文",
+          "sortOrder": 2,
+          "isPreview": false,
+          "bodyHtml": "<p>cs041受保护课程正文，仅购买成功后可读。</p>"
+        }
+      ]
+    },
+    {
+      "key": "cs-content-042",
+      "title": "cs042身体认知视频课程",
+      "kind": "VIDEO_COURSE",
+      "summary": "cs 接口测试样本 042，用于验证视频课程的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs042测试介绍：身体认知。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频课程"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "PURCHASE",
+      "priceCents": 1490,
+      "bodyHtml": "<h2>cs042身体认知</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": [
+        {
+          "title": "cs042第1章免费预览",
+          "sortOrder": 1,
+          "isPreview": true,
+          "bodyHtml": "<p>cs042免费预览章，用于测试匿名阅读。</p>"
+        },
+        {
+          "title": "cs042第2章付费正文",
+          "sortOrder": 2,
+          "isPreview": false,
+          "bodyHtml": "<p>cs042受保护课程正文，仅购买成功后可读。</p>"
+        }
+      ]
+    },
+    {
+      "key": "cs-content-043",
+      "title": "cs043日常沟通视频课程",
+      "kind": "VIDEO_COURSE",
+      "summary": "cs 接口测试样本 043，用于验证视频课程的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs043测试介绍：日常沟通。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频课程"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "PURCHASE",
+      "priceCents": 1990,
+      "bodyHtml": "<h2>cs043日常沟通</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": [
+        {
+          "title": "cs043第1章免费预览",
+          "sortOrder": 1,
+          "isPreview": true,
+          "bodyHtml": "<p>cs043免费预览章，用于测试匿名阅读。</p>"
+        },
+        {
+          "title": "cs043第2章付费正文",
+          "sortOrder": 2,
+          "isPreview": false,
+          "bodyHtml": "<p>cs043受保护课程正文，仅购买成功后可读。</p>"
+        }
+      ]
+    },
+    {
+      "key": "cs-content-044",
+      "title": "cs044个人边界视频课程",
+      "kind": "VIDEO_COURSE",
+      "summary": "cs 接口测试样本 044，用于验证视频课程的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs044测试介绍：个人边界。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频课程"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "PURCHASE",
+      "priceCents": 2490,
+      "bodyHtml": "<h2>cs044个人边界</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": [
+        {
+          "title": "cs044第1章免费预览",
+          "sortOrder": 1,
+          "isPreview": true,
+          "bodyHtml": "<p>cs044免费预览章，用于测试匿名阅读。</p>"
+        },
+        {
+          "title": "cs044第2章付费正文",
+          "sortOrder": 2,
+          "isPreview": false,
+          "bodyHtml": "<p>cs044受保护课程正文，仅购买成功后可读。</p>"
+        }
+      ]
+    },
+    {
+      "key": "cs-content-045",
+      "title": "cs045情绪表达视频课程",
+      "kind": "VIDEO_COURSE",
+      "summary": "cs 接口测试样本 045，用于验证视频课程的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs045测试介绍：情绪表达。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频课程"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "PURCHASE",
+      "priceCents": 2990,
+      "bodyHtml": "<h2>cs045情绪表达</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": [
+        {
+          "title": "cs045第1章免费预览",
+          "sortOrder": 1,
+          "isPreview": true,
+          "bodyHtml": "<p>cs045免费预览章，用于测试匿名阅读。</p>"
+        },
+        {
+          "title": "cs045第2章付费正文",
+          "sortOrder": 2,
+          "isPreview": false,
+          "bodyHtml": "<p>cs045受保护课程正文，仅购买成功后可读。</p>"
+        }
+      ]
+    },
+    {
+      "key": "cs-content-046",
+      "title": "cs046信息辨别视频课程",
+      "kind": "VIDEO_COURSE",
+      "summary": "cs 接口测试样本 046，用于验证视频课程的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs046测试介绍：信息辨别。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频课程"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "PURCHASE",
+      "priceCents": 3490,
+      "bodyHtml": "<h2>cs046信息辨别</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": [
+        {
+          "title": "cs046第1章免费预览",
+          "sortOrder": 1,
+          "isPreview": true,
+          "bodyHtml": "<p>cs046免费预览章，用于测试匿名阅读。</p>"
+        },
+        {
+          "title": "cs046第2章付费正文",
+          "sortOrder": 2,
+          "isPreview": false,
+          "bodyHtml": "<p>cs046受保护课程正文，仅购买成功后可读。</p>"
+        }
+      ]
+    },
+    {
+      "key": "cs-content-047",
+      "title": "cs047营养标签阅读视频课程",
+      "kind": "VIDEO_COURSE",
+      "summary": "cs 接口测试样本 047，用于验证视频课程的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs047测试介绍：营养标签阅读。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频课程"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "PURCHASE",
+      "priceCents": 3990,
+      "bodyHtml": "<h2>cs047营养标签阅读</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": [
+        {
+          "title": "cs047第1章免费预览",
+          "sortOrder": 1,
+          "isPreview": true,
+          "bodyHtml": "<p>cs047免费预览章，用于测试匿名阅读。</p>"
+        },
+        {
+          "title": "cs047第2章付费正文",
+          "sortOrder": 2,
+          "isPreview": false,
+          "bodyHtml": "<p>cs047受保护课程正文，仅购买成功后可读。</p>"
+        }
+      ]
+    },
+    {
+      "key": "cs-content-048",
+      "title": "cs048睡眠知识视频课程",
+      "kind": "VIDEO_COURSE",
+      "summary": "cs 接口测试样本 048，用于验证视频课程的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs048测试介绍：睡眠知识。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频课程"
+      ],
+      "status": "PUBLISHED",
+      "accessPolicy": "PURCHASE",
+      "priceCents": 4490,
+      "bodyHtml": "<h2>cs048睡眠知识</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": [
+        {
+          "title": "cs048第1章免费预览",
+          "sortOrder": 1,
+          "isPreview": true,
+          "bodyHtml": "<p>cs048免费预览章，用于测试匿名阅读。</p>"
+        },
+        {
+          "title": "cs048第2章付费正文",
+          "sortOrder": 2,
+          "isPreview": false,
+          "bodyHtml": "<p>cs048受保护课程正文，仅购买成功后可读。</p>"
+        }
+      ]
+    },
+    {
+      "key": "cs-content-049",
+      "title": "cs049运动常识视频课程",
+      "kind": "VIDEO_COURSE",
+      "summary": "cs 接口测试样本 049，用于验证视频课程的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs049测试介绍：运动常识。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频课程"
+      ],
+      "status": "DRAFT",
+      "accessPolicy": "PURCHASE",
+      "priceCents": 4990,
+      "bodyHtml": "<h2>cs049运动常识</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": [
+        {
+          "title": "cs049第1章免费预览",
+          "sortOrder": 1,
+          "isPreview": true,
+          "bodyHtml": "<p>cs049免费预览章，用于测试匿名阅读。</p>"
+        },
+        {
+          "title": "cs049第2章付费正文",
+          "sortOrder": 2,
+          "isPreview": false,
+          "bodyHtml": "<p>cs049受保护课程正文，仅购买成功后可读。</p>"
+        }
+      ]
+    },
+    {
+      "key": "cs-content-050",
+      "title": "cs050卫生习惯视频课程",
+      "kind": "VIDEO_COURSE",
+      "summary": "cs 接口测试样本 050，用于验证视频课程的查询、编辑、发布和访问权限。",
+      "descriptionHtml": "<p>cs050测试介绍：卫生习惯。</p><p>本条为功能测试占位内容，正式教学资料由编辑后续补充。</p>",
+      "authorName": "cs测试教研组",
+      "tags": [
+        "cs",
+        "测试样本",
+        "视频课程"
+      ],
+      "status": "OFFLINE",
+      "accessPolicy": "PURCHASE",
+      "priceCents": 5490,
+      "bodyHtml": "<h2>cs050卫生习惯</h2><p>本条为科普接口测试正文，不包含实际诊疗或教学建议。</p><ul><li>测试免费阅读与类型筛选。</li><li>测试内容编辑与发布状态。</li></ul>",
+      "chapters": [
+        {
+          "title": "cs050第1章免费预览",
+          "sortOrder": 1,
+          "isPreview": true,
+          "bodyHtml": "<p>cs050免费预览章，用于测试匿名阅读。</p>"
+        },
+        {
+          "title": "cs050第2章付费正文",
+          "sortOrder": 2,
+          "isPreview": false,
+          "bodyHtml": "<p>cs050受保护课程正文，仅购买成功后可读。</p>"
+        }
+      ]
+    }
+  ]
+}

@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "两性健康服务平台 · 已实现认证 API",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "description": "已实现用户与管理员认证、产品、实物订单、人工物流、售后和测试收付款。x-implementation-status 表示仓库实现状态；线上可用范围以部署版本为准。短信及外部支付／物流暂未接入。"
   },
   "servers": [
@@ -12,7 +12,7 @@
     },
     {
       "url": "http://47.97.46.242/api/v1",
-      "description": "staging 测试服务；本次交易模块需部署此版本后可用，协议版本以接口返回值为准"
+      "description": "staging 测试服务；可用接口以部署版本为准，协议版本以接口返回值为准"
     },
     {
       "url": "https://api.example.com/api/v1",

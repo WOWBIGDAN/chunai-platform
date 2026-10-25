@@ -31,7 +31,7 @@ export class AdminRefreshToken extends RecordBase {
 @Entity('product_categories')
 export class Category extends Versioned {
   @Column({ type: 'varchar', length: 32 }) name!: string;
-  @Column({ type: 'varchar', length: 16, default: 'PRODUCT' }) scope!: 'PRODUCT';
+  @Column({ type: 'varchar', length: 16, default: 'PRODUCT' }) scope!: 'PRODUCT' | 'CONTENT';
   @Column({ name: 'parent_id', type: 'varchar', length: 36, nullable: true }) parentId!: string | null;
   @Column({ name: 'sort_order', type: 'int', default: 0 }) sortOrder!: number;
   @Column({ type: 'boolean', default: true }) enabled!: boolean;
@@ -88,14 +88,15 @@ export class Address extends Versioned {
   @Column({ name: 'is_default', type: 'boolean', default: false }) isDefault!: boolean;
 }
 export interface ItemSnapshot {
-  id: string; resourceId: string; resourceType: 'SKU'; productId: string; title: string;
+  id: string; resourceId: string; resourceType: 'SKU' | 'COURSE'; productId: string | null; title: string;
   skuAttributes: Attribute[]; coverUrl: string | null; quantity: number; unitPriceCents: number;
   subtotalCents: number; refundedQuantity: number; refundedAmountCents: number;
 }
 @Entity('order_quotes')
 export class Quote extends RecordBase {
+  @Column({ type: 'varchar', length: 16, default: 'PRODUCT' }) type!: 'PRODUCT' | 'COURSE';
   @Column({ name: 'user_id', type: 'varchar', length: 36 }) userId!: string;
-  @Column({ type: 'json' }) address!: AddressSnapshot;
+  @Column({ type: 'json', nullable: true }) address!: AddressSnapshot | null;
   @Column({ type: 'json' }) items!: ItemSnapshot[];
   @Column({ name: 'shipping_fee_cents', type: 'int', unsigned: true }) shippingFeeCents!: number;
   @Column({ name: 'expires_at', type: 'datetime', precision: 3 }) expiresAt!: Date;
@@ -103,13 +104,14 @@ export class Quote extends RecordBase {
 export const ORDER_STATUSES = ['PENDING_PAYMENT', 'PENDING_SHIPMENT', 'PENDING_RECEIPT', 'COMPLETED', 'CANCELLED', 'CLOSED'] as const;
 @Entity('commerce_orders')
 export class Order extends Versioned {
+  @Column({ type: 'varchar', length: 16, default: 'PRODUCT' }) type!: 'PRODUCT' | 'COURSE';
   @Column({ name: 'user_id', type: 'varchar', length: 36 }) userId!: string;
   @Column({ name: 'quote_id', type: 'varchar', length: 36 }) quoteId!: string;
   @Column({ name: 'order_no', type: 'varchar', length: 40 }) orderNo!: string;
   @Column({ type: 'varchar', length: 24 }) status!: typeof ORDER_STATUSES[number];
   @Column({ name: 'payment_status', type: 'varchar', length: 24, default: 'UNPAID' }) paymentStatus!: string;
   @Column({ name: 'after_sale_status', type: 'varchar', length: 24, default: 'NONE' }) afterSaleStatus!: string;
-  @Column({ type: 'json' }) address!: AddressSnapshot;
+  @Column({ type: 'json', nullable: true }) address!: AddressSnapshot | null;
   @Column({ name: 'items_amount_cents', type: 'int', unsigned: true }) itemsAmountCents!: number;
   @Column({ name: 'shipping_fee_cents', type: 'int', unsigned: true }) shippingFeeCents!: number;
   @Column({ name: 'payable_amount_cents', type: 'int', unsigned: true }) payableAmountCents!: number;
@@ -123,10 +125,11 @@ export class Order extends Versioned {
   @Column({ name: 'closed_reason', type: 'varchar', length: 200, nullable: true }) closedReason!: string | null;
 }
 @Entity('order_items')
-export class OrderItem extends RecordBase implements ItemSnapshot {
+export class OrderItem extends RecordBase {
   @Column({ name: 'order_id', type: 'varchar', length: 36 }) orderId!: string;
-  @Column({ name: 'resource_id', type: 'varchar', length: 36 }) resourceId!: string;
-  @Column({ name: 'product_id', type: 'varchar', length: 36 }) productId!: string;
+  @Column({ name: 'resource_id', type: 'varchar', length: 36, nullable: true }) resourceId!: string | null;
+  @Column({ name: 'product_id', type: 'varchar', length: 36, nullable: true }) productId!: string | null;
+  @Column({ name: 'course_id', type: 'varchar', length: 36, nullable: true }) courseId!: string | null;
   @Column({ type: 'varchar', length: 120 }) title!: string;
   @Column({ name: 'sku_attributes', type: 'json' }) skuAttributes!: Attribute[];
   @Column({ name: 'cover_url', type: 'varchar', length: 2048, nullable: true }) coverUrl!: string | null;
@@ -135,7 +138,7 @@ export class OrderItem extends RecordBase implements ItemSnapshot {
   @Column({ name: 'subtotal_cents', type: 'int', unsigned: true }) subtotalCents!: number;
   @Column({ name: 'refunded_quantity', type: 'int', unsigned: true, default: 0 }) refundedQuantity!: number;
   @Column({ name: 'refunded_amount_cents', type: 'int', unsigned: true, default: 0 }) refundedAmountCents!: number;
-  get resourceType(): 'SKU' { return 'SKU'; }
+  get resourceType(): 'SKU' | 'COURSE' { return this.courseId ? 'COURSE' : 'SKU'; }
 }
 @Entity('shipments')
 export class Shipment extends Versioned {
@@ -194,8 +197,9 @@ export class PaymentRecord extends RecordBase {
 }
 @Entity('refunds')
 export class Refund extends RecordBase {
+  @Column({ type: 'int', unsigned: true, default: 1 }) version!: number;
   @Column({ name: 'order_id', type: 'varchar', length: 36 }) orderId!: string;
-  @Column({ name: 'after_sale_id', type: 'varchar', length: 36 }) afterSaleId!: string;
+  @Column({ name: 'after_sale_id', type: 'varchar', length: 36, nullable: true }) afterSaleId!: string | null;
   @Column({ name: 'payment_id', type: 'varchar', length: 36 }) paymentId!: string;
   @Column({ name: 'amount_cents', type: 'int', unsigned: true }) amountCents!: number;
   @Column({ type: 'varchar', length: 16 }) status!: 'PENDING' | 'PROCESSING' | 'SUCCEEDED' | 'FAILED';

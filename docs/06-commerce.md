@@ -2,7 +2,7 @@
 
 更新：2026-10-24。实现基于 NestJS、TypeORM 和 MySQL，支持实物商品的完整测试交易流程。用户已确认暂不接入第三方支付、退款和快递查询。
 
-本文描述本次仓库代码；本次修改尚未发布到公网服务器。已有测试地址为 `http://47.97.46.242/api/v1`，上线后才能在该地址调用新增接口。
+实物交易模块已部署到测试服务 `http://47.97.46.242/api/v1`。2026-10-25 新增课程数字订单与退款、内容和专栏，见 [课程后端说明](08-content-courses.md)。
 
 ## 启动与建表
 
@@ -66,7 +66,7 @@ sudo systemd-run --quiet --wait --pty --collect \
 |---|---|
 | 游客 | 查询启用产品分类和上架商品、可售 SKU |
 | 普通用户 `aud=client` | 操作本人的地址、报价、订单、物流、售后、退款查询 |
-| `content:write` | 产品分类管理；当前仅 `scope=PRODUCT` |
+| `content:write` | PRODUCT／CONTENT 分类、科普课程章节、内容素材与专栏管理 |
 | `products:write` | 图片登记、产品与 SKU 维护、上下架、库存调整和流水查询 |
 | `orders:read` | 查询订单和物流；订单列表不返回收货地址，详情返回履约地址并记审计 |
 | `orders:ship` | 发货、揽收前改运单、录入人工物流事件 |
@@ -192,6 +192,6 @@ python scripts/validate_commerce_responses.py
 
 E2E 测试在忽略提交的 `.tmp/commerce-contract-responses.json` 保存测试业务成功响应，不保存登录令牌。`validate_commerce_responses.py` 将真实响应与文档校验；本次验证 239 份响应、37 种路由。CI 已加入该校验，避免接口返回与 OpenAPI 分离。编译后的 NestJS 启动、重复迁移、公开商品查询及隐藏密码的管理员创建命令均已通过验证。
 
-CI 发布包已包含新增 SQL 和编译后的管理员 CLI。发布前备份数据库；发布到 main 后现有工作流会测试、迁移和切换版本。服务器还需按需要启用 `COMMERCE_TEST_PAYMENTS=true` 并初始化管理员。Nginx 模板的请求体上限改为 256 KiB，以支持商品详情；这是服务器配置文件，需要运维安装并执行 `nginx -t`、重新加载。应用仍将普通接口限制为 16 KiB，仅管理产品请求允许 256 KiB。具体服务器操作见 [部署说明](05-deployment.md)。
+CI 发布包包含全部迁移 SQL 和编译后的管理员 CLI。发布前备份数据库；推送 main 后现有工作流会测试、迁移和切换版本。测试交易配置 `COMMERCE_TEST_PAYMENTS=true`。当前应用普通 JSON 限制 16 KiB、产品描述 256 KiB、科普与章节正文 4 MiB，视频上传 100 MiB。Nginx 与私有视频持久目录配置见 [课程后端说明](08-content-courses.md) 和 [部署说明](05-deployment.md)。
 
 实现使用 [NestJS Guards](https://docs.nestjs.com/guards) 分离鉴权与权限检查，并在 [TypeORM 事务](https://typeorm.io/docs/transactions/) 内统一执行业务写入和行锁。

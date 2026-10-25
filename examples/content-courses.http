@@ -1,0 +1,128 @@
+@baseUrl = http://47.97.46.242/api/v1
+@adminToken = replace-with-admin-access-token
+@userToken = replace-with-client-access-token
+@courseId = replace-with-a-published-course-uuid
+@chapterId = replace-with-a-paid-chapter-uuid
+@quoteId = replace-with-quote-uuid
+@orderId = replace-with-order-uuid
+@refundId = replace-with-refund-uuid
+@columnId = replace-with-column-uuid
+@coverMediaId = replace-with-CONTENT_COVER-media-uuid
+@columnCoverMediaId = replace-with-COLUMN_COVER-media-uuid
+@categoryId = replace-with-CONTENT-category-uuid
+@contentId = replace-with-content-uuid
+@version = 1
+
+### 管理端查看全部 50 条 cs 样本（保留草稿和下架样本）
+GET {{baseUrl}}/admin/contents?keyword=cs&pageSize=100
+Authorization: Bearer {{adminToken}}
+
+### 公共图文课程列表（无正文）
+GET {{baseUrl}}/articles?kind=ARTICLE_COURSE&keyword=cs
+
+### 公共视频科普
+GET {{baseUrl}}/videos?kind=SCIENCE_VIDEO&keyword=cs
+
+### 课程目录：取 isPreview=false 的章节测试权限
+GET {{baseUrl}}/courses/{{courseId}}/chapters
+
+### 未购买返回 403；购买后返回正文
+GET {{baseUrl}}/chapters/{{chapterId}}/body
+Authorization: Bearer {{userToken}}
+
+### 课程试算，使用普通用户令牌
+POST {{baseUrl}}/order-quotes
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{"type":"COURSE","courseId":"{{courseId}}"}
+
+### 从报价创建订单；新业务请换幂等键
+POST {{baseUrl}}/orders
+Authorization: Bearer {{userToken}}
+Idempotency-Key: cs_course_order_00001
+Content-Type: application/json
+
+{"quoteId":"{{quoteId}}"}
+
+### 测试支付：使用管理员令牌，取订单最新 version
+POST {{baseUrl}}/admin/orders/{{orderId}}/test-payment
+Authorization: Bearer {{adminToken}}
+Idempotency-Key: cs_course_payment_00001
+Content-Type: application/json
+
+{"version":{{version}},"transactionNo":"cs_course_payment_00001"}
+
+### 本人已购课程
+GET {{baseUrl}}/me/courses?status=ACTIVE
+Authorization: Bearer {{userToken}}
+
+### 视频课程章节播放授权（获取 playbackUrl 后直接 GET）
+GET {{baseUrl}}/chapters/{{chapterId}}/playback
+Authorization: Bearer {{userToken}}
+
+### 全额退款请求：orderVersion 为订单最新版本
+POST {{baseUrl}}/admin/orders/{{orderId}}/digital-refund
+Authorization: Bearer {{adminToken}}
+Idempotency-Key: cs_course_refund_00001
+Content-Type: application/json
+
+{"orderVersion":{{version}},"reason":"cs测试全额退款"}
+
+### 测试退款成功：这里 version 是退款流水版本；成功后再次读取付费章应为 403
+POST {{baseUrl}}/admin/refunds/{{refundId}}/test-result
+Authorization: Bearer {{adminToken}}
+Idempotency-Key: cs_course_refund_result_00001
+Content-Type: application/json
+
+{"version":{{version}},"result":"SUCCEEDED"}
+
+### 获取内容分类
+GET {{baseUrl}}/categories?scope=CONTENT
+
+### 创建可增删改查的草稿
+POST {{baseUrl}}/admin/contents
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"kind":"SCIENCE_ARTICLE","title":"cs新增图文测试","summary":"cs接口测试","coverMediaId":"{{coverMediaId}}","categoryId":"{{categoryId}}","accessPolicy":"FREE","priceCents":0}
+
+### 写科普正文；版本从创建响应读取
+PUT {{baseUrl}}/admin/contents/{{contentId}}/body
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"version":{{version}},"bodyHtml":"<p>cs正文测试</p>","imageMediaIds":[]}
+
+### 修改资料：每次读取最新版本
+PATCH {{baseUrl}}/admin/contents/{{contentId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"version":{{version}},"title":"cs已修改图文测试"}
+
+### 删除从未发布且无引用的草稿
+DELETE {{baseUrl}}/admin/contents/{{contentId}}?version={{version}}
+Authorization: Bearer {{adminToken}}
+
+### 专栏列表
+GET {{baseUrl}}/admin/columns?keyword=cs
+Authorization: Bearer {{adminToken}}
+
+### 新建专栏
+POST {{baseUrl}}/admin/columns
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"name":"cs新增专栏测试","coverMediaId":"{{columnCoverMediaId}}","description":"cs专栏 CRUD 测试","sortOrder":10}
+
+### 关联内容或修改顺序（不授予课程权益）
+PUT {{baseUrl}}/admin/columns/{{columnId}}/contents/{{courseId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"sortOrder":10}
+
+### 移除关联
+DELETE {{baseUrl}}/admin/columns/{{columnId}}/contents/{{courseId}}
+Authorization: Bearer {{adminToken}}

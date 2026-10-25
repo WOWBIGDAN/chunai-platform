@@ -8,12 +8,15 @@ import { CategoryCreateDto, CategoryPatchDto, CategoryQueryDto, ImageCreateDto, 
   ProductPatchDto, AdminProductQueryDto, SkuCreateDto, SkuPatchDto, StockDto, DateQueryDto } from './commerce.dto';
 import { Category, Product, ProductImage, Sku, StockMovement, OrderItem, Quote } from './entities';
 import { Actor, actorId, CommerceTransaction, canonical, checkVersion, conflict, defined, hash, missing, page, touch } from './transaction';
+import { Content } from '../content/entities';
 
 @Injectable()
 export class CatalogService {
   constructor(private readonly db: DataSource, private readonly tx: CommerceTransaction) {}
   async categories(q: CategoryQueryDto, admin = false) {
     const b = this.db.getRepository(Category).createQueryBuilder('c');
+    if (q.scope) b.andWhere('c.scope = :scope', { scope: q.scope });
+    else if (!admin) b.andWhere("c.scope = 'PRODUCT'");
     if (!admin) b.andWhere('c.enabled = true');
     if (q.keyword) b.andWhere('c.name LIKE :keyword', { keyword: `%${q.keyword}%` });
     if (q.parentId) b.andWhere('c.parentId = :parentId', { parentId: q.parentId });
@@ -40,6 +43,7 @@ export class CatalogService {
           visited.add(parent);
           const p = all.find(x => x.id === parent);
           if (!p) throw missing();
+          if (p.scope !== c.scope) conflict('CATEGORY_SCOPE_MISMATCH', '父分类必须属于同一作用域');
           parent = p.parentId;
         }
       }
@@ -52,7 +56,7 @@ export class CatalogService {
     return this.tx.run(actor, async m => {
       const all = await m.find(Category, { order: { id: 'ASC' }, lock: { mode: 'pessimistic_write' } });
       const c = all.find(x => x.id === id); if (!c) throw missing(); checkVersion(c, version);
-      if (all.some(x => x.parentId === id) || await m.countBy(Product, { categoryId: id })) conflict('RESOURCE_IN_USE', '分类被子分类或产品引用');
+      if (all.some(x => x.parentId === id) || await m.countBy(Product, { categoryId: id }) || await m.countBy(Content, { categoryId: id })) conflict('RESOURCE_IN_USE', '分类被子分类、产品或内容引用');
       await m.delete(Category, id); await this.tx.audit(m, actor, 'category.delete', id); return { success: true };
     });
   }
@@ -67,7 +71,7 @@ export class CatalogService {
     });
   }
   private async references(m: EntityManager, p: Product) {
-    const c = await m.findOneBy(Category, { id: p.categoryId, enabled: true });
+    const c = await m.findOneBy(Category, { id: p.categoryId, enabled: true, scope: 'PRODUCT' });
     if (!c) conflict('CATEGORY_UNAVAILABLE', '请选择启用的产品分类');
     const ids = [...new Set([p.coverMediaId, ...p.galleryMediaIds])];
     if (await m.countBy(ProductImage, { id: In(ids) }) !== ids.length) conflict('MEDIA_UNAVAILABLE', '产品图片不存在');

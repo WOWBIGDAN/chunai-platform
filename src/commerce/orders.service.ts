@@ -11,6 +11,7 @@ import { Address, AddressSnapshot, AfterSale, ACTIVE_AFTERSALES, Category, ItemS
 import { Actor, actorId, CommerceTransaction, canonical, checkVersion, conflict, missing, page, touch } from './transaction';
 import { CatalogService } from './catalog.service';
 import { testPaymentsEnabled } from './permissions';
+import { courseQuote, grantCourse, validateCourseOrder } from '../content/course-purchase';
 
 export const CARRIERS: Record<string, string> = { SF: '顺丰速运', YTO: '圆通速递', ZTO: '中通快递', STO: '申通快递', YUNDA: '韵达快递', EMS: '中国邮政', JD: '京东物流' };
 export function carrierName(code: string) { if (!CARRIERS[code]) throw new ApiException(400, 'CARRIER_UNSUPPORTED', '不支持的快递代码'); return CARRIERS[code]; }
@@ -73,11 +74,17 @@ export class OrdersService {
   }
   createQuote(actor: Actor, dto: QuoteDto) {
     return this.tx.run(actor, async m => {
-      if (new Set(dto.items.map(i => i.skuId)).size !== dto.items.length) throw new ApiException(400, 'VALIDATION_ERROR', 'SKU 不可重复');
+      if (dto.type === 'COURSE') {
+        if (dto.addressId !== undefined || dto.items !== undefined) throw new ApiException(400, 'VALIDATION_ERROR', '课程订单不能包含地址或 SKU');
+        return courseQuote(m, actorId(actor), dto.courseId!);
+      }
+      if (dto.courseId !== undefined) throw new ApiException(400, 'VALIDATION_ERROR', '产品订单不能包含课程');
+      const lines = dto.items!;
+      if (new Set(lines.map(i => i.skuId)).size !== lines.length) throw new ApiException(400, 'VALIDATION_ERROR', 'SKU 不可重复');
       const a = await m.findOneBy(Address, { id: dto.addressId, userId: actorId(actor) }); if (!a) throw missing();
-      const { products, skus } = await this.lockSkus(m, dto.items.map(i => i.skuId));
+      const { products, skus } = await this.lockSkus(m, lines.map(i => i.skuId));
       const items: ItemSnapshot[] = [];
-      for (const line of dto.items) {
+      for (const line of lines) {
         const s = skus.get(line.skuId)!; const p = products.get(s.productId)!;
         await this.sellable(m, p, s, line.quantity);
         const image = await m.findOneByOrFail(ProductImage, { id: p.coverMediaId });
@@ -86,7 +93,7 @@ export class OrdersService {
           subtotalCents: s.priceCents * line.quantity, refundedQuantity: 0, refundedAmountCents: 0 });
       }
       if (items.reduce((n,i) => n + i.subtotalCents, 0) > 100000000) conflict('ORDER_AMOUNT_LIMIT', '单笔订单金额超过上限');
-      const q = m.create(Quote, { id: randomUUID(), userId: actorId(actor), address: a.snapshot, items, shippingFeeCents: 0, expiresAt: new Date(Date.now() + 600000) });
+      const q = m.create(Quote, { id: randomUUID(), type: 'PRODUCT', userId: actorId(actor), address: a.snapshot, items, shippingFeeCents: 0, expiresAt: new Date(Date.now() + 600000) });
       await m.save(q);
       const itemsAmountCents = items.reduce((n,i) => n + i.subtotalCents, 0);
       return { quoteId: q.id, type: 'PRODUCT', items, itemsAmountCents, shippingFeeCents: q.shippingFeeCents,
@@ -100,13 +107,14 @@ export class OrdersService {
       const existing = await m.findOneBy(Order, { quoteId: q.id, userId: actorId(actor) });
       if (existing) return this.view(m, existing);
       if (q.expiresAt.getTime() <= Date.now()) conflict('QUOTE_EXPIRED', '报价已过期，请重新试算');
-      const { products, skus } = await this.lockSkus(m, q.items.map(i => i.resourceId));
-      for (const i of q.items) {
+      if (q.type === 'COURSE') await validateCourseOrder(m, q);
+      const { products, skus } = q.type === 'PRODUCT' ? await this.lockSkus(m, q.items.map(i => i.resourceId)) : { products: new Map<string, Product>(), skus: new Map<string, Sku>() };
+      for (const i of q.type === 'PRODUCT' ? q.items : []) {
         const s = skus.get(i.resourceId)!; await this.sellable(m, products.get(s.productId)!, s, i.quantity);
         if (s.priceCents !== i.unitPriceCents || canonical(s.attributes) !== canonical(i.skuAttributes)) conflict('QUOTE_CHANGED', '价格或规格已变更，请重新试算');
       }
       const id = randomUUID(); const amount = q.items.reduce((n,i) => n + i.subtotalCents, 0);
-      const order = m.create(Order, { id, userId: actorId(actor), quoteId: q.id, orderNo: `O${id.replace(/-/g, '')}`,
+      const order = m.create(Order, { id, type: q.type, userId: actorId(actor), quoteId: q.id, orderNo: `O${id.replace(/-/g, '')}`,
         status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID', afterSaleStatus: 'NONE', address: q.address,
         itemsAmountCents: amount, shippingFeeCents: q.shippingFeeCents, payableAmountCents: amount + q.shippingFeeCents,
         paidAmountCents: 0, refundedAmountCents: 0, paymentDeadlineAt: new Date(Date.now() + 1800000),
@@ -114,8 +122,9 @@ export class OrdersService {
       await m.save(order);
       for (const i of q.items) {
         const { resourceType: _type, ...snapshot } = i;
-        await m.save(m.create(OrderItem, { ...snapshot, id: randomUUID(), orderId: id }));
-        await this.catalog.moveStock(m, skus.get(i.resourceId)!, 0, i.quantity, 'ORDER_RESERVED', actorId(actor), id);
+        await m.save(m.create(OrderItem, { ...snapshot, resourceId: q.type === 'COURSE' ? null : i.resourceId,
+          courseId: q.type === 'COURSE' ? i.resourceId : null, id: randomUUID(), orderId: id }));
+        if (q.type === 'PRODUCT') await this.catalog.moveStock(m, skus.get(i.resourceId)!, 0, i.quantity, 'ORDER_RESERVED', actorId(actor), id);
       }
       await this.tx.audit(m, actor, 'order.create', id); return this.view(m, order);
     }, { key, action: 'order.create', body: dto });
@@ -130,18 +139,18 @@ export class OrdersService {
       .andWhere('a.status IN (:...statuses)', { statuses: ACTIVE_AFTERSALES }).getExists();
   }
   async view(m: EntityManager, o: Order, admin = false) {
-    const items = (await this.items(m, o.id)).map(i => ({ id: i.id, resourceId: i.resourceId, resourceType: 'SKU', productId: i.productId,
+    const items = (await this.items(m, o.id)).map(i => ({ id: i.id, resourceId: i.courseId ?? i.resourceId, resourceType: i.resourceType, productId: i.productId,
       title: i.title, skuAttributes: i.skuAttributes, coverUrl: i.coverUrl, quantity: i.quantity, unitPriceCents: i.unitPriceCents,
       subtotalCents: i.subtotalCents, refundedQuantity: i.refundedQuantity, refundedAmountCents: i.refundedAmountCents }));
     const active = o.afterSaleStatus === 'PROCESSING'; const withinWindow = !o.completedAt || Date.now() <= o.completedAt.getTime() + 7 * 86400000;
     const user = admin ? await m.findOneByOrFail(User, { id: o.userId }) : null;
-    return { id: o.id, orderNo: o.orderNo, type: 'PRODUCT', status: o.status, paymentStatus: o.paymentStatus,
+    return { id: o.id, orderNo: o.orderNo, type: o.type, status: o.status, paymentStatus: o.paymentStatus,
       afterSaleStatus: o.afterSaleStatus, items, itemsAmountCents: o.itemsAmountCents, shippingFeeCents: o.shippingFeeCents,
       payableAmountCents: o.payableAmountCents, paidAmountCents: o.paidAmountCents, refundedAmountCents: o.refundedAmountCents,
       currency: 'CNY', paymentDeadlineAt: o.paymentDeadlineAt, paidAt: o.paidAt, createdAt: o.createdAt, address: o.address,
       actions: { canPay: o.status === 'PENDING_PAYMENT' && o.paymentDeadlineAt.getTime() > Date.now(), canCancel: o.status === 'PENDING_PAYMENT',
         canConfirmReceipt: o.status === 'PENDING_RECEIPT' && !active,
-        canApplyAfterSale: ['PENDING_SHIPMENT', 'PENDING_RECEIPT', 'COMPLETED'].includes(o.status) && !active && withinWindow },
+        canApplyAfterSale: o.type === 'PRODUCT' && ['PENDING_SHIPMENT', 'PENDING_RECEIPT', 'COMPLETED'].includes(o.status) && !active && withinWindow },
       cancelReason: o.cancelReason, cancelledAt: o.cancelledAt, completedAt: o.completedAt, closedReason: o.closedReason, version: o.version,
       ...(user ? { user: { id: user.id, nickname: user.nickname, avatarUrl: null,
         phoneMasked: `${(user.phone.startsWith('+86') ? user.phone.slice(3) : user.phone).slice(0, 3)}****${user.phone.slice(-4)}`,
@@ -157,7 +166,7 @@ export class OrdersService {
     const b = m.getRepository(Order).createQueryBuilder('o');
     const owner = userId ?? q.userId;
     if (owner) b.andWhere('o.userId = :owner', { owner });
-    for (const field of ['status', 'paymentStatus', 'afterSaleStatus', 'orderNo'] as const) if (q[field]) b.andWhere(`o.${field} = :${field}`, { [field]: q[field] });
+    for (const field of ['type', 'status', 'paymentStatus', 'afterSaleStatus', 'orderNo'] as const) if (q[field]) b.andWhere(`o.${field} = :${field}`, { [field]: q[field] });
     if (q.createdFrom) b.andWhere('o.createdAt >= :from', { from: new Date(q.createdFrom) });
     if (q.createdTo) b.andWhere('o.createdAt <= :to', { to: new Date(q.createdTo) });
     const [items, total] = await b.orderBy('o.createdAt', q.sort === 'createdAt:asc' ? 'ASC' : 'DESC').addOrderBy('o.id', 'DESC').skip((q.page - 1) * q.pageSize).take(q.pageSize).getManyAndCount();
@@ -169,8 +178,9 @@ export class OrdersService {
     });
   }
   private async release(m: EntityManager, o: Order, operatorId: string) {
-    const items = await this.items(m, o.id); const { skus } = await this.lockSkus(m, items.map(i => i.resourceId));
-    for (const i of items) await this.catalog.moveStock(m, skus.get(i.resourceId)!, 0, -(i.quantity - i.refundedQuantity), 'ORDER_RELEASED', operatorId, o.id);
+    if (o.type === 'COURSE') return;
+    const items = await this.items(m, o.id); const { skus } = await this.lockSkus(m, items.map(i => i.resourceId!));
+    for (const i of items) await this.catalog.moveStock(m, skus.get(i.resourceId!)!, 0, -(i.quantity - i.refundedQuantity), 'ORDER_RELEASED', operatorId, o.id);
   }
   async expireOrder(id: string) {
     await this.db.transaction('READ COMMITTED', async m => {
@@ -200,8 +210,11 @@ export class OrdersService {
     return this.tx.run(actor, async m => {
       testMode(); const o = await this.lockOrder(m, id); checkVersion(o, dto.version);
       if (o.status !== 'PENDING_PAYMENT' || o.paymentDeadlineAt.getTime() <= Date.now()) conflict('ORDER_STATE_INVALID', '订单不是有效的待支付订单');
+      if (o.type === 'COURSE') await grantCourse(m, o);
       await m.insert(PaymentRecord, { id: randomUUID(), orderId: id, provider: 'TEST', transactionNo: dto.transactionNo, amountCents: o.payableAmountCents, operatorId: actorId(actor) });
-      o.status = 'PENDING_SHIPMENT'; o.paymentStatus = 'PAID'; o.paidAmountCents = o.payableAmountCents; o.paidAt = new Date(); touch(o); await m.save(o);
+      o.status = o.type === 'COURSE' ? 'COMPLETED' : 'PENDING_SHIPMENT'; o.paymentStatus = 'PAID'; o.paidAmountCents = o.payableAmountCents; o.paidAt = new Date();
+      if (o.type === 'COURSE') o.completedAt = o.paidAt;
+      touch(o); await m.save(o);
       await this.tx.audit(m, actor, 'payment.test-confirm', id, { transactionNo: dto.transactionNo, amountCents: o.paidAmountCents });
       return this.view(m, o, true);
     }, { key, action: `payment.test:${id}`, body: dto });
@@ -215,8 +228,8 @@ export class OrdersService {
       const name = carrierName(dto.carrierCode); const o = await this.lockOrder(m, id); checkVersion(o, dto.orderVersion);
       if (o.status !== 'PENDING_SHIPMENT' || !['PAID', 'PARTIALLY_REFUNDED'].includes(o.paymentStatus) || await this.hasActiveAfterSale(m, id)) conflict('ORDER_STATE_INVALID', '订单未付款、已发货或存在活跃售后');
       const items = (await this.items(m, id)).filter(i => i.quantity > i.refundedQuantity); if (!items.length) conflict('ORDER_STATE_INVALID', '没有可发货商品');
-      const { skus } = await this.lockSkus(m, items.map(i => i.resourceId));
-      for (const i of items) await this.catalog.moveStock(m, skus.get(i.resourceId)!, -(i.quantity - i.refundedQuantity), -(i.quantity - i.refundedQuantity), 'ORDER_SHIPPED', actorId(actor), id);
+      const { skus } = await this.lockSkus(m, items.map(i => i.resourceId!));
+      for (const i of items) await this.catalog.moveStock(m, skus.get(i.resourceId!)!, -(i.quantity - i.refundedQuantity), -(i.quantity - i.refundedQuantity), 'ORDER_SHIPPED', actorId(actor), id);
       const s = m.create(Shipment, { id: randomUUID(), orderId: id, carrierCode: dto.carrierCode, carrierName: name,
         trackingNo: dto.trackingNo, status: 'PENDING_PICKUP', shippedAt: new Date(), deliveredAt: null, lastSyncedAt: null,
         items: items.map(i => ({ orderItemId: i.id, quantity: i.quantity - i.refundedQuantity })), version: 1 });

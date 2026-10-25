@@ -14,7 +14,7 @@ export class AdminLoginDto {
 }
 export class CategoryCreateDto {
   @IsString() @Length(1, 32) @Matches(/\S/) name!: string;
-  @IsIn(['PRODUCT']) scope!: 'PRODUCT';
+  @IsIn(['PRODUCT', 'CONTENT']) scope!: 'PRODUCT' | 'CONTENT';
   @ValidateIf((_o, v) => v !== undefined && v !== null) @IsUUID('4') parentId?: string | null;
   @Optional() @IsInt() @Min(0) @Max(1000000) sortOrder?: number;
   @Optional() @IsBoolean() enabled?: boolean;
@@ -26,7 +26,7 @@ export class CategoryPatchDto extends VersionDto {
   @Optional() @IsBoolean() enabled?: boolean;
 }
 export class CategoryQueryDto extends PageDto {
-  @Optional() @IsIn(['PRODUCT']) scope?: 'PRODUCT';
+  @Optional() @IsIn(['PRODUCT', 'CONTENT']) scope?: 'PRODUCT' | 'CONTENT';
   @Optional() @IsString() @Length(1, 120) keyword?: string;
   @Optional() @IsUUID('4') parentId?: string;
 }
@@ -105,9 +105,10 @@ export class PurchaseLineDto {
   @IsInt() @Min(1) @Max(999) quantity!: number;
 }
 export class QuoteDto {
-  @IsIn(['PRODUCT']) type!: 'PRODUCT';
-  @IsUUID('4') addressId!: string;
-  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(50) @ValidateNested({ each: true }) @Type(() => PurchaseLineDto) items!: PurchaseLineDto[];
+  @IsIn(['PRODUCT', 'COURSE']) type!: 'PRODUCT' | 'COURSE';
+  @ValidateIf(o => o.type === 'PRODUCT' || o.addressId !== undefined) @IsUUID('4') addressId?: string;
+  @ValidateIf(o => o.type === 'PRODUCT' || o.items !== undefined) @IsArray() @ArrayMinSize(1) @ArrayMaxSize(50) @ValidateNested({ each: true }) @Type(() => PurchaseLineDto) items?: PurchaseLineDto[];
+  @ValidateIf(o => o.type === 'COURSE' || o.courseId !== undefined) @IsUUID('4') courseId?: string;
 }
 export class CreateOrderDto { @IsUUID('4') quoteId!: string; }
 export class CancelOrderDto extends VersionDto { @IsString() @Length(1, 200) @Matches(/\S/) reason!: string; }
@@ -116,7 +117,7 @@ export class DateQueryDto extends PageDto {
   @Optional() @IsISO8601({ strict: true }) createdTo?: string;
 }
 export class OrderQueryDto extends DateQueryDto {
-  @Optional() @IsIn(['PRODUCT']) type?: string;
+  @Optional() @IsIn(['PRODUCT', 'COURSE']) type?: string;
   @Optional() @IsIn(ORDER_STATUSES) status?: typeof ORDER_STATUSES[number];
   @Optional() @IsIn(['UNPAID', 'PAID', 'PARTIALLY_REFUNDED', 'REFUNDED']) paymentStatus?: string;
   @Optional() @IsIn(['NONE', 'PROCESSING', 'PARTIALLY_COMPLETED', 'COMPLETED']) afterSaleStatus?: string;
@@ -171,6 +172,10 @@ export class TestPaymentDto extends VersionDto {
   @IsString() @Matches(/^[A-Za-z0-9_-]{1,64}$/) transactionNo!: string;
 }
 export class TestRefundDto extends VersionDto { @IsIn(['SUCCEEDED', 'FAILED']) result!: 'SUCCEEDED' | 'FAILED'; }
+export class DigitalRefundDto {
+  @IsInt() @Min(1) @Max(2147483647) orderVersion!: number;
+  @IsString() @Length(1, 1000) @Matches(/\S/) reason!: string;
+}
 export class RefundQueryDto extends DateQueryDto {
   @Optional() @IsUUID('4') orderId?: string;
   @Optional() @IsIn(['PENDING', 'PROCESSING', 'SUCCEEDED', 'FAILED']) status?: 'PENDING' | 'PROCESSING' | 'SUCCEEDED' | 'FAILED';

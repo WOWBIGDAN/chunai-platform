@@ -10,5 +10,6 @@ import { CommerceMaintenance } from './maintenance.service';
 
 @Module({ imports: [AuthModule, AdminAuthModule],
   controllers: [CatalogController, CustomerCommerceController, AdminCatalogController, AdminFulfilmentController],
-  providers: [CommerceTransaction, CatalogService, OrdersService, AfterSalesService, CommerceMaintenance] })
+  providers: [CommerceTransaction, CatalogService, OrdersService, AfterSalesService, CommerceMaintenance],
+  exports: [CommerceTransaction, CatalogService] })
 export class CommerceModule {}

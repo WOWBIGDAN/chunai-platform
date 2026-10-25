@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "两性健康服务平台 API",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "description": "已实现用户与管理员认证、产品、实物订单、人工物流、售后和测试收付款。x-implementation-status 表示仓库实现状态；线上可用范围以部署版本为准。短信及外部支付／物流暂未接入。"
   },
   "servers": [
@@ -12,7 +12,7 @@
     },
     {
       "url": "http://47.97.46.242/api/v1",
-      "description": "staging 测试服务；本次交易模块需部署此版本后可用，协议版本以接口返回值为准"
+      "description": "staging 测试服务；可用接口以部署版本为准，协议版本以接口返回值为准"
     },
     {
       "url": "https://api.example.com/api/v1",
@@ -906,11 +906,12 @@
           },
           "scope": {
             "type": "string",
-            "description": "当前仅支持产品分类。",
+            "description": "作用域。",
             "enum": [
+              "CONTENT",
               "PRODUCT"
             ],
-            "example": "PRODUCT"
+            "example": "CONTENT"
           },
           "parentId": {
             "type": "string",
@@ -1038,11 +1039,10 @@
           },
           "accessPolicy": {
             "type": "string",
-            "description": "访问策略：免费／单独购买／会员或购买。",
+            "description": "已实现免费与单独购买；会员服务尚未接入。",
             "enum": [
               "FREE",
-              "PURCHASE",
-              "MEMBER_OR_PURCHASE"
+              "PURCHASE"
             ],
             "example": "FREE"
           },
@@ -1176,11 +1176,10 @@
           },
           "accessPolicy": {
             "type": "string",
-            "description": "访问策略：免费／单独购买／会员或购买。",
+            "description": "已实现免费与单独购买；会员服务尚未接入。",
             "enum": [
               "FREE",
-              "PURCHASE",
-              "MEMBER_OR_PURCHASE"
+              "PURCHASE"
             ],
             "example": "FREE"
           },
@@ -1296,7 +1295,7 @@
       },
       "PlaybackGrant": {
         "type": "object",
-        "description": "短时播放授权；不可持久化为内容源地址。",
+        "description": "5 分钟播放 URL；每次请求重新校验会话、内容状态、章节预览与购买权益。成功退款或退出会话后旧链接失效。",
         "additionalProperties": false,
         "properties": {
           "contentId": {
@@ -1336,7 +1335,7 @@
           },
           "preview": {
             "type": "boolean",
-            "description": "是否为服务端限制的独立预览片段。",
+            "description": "整章免费预览；不是在完整付费视频上做客户端限时。",
             "example": false
           }
         },
@@ -1721,11 +1720,10 @@
           },
           "accessPolicy": {
             "type": "string",
-            "description": "访问策略：免费／单独购买／会员或购买。",
+            "description": "已实现免费与单独购买；会员服务尚未接入。",
             "enum": [
               "FREE",
-              "PURCHASE",
-              "MEMBER_OR_PURCHASE"
+              "PURCHASE"
             ],
             "example": "FREE"
           },
@@ -1807,11 +1805,10 @@
           },
           "accessPolicy": {
             "type": "string",
-            "description": "访问策略：免费／单独购买／会员或购买。",
+            "description": "已实现免费与单独购买；会员服务尚未接入。",
             "enum": [
               "FREE",
-              "PURCHASE",
-              "MEMBER_OR_PURCHASE"
+              "PURCHASE"
             ],
             "example": "FREE"
           },
@@ -1890,11 +1887,10 @@
           },
           "accessPolicy": {
             "type": "string",
-            "description": "访问策略：免费／单独购买／会员或购买。",
+            "description": "已实现免费与单独购买；会员服务尚未接入。",
             "enum": [
               "FREE",
-              "PURCHASE",
-              "MEMBER_OR_PURCHASE"
+              "PURCHASE"
             ],
             "example": "FREE"
           },
@@ -3727,7 +3723,82 @@
             "example": "CNY"
           },
           "address": {
-            "$ref": "#/components/schemas/AddressSnapshot"
+            "type": "object",
+            "description": "产品地址快照；课程订单为 null。",
+            "additionalProperties": false,
+            "properties": {
+              "recipient": {
+                "type": "string",
+                "description": "收件人。",
+                "minLength": 1,
+                "maxLength": 32,
+                "example": "张女士"
+              },
+              "phone": {
+                "type": "string",
+                "description": "E.164 手机号；默认支持 +86，其他地区由短信配置决定。",
+                "pattern": "^\\+[1-9]\\d{7,14}$",
+                "example": "+8613800000000"
+              },
+              "provinceCode": {
+                "type": "string",
+                "description": "省级行政区划码。",
+                "pattern": "^\\d{6}$",
+                "example": "310000"
+              },
+              "province": {
+                "type": "string",
+                "description": "省。",
+                "minLength": 1,
+                "maxLength": 32,
+                "example": "上海市"
+              },
+              "cityCode": {
+                "type": "string",
+                "description": "地市行政区划码。",
+                "pattern": "^\\d{6}$",
+                "example": "310100"
+              },
+              "city": {
+                "type": "string",
+                "description": "市。",
+                "minLength": 1,
+                "maxLength": 32,
+                "example": "上海市"
+              },
+              "districtCode": {
+                "type": "string",
+                "description": "区县行政区划码。",
+                "pattern": "^\\d{6}$",
+                "example": "310101"
+              },
+              "district": {
+                "type": "string",
+                "description": "区县。",
+                "minLength": 1,
+                "maxLength": 32,
+                "example": "黄浦区"
+              },
+              "detail": {
+                "type": "string",
+                "description": "详细地址。",
+                "minLength": 1,
+                "maxLength": 200,
+                "example": "示例路 100 号"
+              }
+            },
+            "required": [
+              "recipient",
+              "phone",
+              "provinceCode",
+              "province",
+              "cityCode",
+              "city",
+              "districtCode",
+              "district",
+              "detail"
+            ],
+            "nullable": true
           },
           "expiresAt": {
             "type": "string",
@@ -3993,7 +4064,7 @@
       },
       "OrderDetail": {
         "type": "object",
-        "description": "本人订单详情；数字订单不返回 address 字段。",
+        "description": "本人订单详情；课程订单 address=null，无运费和实物履约。",
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -4124,7 +4195,82 @@
             "example": "2026-10-22T02:30:00Z"
           },
           "address": {
-            "$ref": "#/components/schemas/AddressSnapshot"
+            "type": "object",
+            "description": "产品地址快照；课程订单为 null。",
+            "additionalProperties": false,
+            "properties": {
+              "recipient": {
+                "type": "string",
+                "description": "收件人。",
+                "minLength": 1,
+                "maxLength": 32,
+                "example": "张女士"
+              },
+              "phone": {
+                "type": "string",
+                "description": "E.164 手机号；默认支持 +86，其他地区由短信配置决定。",
+                "pattern": "^\\+[1-9]\\d{7,14}$",
+                "example": "+8613800000000"
+              },
+              "provinceCode": {
+                "type": "string",
+                "description": "省级行政区划码。",
+                "pattern": "^\\d{6}$",
+                "example": "310000"
+              },
+              "province": {
+                "type": "string",
+                "description": "省。",
+                "minLength": 1,
+                "maxLength": 32,
+                "example": "上海市"
+              },
+              "cityCode": {
+                "type": "string",
+                "description": "地市行政区划码。",
+                "pattern": "^\\d{6}$",
+                "example": "310100"
+              },
+              "city": {
+                "type": "string",
+                "description": "市。",
+                "minLength": 1,
+                "maxLength": 32,
+                "example": "上海市"
+              },
+              "districtCode": {
+                "type": "string",
+                "description": "区县行政区划码。",
+                "pattern": "^\\d{6}$",
+                "example": "310101"
+              },
+              "district": {
+                "type": "string",
+                "description": "区县。",
+                "minLength": 1,
+                "maxLength": 32,
+                "example": "黄浦区"
+              },
+              "detail": {
+                "type": "string",
+                "description": "详细地址。",
+                "minLength": 1,
+                "maxLength": 200,
+                "example": "示例路 100 号"
+              }
+            },
+            "required": [
+              "recipient",
+              "phone",
+              "provinceCode",
+              "province",
+              "cityCode",
+              "city",
+              "districtCode",
+              "district",
+              "detail"
+            ],
+            "nullable": true
           },
           "actions": {
             "$ref": "#/components/schemas/OrderActions"
@@ -5237,6 +5383,12 @@
             "format": "date-time",
             "example": null,
             "nullable": true
+          },
+          "version": {
+            "type": "integer",
+            "description": "乐观锁版本；写操作必须提交最近读取的版本。",
+            "minimum": 1,
+            "example": 1
           }
         },
         "required": [
@@ -5248,7 +5400,8 @@
           "status",
           "failureCode",
           "createdAt",
-          "completedAt"
+          "completedAt",
+          "version"
         ]
       },
       "DigitalRefundInput": {
@@ -6777,7 +6930,82 @@
             "example": "2026-10-22T02:30:00Z"
           },
           "address": {
-            "$ref": "#/components/schemas/AddressSnapshot"
+            "type": "object",
+            "description": "产品地址快照；课程订单为 null。",
+            "additionalProperties": false,
+            "properties": {
+              "recipient": {
+                "type": "string",
+                "description": "收件人。",
+                "minLength": 1,
+                "maxLength": 32,
+                "example": "张女士"
+              },
+              "phone": {
+                "type": "string",
+                "description": "E.164 手机号；默认支持 +86，其他地区由短信配置决定。",
+                "pattern": "^\\+[1-9]\\d{7,14}$",
+                "example": "+8613800000000"
+              },
+              "provinceCode": {
+                "type": "string",
+                "description": "省级行政区划码。",
+                "pattern": "^\\d{6}$",
+                "example": "310000"
+              },
+              "province": {
+                "type": "string",
+                "description": "省。",
+                "minLength": 1,
+                "maxLength": 32,
+                "example": "上海市"
+              },
+              "cityCode": {
+                "type": "string",
+                "description": "地市行政区划码。",
+                "pattern": "^\\d{6}$",
+                "example": "310100"
+              },
+              "city": {
+                "type": "string",
+                "description": "市。",
+                "minLength": 1,
+                "maxLength": 32,
+                "example": "上海市"
+              },
+              "districtCode": {
+                "type": "string",
+                "description": "区县行政区划码。",
+                "pattern": "^\\d{6}$",
+                "example": "310101"
+              },
+              "district": {
+                "type": "string",
+                "description": "区县。",
+                "minLength": 1,
+                "maxLength": 32,
+                "example": "黄浦区"
+              },
+              "detail": {
+                "type": "string",
+                "description": "详细地址。",
+                "minLength": 1,
+                "maxLength": 200,
+                "example": "示例路 100 号"
+              }
+            },
+            "required": [
+              "recipient",
+              "phone",
+              "provinceCode",
+              "province",
+              "cityCode",
+              "city",
+              "districtCode",
+              "district",
+              "detail"
+            ],
+            "nullable": true
           },
           "actions": {
             "$ref": "#/components/schemas/OrderActions"
@@ -7184,7 +7412,7 @@
       },
       "VideoBodyWrite": {
         "type": "object",
-        "description": "视频正文写入；仅 READY 且已转码素材。",
+        "description": "仅已上传的 MP4 素材，CONTENT_VIDEO 用途；服务端不抓取远程视频，不进行转码。",
         "additionalProperties": false,
         "properties": {
           "version": {
@@ -8610,7 +8838,7 @@
       },
       "TestRefundInput": {
         "type": "object",
-        "description": "管理员模拟退款结果；version 为售后单当前版本，不发生真实转账。",
+        "description": "测试环境管理员模拟退款结果。课程退款 version 取退款流水，产品退款 version 取售后单。",
         "additionalProperties": false,
         "properties": {
           "version": {
@@ -8808,6 +9036,71 @@
           "hasNext"
         ]
       },
+      "ImplementedPurchase": {
+        "description": "当前可用的商品或课程试算，不包含会员购买。",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ProductPurchase"
+          },
+          {
+            "$ref": "#/components/schemas/CoursePurchase"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "PRODUCT": "#/components/schemas/ProductPurchase",
+            "COURSE": "#/components/schemas/CoursePurchase"
+          }
+        }
+      },
+      "ContentImageCreate": {
+        "type": "object",
+        "description": "登记已托管公开 HTTPS 图片元数据；限制内容封面、专栏封面或正文图片用途。",
+        "additionalProperties": false,
+        "properties": {
+          "publicUrl": {
+            "type": "string",
+            "description": "HTTPS 公开图片地址，不得含用户名或密码。",
+            "format": "uri",
+            "maxLength": 2048,
+            "example": "https://example.com/product.jpg"
+          },
+          "mimeType": {
+            "type": "string",
+            "description": "管理员登记的图片 MIME。",
+            "enum": [
+              "image/jpeg",
+              "image/png",
+              "image/webp"
+            ],
+            "example": "image/jpeg"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "description": "管理员登记的文件大小。",
+            "minimum": 1,
+            "example": 1024,
+            "maximum": 20971520
+          },
+          "purpose": {
+            "type": "string",
+            "description": "图片用途；引用时精确匹配。",
+            "enum": [
+              "CONTENT_COVER",
+              "COLUMN_COVER",
+              "CONTENT_BODY_IMAGE"
+            ],
+            "example": "CONTENT_COVER"
+          }
+        },
+        "required": [
+          "publicUrl",
+          "mimeType",
+          "sizeBytes",
+          "purpose"
+        ]
+      },
       "ContentCategory": {
         "type": "object",
         "description": "作用域固定为 CONTENT 的分类。",
@@ -8992,17 +9285,17 @@
           },
           "accessPolicy": {
             "type": "string",
-            "description": "可购买访问策略。",
+            "description": "课程当前访问策略；编辑价格不会改写历史订单。",
             "enum": [
-              "PURCHASE",
-              "MEMBER_OR_PURCHASE"
+              "FREE",
+              "PURCHASE"
             ],
-            "example": "PURCHASE"
+            "example": "FREE"
           },
           "priceCents": {
             "type": "integer",
             "description": "金额，单位为人民币分；由服务端计算，禁止浮点。",
-            "minimum": 1,
+            "minimum": 0,
             "example": 9900,
             "maximum": 9007199254740991
           },
@@ -13517,7 +13810,7 @@
       "get": {
         "operationId": "get_categories",
         "summary": "查询启用分类",
-        "description": "当前仅 PRODUCT 分类，parentId 可过滤直接子分类。",
+        "description": "支持 CONTENT 和 PRODUCT；父子分类必须同域。被子分类、产品或内容引用时不可删除。",
         "tags": [
           "03 视频、图文与专栏"
         ],
@@ -13556,11 +13849,12 @@
             "required": false,
             "schema": {
               "type": "string",
-              "description": "当前仅产品分类。",
+              "description": "分类作用域；公共列表省略时默认 PRODUCT。",
               "enum": [
+                "CONTENT",
                 "PRODUCT"
               ],
-              "example": "PRODUCT"
+              "example": "CONTENT"
             },
             "description": "分类域。"
           },
@@ -13916,6 +14210,19 @@
             "description": "排序白名单，默认 publishedAt:desc。"
           },
           {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "精确匹配公开标签。",
+              "minLength": 1,
+              "maxLength": 20,
+              "example": "cs"
+            },
+            "description": "精确匹配公开标签。"
+          },
+          {
             "in": "header",
             "name": "X-Request-ID",
             "required": false,
@@ -13929,7 +14236,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": false,
         "x-admin-required": false,
         "x-auth-mode": "public",
@@ -14192,7 +14499,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": false,
         "x-admin-required": false,
         "x-auth-mode": "optional",
@@ -14539,6 +14846,19 @@
             "description": "排序白名单，默认 publishedAt:desc。"
           },
           {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "精确匹配公开标签。",
+              "minLength": 1,
+              "maxLength": 20,
+              "example": "cs"
+            },
+            "description": "精确匹配公开标签。"
+          },
+          {
             "in": "header",
             "name": "X-Request-ID",
             "required": false,
@@ -14552,7 +14872,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": false,
         "x-admin-required": false,
         "x-auth-mode": "public",
@@ -14815,7 +15135,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": false,
         "x-admin-required": false,
         "x-auth-mode": "optional",
@@ -15079,7 +15399,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": false,
         "x-admin-required": false,
         "x-auth-mode": "optional",
@@ -15311,7 +15631,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": false,
         "x-admin-required": false,
         "x-auth-mode": "optional",
@@ -15569,7 +15889,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": false,
         "x-admin-required": false,
         "x-auth-mode": "optional",
@@ -15775,7 +16095,7 @@
       "get": {
         "operationId": "get_chapters_id_body",
         "summary": "读取课程图文章节",
-        "description": "仅 ARTICLE 章节；免费预览可匿名，否则校验课程购买／会员权益。返回 contentId 为所属课程 ID。",
+        "description": "仅 ARTICLE 章节；免费预览可匿名，否则校验课程购买权益。返回 contentId 为所属课程 ID。",
         "tags": [
           "03 视频、图文与专栏"
         ],
@@ -15814,7 +16134,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": false,
         "x-admin-required": false,
         "x-auth-mode": "optional",
@@ -16006,7 +16326,7 @@
       "get": {
         "operationId": "get_chapters_id_playback",
         "summary": "获取课程视频播放授权",
-        "description": "仅 VIDEO 章节；isPreview=true 可匿名播放该完整预览章，其余章校验购买／会员权益。",
+        "description": "仅 VIDEO 章节；isPreview=true 可匿名播放该完整预览章，其余章校验购买权益。",
         "tags": [
           "03 视频、图文与专栏"
         ],
@@ -16045,7 +16365,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": false,
         "x-admin-required": false,
         "x-auth-mode": "optional",
@@ -16297,7 +16617,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": false,
         "x-admin-required": false,
         "x-auth-mode": "public",
@@ -16539,7 +16859,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": false,
         "x-admin-required": false,
         "x-auth-mode": "public",
@@ -16817,7 +17137,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": false,
         "x-admin-required": false,
         "x-auth-mode": "public",
@@ -17033,6 +17353,245 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/content-playback/{id}": {
+      "get": {
+        "operationId": "get_content_playback_id",
+        "summary": "读取授权视频字节",
+        "description": "只接受 aud=content-playback 的有效签名；校验原授权内容及当前会话和权益，不能直接用媒体 ID 下载。返回 video/mp4，支持 200、206 和 416，不套 JSON 成功外壳。",
+        "tags": [
+          "03 视频、图文与专栏"
+        ],
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "schema": {
+              "type": "string",
+              "description": "不透明业务 ID；前端必须按字符串保存。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "id_10001"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "播放接口签发的短时令牌。",
+              "maxLength": 4096,
+              "example": "playback-grant"
+            },
+            "description": "播放接口签发的短时令牌。"
+          },
+          {
+            "in": "header",
+            "name": "Range",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "支持单个字节区间。",
+              "example": "bytes=0-1023"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": false,
+        "x-admin-required": false,
+        "x-auth-mode": "public",
+        "x-permissions": [],
+        "x-idempotency-required": false,
+        "responses": {
+          "200": {
+            "description": "授权 MP4 视频字节。",
+            "content": {
+              "video/mp4": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "授权 MP4 视频字节。",
+            "content": {
+              "video/mp4": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "416": {
+            "description": "非法或越界的 Range；Content-Range 返回总大小。"
           }
         }
       }
@@ -17658,8 +18217,8 @@
     "/order-quotes": {
       "post": {
         "operationId": "post_order_quotes",
-        "summary": "实物商品下单试算",
-        "description": "当前仅 PRODUCT，10 分钟有效，不占库存；服务端计算价格，当前免运费。快照绑定用户，数字商品后续接入。",
+        "summary": "商品／课程下单试算",
+        "description": "PRODUCT 或 COURSE 二选一，不混单。报价 10 分钟有效；课程不含地址和运费。价格变动后下单返回 QUOTE_CHANGED。",
         "tags": [
           "05 订单、支付与物流"
         ],
@@ -17694,7 +18253,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ProductPurchase"
+                "$ref": "#/components/schemas/ImplementedPurchase"
               },
               "example": {
                 "type": "PRODUCT",
@@ -17929,7 +18488,7 @@
       "post": {
         "operationId": "post_orders",
         "summary": "创建订单",
-        "description": "一份报价最多一单。下单重查产品状态、SKU 价格和规格、库存；价格或规格改变返回 QUOTE_CHANGED，须重新试算。事务预占库存，待付款 30 分钟到期释放。",
+        "description": "报价最多一单；重新校验可售状态与价格。产品预占库存，课程阻止同用户重复待付款单及重复已购。30 分钟付款超时可取消。课程支付成功原子授予永久访问权并完成订单。",
         "tags": [
           "05 订单、支付与物流"
         ],
@@ -20611,7 +21170,8 @@
                         "status": "PENDING",
                         "failureCode": null,
                         "createdAt": "2026-10-22T02:00:00Z",
-                        "completedAt": null
+                        "completedAt": null,
+                        "version": 1
                       }
                     ],
                     "total": 1,
@@ -21664,7 +22224,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "user",
@@ -21755,7 +22315,7 @@
                           "tags": [
                             "基础知识"
                           ],
-                          "accessPolicy": "PURCHASE",
+                          "accessPolicy": "FREE",
                           "priceCents": 9900,
                           "currency": "CNY",
                           "chapterCount": 1,
@@ -29412,7 +29972,7 @@
       "get": {
         "operationId": "get_admin_categories",
         "summary": "查询分类列表",
-        "description": "查询分类列表",
+        "description": "支持 CONTENT 和 PRODUCT；父子分类必须同域。被子分类、产品或内容引用时不可删除。",
         "tags": [
           "13 分类与内容管理"
         ],
@@ -29455,7 +30015,7 @@
             "required": false,
             "schema": {
               "type": "string",
-              "description": "作用域。",
+              "description": "分类作用域；公共列表省略时默认 PRODUCT。",
               "enum": [
                 "CONTENT",
                 "PRODUCT"
@@ -29692,7 +30252,7 @@
       "post": {
         "operationId": "post_admin_categories",
         "summary": "创建分类",
-        "description": "创建分类",
+        "description": "支持 CONTENT 和 PRODUCT；父子分类必须同域。被子分类、产品或内容引用时不可删除。",
         "tags": [
           "13 分类与内容管理"
         ],
@@ -29733,7 +30293,7 @@
               },
               "example": {
                 "name": "健康科普",
-                "scope": "PRODUCT"
+                "scope": "CONTENT"
               }
             }
           }
@@ -30769,7 +31329,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -31030,7 +31590,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -31318,7 +31878,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -31585,7 +32145,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -31828,7 +32388,7 @@
       "delete": {
         "operationId": "delete_admin_contents_id",
         "summary": "删除科普／课程",
-        "description": "软删除。仅未被订单、权益或其他资源引用的草稿可删除；其他情况先下架。",
+        "description": "只物理删除从未发布、没有章节、专栏、报价或订单引用的草稿；已发布内容保留历史，使用下架。",
         "tags": [
           "13 分类与内容管理"
         ],
@@ -31878,7 +32438,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -32106,7 +32666,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -32388,7 +32948,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -32632,7 +33192,7 @@
       "get": {
         "operationId": "get_admin_contents_id_body",
         "summary": "查询科普正文／视频引用",
-        "description": "查询科普正文／视频引用",
+        "description": "图文传 bodyHtml + imageMediaIds，视频只传 videoMediaId，不能混用。正文图片必须是 CONTENT_BODY_IMAGE 素材；禁止任意源地址。视频为管理员上传的可直接播放 MP4，当前无转码。",
         "tags": [
           "13 分类与内容管理"
         ],
@@ -32670,7 +33230,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -32863,7 +33423,7 @@
       "put": {
         "operationId": "put_admin_contents_id_body",
         "summary": "替换科普正文／视频引用",
-        "description": "仅 SCIENCE_*；课程需使用章节接口。清洗 HTML，并校验正文图片归属、用途与引用完整性。",
+        "description": "图文传 bodyHtml + imageMediaIds，视频只传 videoMediaId，不能混用。正文图片必须是 CONTENT_BODY_IMAGE 素材；禁止任意源地址。视频为管理员上传的可直接播放 MP4，当前无转码。",
         "tags": [
           "13 分类与内容管理"
         ],
@@ -32901,7 +33461,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -33194,7 +33754,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -33442,7 +34002,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -33698,7 +34258,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -33938,7 +34498,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -34204,7 +34764,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -34394,7 +34954,7 @@
       "get": {
         "operationId": "get_admin_chapters_id_body",
         "summary": "查询章节正文／视频引用",
-        "description": "查询章节正文／视频引用",
+        "description": "图文传 bodyHtml + imageMediaIds，视频只传 videoMediaId，不能混用。正文图片必须是 CONTENT_BODY_IMAGE 素材；禁止任意源地址。视频为管理员上传的可直接播放 MP4，当前无转码。",
         "tags": [
           "13 分类与内容管理"
         ],
@@ -34432,7 +34992,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -34625,7 +35185,7 @@
       "put": {
         "operationId": "put_admin_chapters_id_body",
         "summary": "替换章节正文／视频引用",
-        "description": "请求正文类型必须匹配章节；更新正文会递增章节 version。",
+        "description": "图文传 bodyHtml + imageMediaIds，视频只传 videoMediaId，不能混用。正文图片必须是 CONTENT_BODY_IMAGE 素材；禁止任意源地址。视频为管理员上传的可直接播放 MP4，当前无转码。",
         "tags": [
           "13 分类与内容管理"
         ],
@@ -34663,7 +35223,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -34913,7 +35473,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -35130,7 +35690,7 @@
       "post": {
         "operationId": "post_admin_chapters_id_unpublish",
         "summary": "下架课程章节",
-        "description": "发布前校验全部必填资料、启用分类和 READY 素材。下架停止新购买与公开发现，已有购买权益可从已购入口访问。",
+        "description": "下架最后一章时自动下架课程，并增加课程版本。已购用户可继续读取历史已发布章节；草稿始终不可见。",
         "tags": [
           "13 分类与内容管理"
         ],
@@ -35168,7 +35728,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -35423,7 +35983,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -35656,7 +36216,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -35847,6 +36407,484 @@
         }
       }
     },
+    "/admin/content-media/images": {
+      "post": {
+        "operationId": "post_admin_content_media_images",
+        "summary": "登记公开内容图片",
+        "description": "登记公开内容图片",
+        "tags": [
+          "13 分类与内容管理"
+        ],
+        "security": [
+          {
+            "AdminBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": true,
+        "x-auth-mode": "admin",
+        "x-permissions": [
+          "content:write"
+        ],
+        "x-idempotency-required": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContentImageCreate"
+              },
+              "example": {
+                "publicUrl": "https://example.com/product.jpg",
+                "mimeType": "image/jpeg",
+                "sizeBytes": 1024,
+                "purpose": "CONTENT_COVER"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/MediaSummary"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "id": "id_10001",
+                    "kind": "IMAGE",
+                    "status": "READY",
+                    "mimeType": "image/jpeg",
+                    "sizeBytes": 102400,
+                    "publicUrl": "https://cdn.example.com/cover.jpg"
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/content-media/videos": {
+      "post": {
+        "operationId": "post_admin_content_media_videos",
+        "summary": "上传私有 MP4",
+        "description": "请求 Content-Type: video/mp4，body 为原始文件字节，最大 100 MiB。保存在 CONTENT_MEDIA_DIR；视频 publicUrl 固定 null。须预先编码为浏览器兼容 MP4（建议 H.264/AAC），当前不转码。",
+        "tags": [
+          "13 分类与内容管理"
+        ],
+        "security": [
+          {
+            "AdminBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "durationSeconds",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "管理员填写的视频时长秒数。",
+              "minimum": 1,
+              "example": 3,
+              "maximum": 86400
+            },
+            "description": "管理员填写的视频时长秒数。"
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": true,
+        "x-auth-mode": "admin",
+        "x-permissions": [
+          "content:write"
+        ],
+        "x-idempotency-required": false,
+        "responses": {
+          "201": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/MediaSummary"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "id": "id_10001",
+                    "kind": "IMAGE",
+                    "status": "READY",
+                    "mimeType": "image/jpeg",
+                    "sizeBytes": 102400,
+                    "publicUrl": "https://cdn.example.com/cover.jpg"
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "video/mp4": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/columns": {
       "get": {
         "operationId": "get_admin_columns",
@@ -35930,7 +36968,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -36166,7 +37204,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -36424,7 +37462,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -36666,7 +37704,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -36884,7 +37922,7 @@
       "delete": {
         "operationId": "delete_admin_columns_id",
         "summary": "删除专栏",
-        "description": "软删除。仅未被订单、权益或其他资源引用的草稿可删除；其他情况先下架。",
+        "description": "先下架专栏再删除；同时移除分组关联，内容、课程和购买权益保留。",
         "tags": [
           "14 专栏管理"
         ],
@@ -36934,7 +37972,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -37162,7 +38200,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -37419,7 +38457,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -37736,7 +38774,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -38027,7 +39065,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -38280,7 +39318,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -45740,7 +46778,8 @@
                         "status": "PENDING",
                         "failureCode": null,
                         "createdAt": "2026-10-22T02:00:00Z",
-                        "completedAt": null
+                        "completedAt": null,
+                        "version": 1
                       }
                     ],
                     "total": 1,
@@ -45871,7 +46910,7 @@
       "post": {
         "operationId": "post_admin_orders_id_digital_refund",
         "summary": "数字订单人工全额退款",
-        "description": "仅 COURSE／MEMBERSHIP，且没有其他退款。课程退款成功撤销本次权益；会员仅允许尚未开始的未来完整权益段退款。当前或已消费会员段返回 DIGITAL_REFUND_NOT_ELIGIBLE。",
+        "description": "当前只支持 COURSE 全额退款；orderVersion 为订单版本。创建 PROCESSING 退款不会撤销访问权；测试退款成功才原子撤权并关闭订单。FAILED 可用同接口和最新订单版本重试，重用退款 ID。",
         "tags": [
           "16 订单、物流与售后管理"
         ],
@@ -45922,7 +46961,7 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": true,
         "x-auth-mode": "admin",
@@ -46009,7 +47048,8 @@
                     "status": "PENDING",
                     "failureCode": null,
                     "createdAt": "2026-10-22T02:00:00Z",
-                    "completedAt": null
+                    "completedAt": null,
+                    "version": 1
                   },
                   "requestId": "req_demo_001",
                   "timestamp": "2026-10-22T02:00:00Z"
@@ -46461,7 +47501,7 @@
       "post": {
         "operationId": "post_admin_refunds_id_test_result",
         "summary": "测试确认退款结果",
-        "description": "version 为售后单版本。只允许 TEST 支付的 PROCESSING 退款。成功才更新金额、售后数量和未发货预占库存；失败维持冻结。",
+        "description": "仅 TEST 支付；课程退款 version 为退款流水版本，产品售后仍为售后单版本。成功才改金额并撤销本订单课程权益，失败保留权益。",
         "tags": [
           "16 订单、物流与售后管理"
         ],
@@ -46599,7 +47639,8 @@
                     "status": "PENDING",
                     "failureCode": null,
                     "createdAt": "2026-10-22T02:00:00Z",
-                    "completedAt": null
+                    "completedAt": null,
+                    "version": 1
                   },
                   "requestId": "req_demo_001",
                   "timestamp": "2026-10-22T02:00:00Z"

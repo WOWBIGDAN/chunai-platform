@@ -16,6 +16,7 @@
     "migration:run:prod": "typeorm migration:run -d dist/database/data-source.js",
     "admin": "ts-node src/commerce/admin-cli.ts",
     "seed:products": "node scripts/seed-products.cjs",
+    "seed:content": "node scripts/seed-content.cjs",
     "test": "jest --runInBand --testPathPatterns=unit",
     "test:e2e": "jest --runInBand --testPathPatterns=e2e",
     "docs:build": "python scripts/build_api_docs.py"

@@ -219,6 +219,8 @@
 - [ShipmentLine](#shipmentline)
 - [CommerceAuditLog](#commerceauditlog)
 - [PageCommerceAuditLog](#pagecommerceauditlog)
+- [ImplementedPurchase](#implementedpurchase)
+- [ContentImageCreate](#contentimagecreate)
 - [ContentCategory](#contentcategory)
 - [ProductCategory](#productcategory)
 - [CourseSummary](#coursesummary)
@@ -790,7 +792,7 @@
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
 | `name` | string | 是 | 名称。 | 最短: `1`；最长: `32` |
-| `scope` | string | 是 | 当前仅支持产品分类。 | 枚举: `PRODUCT` |
+| `scope` | string | 是 | 作用域。 | 枚举: `CONTENT, PRODUCT` |
 | `parentId` | string / null | 否 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 | `sortOrder` | integer | 否 | 排序。 | 最小: `0` |
 | `enabled` | boolean | 否 | 启用。 |  |
@@ -800,7 +802,7 @@
 ```json
 {
   "name": "健康科普",
-  "scope": "PRODUCT"
+  "scope": "CONTENT"
 }
 ```
 
@@ -844,7 +846,7 @@ scope 不可修改；有子分类或引用时不可删除。
 | `cover` | [MediaSummary](#mediasummary) | 是 | 见关联对象。 |  |
 | `category` | [ContentCategory](#contentcategory) | 是 | 见关联对象。 |  |
 | `tags` | string[] | 是 | 标签 | 最多项: `10` |
-| `accessPolicy` | string | 是 | 访问策略：免费／单独购买／会员或购买。 | 枚举: `FREE, PURCHASE, MEMBER_OR_PURCHASE` |
+| `accessPolicy` | string | 是 | 已实现免费与单独购买；会员服务尚未接入。 | 枚举: `FREE, PURCHASE` |
 | `priceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `0`；最大: `9007199254740991` |
 | `currency` | string | 是 | 币种。 | 枚举: `CNY` |
 | `chapterCount` | integer | 是 | 科普为 0；课程为已发布章节数。 | 最小: `0` |
@@ -921,7 +923,7 @@ scope 不可修改；有子分类或引用时不可删除。
 | `cover` | [MediaSummary](#mediasummary) | 是 | 见关联对象。 |  |
 | `category` | [ContentCategory](#contentcategory) | 是 | 见关联对象。 |  |
 | `tags` | string[] | 是 | 标签 | 最多项: `10` |
-| `accessPolicy` | string | 是 | 访问策略：免费／单独购买／会员或购买。 | 枚举: `FREE, PURCHASE, MEMBER_OR_PURCHASE` |
+| `accessPolicy` | string | 是 | 已实现免费与单独购买；会员服务尚未接入。 | 枚举: `FREE, PURCHASE` |
 | `priceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `0`；最大: `9007199254740991` |
 | `currency` | string | 是 | 币种。 | 枚举: `CNY` |
 | `chapterCount` | integer | 是 | 科普为 0；课程为已发布章节数。 | 最小: `0` |
@@ -1004,7 +1006,7 @@ scope 不可修改；有子分类或引用时不可删除。
 <a id="playbackgrant"></a>
 ## PlaybackGrant
 
-短时播放授权；不可持久化为内容源地址。
+5 分钟播放 URL；每次请求重新校验会话、内容状态、章节预览与购买权益。成功退款或退出会话后旧链接失效。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
@@ -1013,7 +1015,7 @@ scope 不可修改；有子分类或引用时不可删除。
 | `playbackUrl` | string | 是 | HTTPS URL。 | 格式: `uri` |
 | `expiresAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
 | `durationSeconds` | integer | 是 | 可播放时长。 | 最小: `0` |
-| `preview` | boolean | 是 | 是否为服务端限制的独立预览片段。 |  |
+| `preview` | boolean | 是 | 整章免费预览；不是在完整付费视频上做客户端限时。 |  |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
@@ -1222,7 +1224,7 @@ scope 不可修改；有子分类或引用时不可删除。
 | `categoryId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 | `authorName` | string | 否 | 作者。 | 最长: `64` |
 | `tags` | string[] | 否 | 标签 | 最多项: `10`；元素不重复 |
-| `accessPolicy` | string | 是 | 访问策略：免费／单独购买／会员或购买。 | 枚举: `FREE, PURCHASE, MEMBER_OR_PURCHASE` |
+| `accessPolicy` | string | 是 | 已实现免费与单独购买；会员服务尚未接入。 | 枚举: `FREE, PURCHASE` |
 | `priceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `0`；最大: `9007199254740991` |
 
 示例（仅结构示意，不作为可用业务 ID）：
@@ -1254,7 +1256,7 @@ scope 不可修改；有子分类或引用时不可删除。
 | `categoryId` | string | 否 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 | `authorName` | string | 否 | 作者。 | 最长: `64` |
 | `tags` | string[] | 否 | 标签 | 最多项: `10`；元素不重复 |
-| `accessPolicy` | string | 否 | 访问策略：免费／单独购买／会员或购买。 | 枚举: `FREE, PURCHASE, MEMBER_OR_PURCHASE` |
+| `accessPolicy` | string | 否 | 已实现免费与单独购买；会员服务尚未接入。 | 枚举: `FREE, PURCHASE` |
 | `priceCents` | integer | 否 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `0`；最大: `9007199254740991` |
 | `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1` |
 
@@ -1284,7 +1286,7 @@ scope 不可修改；有子分类或引用时不可删除。
 | `cover` | [MediaSummary](#mediasummary) | 是 | 见关联对象。 |  |
 | `category` | [ContentCategory](#contentcategory) | 是 | 见关联对象。 |  |
 | `tags` | string[] | 是 | 标签 | 最多项: `10` |
-| `accessPolicy` | string | 是 | 访问策略：免费／单独购买／会员或购买。 | 枚举: `FREE, PURCHASE, MEMBER_OR_PURCHASE` |
+| `accessPolicy` | string | 是 | 已实现免费与单独购买；会员服务尚未接入。 | 枚举: `FREE, PURCHASE` |
 | `priceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `0`；最大: `9007199254740991` |
 | `currency` | string | 是 | 币种。 | 枚举: `CNY` |
 | `chapterCount` | integer | 是 | 科普为 0；课程为已发布章节数。 | 最小: `0` |
@@ -2282,7 +2284,7 @@ SKU 的规格维度。
 | `shippingFeeCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `0`；最大: `9007199254740991` |
 | `payableAmountCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `0`；最大: `9007199254740991` |
 | `currency` | string | 是 | 币种。 | 枚举: `CNY` |
-| `address` | [AddressSnapshot](#addresssnapshot) | 否 | 见关联对象。 |  |
+| `address` | object / null | 否 | 产品地址快照；课程订单为 null。 |  |
 | `expiresAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
 
 示例（仅结构示意，不作为可用业务 ID）：
@@ -2445,7 +2447,7 @@ SKU 的规格维度。
 <a id="orderdetail"></a>
 ## OrderDetail
 
-本人订单详情；数字订单不返回 address 字段。
+本人订单详情；课程订单 address=null，无运费和实物履约。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
@@ -2465,7 +2467,7 @@ SKU 的规格维度。
 | `paymentDeadlineAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
 | `paidAt` | string / null | 是 | UTC 时间；未发生时为 null。 | 格式: `date-time` |
 | `createdAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
-| `address` | [AddressSnapshot](#addresssnapshot) | 否 | 见关联对象。 |  |
+| `address` | object / null | 否 | 产品地址快照；课程订单为 null。 |  |
 | `actions` | [OrderActions](#orderactions) | 是 | 见关联对象。 |  |
 | `cancelReason` | string / null | 是 | 文本。 | 最长: `2000` |
 | `cancelledAt` | string / null | 是 | UTC 时间；未发生时为 null。 | 格式: `date-time` |
@@ -2994,6 +2996,7 @@ SKU 的规格维度。
 | `failureCode` | string / null | 是 | 失败原因码。 |  |
 | `createdAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
 | `completedAt` | string / null | 是 | UTC 时间；未发生时为 null。 | 格式: `date-time` |
+| `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1` |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
@@ -3007,7 +3010,8 @@ SKU 的规格维度。
   "status": "PENDING",
   "failureCode": null,
   "createdAt": "2026-10-22T02:00:00Z",
-  "completedAt": null
+  "completedAt": null,
+  "version": 1
 }
 ```
 
@@ -3239,7 +3243,7 @@ SKU 的规格维度。
     "tags": [
       "基础知识"
     ],
-    "accessPolicy": "PURCHASE",
+    "accessPolicy": "FREE",
     "priceCents": 9900,
     "currency": "CNY",
     "chapterCount": 1,
@@ -3849,7 +3853,7 @@ PUT 到对象存储，不经过业务 API；必须带返回 headers。
 | `paymentDeadlineAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
 | `paidAt` | string / null | 是 | UTC 时间；未发生时为 null。 | 格式: `date-time` |
 | `createdAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
-| `address` | [AddressSnapshot](#addresssnapshot) | 否 | 见关联对象。 |  |
+| `address` | object / null | 否 | 产品地址快照；课程订单为 null。 |  |
 | `actions` | [OrderActions](#orderactions) | 是 | 见关联对象。 |  |
 | `cancelReason` | string / null | 是 | 文本。 | 最长: `2000` |
 | `cancelledAt` | string / null | 是 | UTC 时间；未发生时为 null。 | 格式: `date-time` |
@@ -4097,7 +4101,7 @@ PUT 到对象存储，不经过业务 API；必须带返回 headers。
 <a id="videobodywrite"></a>
 ## VideoBodyWrite
 
-视频正文写入；仅 READY 且已转码素材。
+仅已上传的 MP4 素材，CONTENT_VIDEO 用途；服务端不抓取远程视频，不进行转码。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
@@ -4552,7 +4556,8 @@ Refund 的分页结果。固定按白名单排序；同值用 id 排序。
       "status": "PENDING",
       "failureCode": null,
       "createdAt": "2026-10-22T02:00:00Z",
-      "completedAt": null
+      "completedAt": null,
+      "version": 1
     }
   ],
   "total": 1,
@@ -4647,7 +4652,7 @@ CourseEntitlement 的分页结果。固定按白名单排序；同值用 id 排�
         "tags": [
           "基础知识"
         ],
-        "accessPolicy": "PURCHASE",
+        "accessPolicy": "FREE",
         "priceCents": 9900,
         "currency": "CNY",
         "chapterCount": 1,
@@ -5504,7 +5509,7 @@ AuditLog 的分页结果。固定按白名单排序；同值用 id 排序。
 <a id="testrefundinput"></a>
 ## TestRefundInput
 
-管理员模拟退款结果；version 为售后单当前版本，不发生真实转账。
+测试环境管理员模拟退款结果。课程退款 version 取退款流水，产品退款 version 取售后单。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
@@ -5629,6 +5634,41 @@ CommerceAuditLog 的分页结果。固定按白名单排序；同值用 id 排�
 ```
 
 
+<a id="implementedpurchase"></a>
+## ImplementedPurchase
+
+当前可用的商品或课程试算，不包含会员购买。
+
+仅允许以下一种结构：
+
+- [ProductPurchase](#productpurchase)
+- [CoursePurchase](#coursepurchase)
+
+
+<a id="contentimagecreate"></a>
+## ContentImageCreate
+
+登记已托管公开 HTTPS 图片元数据；限制内容封面、专栏封面或正文图片用途。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `publicUrl` | string | 是 | HTTPS 公开图片地址，不得含用户名或密码。 | 格式: `uri`；最长: `2048` |
+| `mimeType` | string | 是 | 管理员登记的图片 MIME。 | 枚举: `image/jpeg, image/png, image/webp` |
+| `sizeBytes` | integer | 是 | 管理员登记的文件大小。 | 最小: `1`；最大: `20971520` |
+| `purpose` | string | 是 | 图片用途；引用时精确匹配。 | 枚举: `CONTENT_COVER, COLUMN_COVER, CONTENT_BODY_IMAGE` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "publicUrl": "https://example.com/product.jpg",
+  "mimeType": "image/jpeg",
+  "sizeBytes": 1024,
+  "purpose": "CONTENT_COVER"
+}
+```
+
+
 <a id="contentcategory"></a>
 ## ContentCategory
 
@@ -5703,8 +5743,8 @@ CommerceAuditLog 的分页结果。固定按白名单排序；同值用 id 排�
 | `cover` | [MediaSummary](#mediasummary) | 是 | 见关联对象。 |  |
 | `category` | [ContentCategory](#contentcategory) | 是 | 见关联对象。 |  |
 | `tags` | string[] | 是 | 标签 | 最多项: `10` |
-| `accessPolicy` | string | 是 | 可购买访问策略。 | 枚举: `PURCHASE, MEMBER_OR_PURCHASE` |
-| `priceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `1`；最大: `9007199254740991` |
+| `accessPolicy` | string | 是 | 课程当前访问策略；编辑价格不会改写历史订单。 | 枚举: `FREE, PURCHASE` |
+| `priceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `0`；最大: `9007199254740991` |
 | `currency` | string | 是 | 币种。 | 枚举: `CNY` |
 | `chapterCount` | integer | 是 | 科普为 0；课程为已发布章节数。 | 最小: `0` |
 | `publishedAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
@@ -5737,7 +5777,7 @@ CommerceAuditLog 的分页结果。固定按白名单排序；同值用 id 排�
   "tags": [
     "基础知识"
   ],
-  "accessPolicy": "PURCHASE",
+  "accessPolicy": "FREE",
   "priceCents": 9900,
   "currency": "CNY",
   "chapterCount": 1,
