@@ -7,6 +7,7 @@ import { ApiException, Principal } from '../common/http';
 import { AuthSession, RefreshToken, User } from '../database/entities';
 import { PageDto, PasswordChangeDto, PasswordLoginDto, RegisterDto } from './auth.dto';
 import { PasswordService } from './password.service';
+import { membershipSummary } from '../membership/membership-access';
 
 const invalidToken = () => new ApiException(401, 'TOKEN_INVALID', '登录凭证无效，请重新登录');
 const invalidCredentials = () => new ApiException(401, 'AUTH_INVALID_CREDENTIALS', '手机号或密码错误');
@@ -19,14 +20,13 @@ export class AuthService {
   constructor(private readonly db: DataSource, private readonly passwords: PasswordService,
     private readonly jwt: JwtService) {}
 
-  userSummary(user: User) {
+  async userSummary(user: User, manager = this.db.manager) {
     const phone = user.phone.startsWith('+86') ? user.phone.slice(3) : user.phone;
     return {
       id: user.id, nickname: user.nickname, avatarUrl: null,
       phoneMasked: `${phone.slice(0, 3)}****${phone.slice(-4)}`,
       status: user.status,
-      // Membership and media are separate modules, not implemented in this phase.
-      membership: { active: false, expiresAt: null, benefitCodes: [] },
+      membership: await membershipSummary(manager, user.id),
       createdAt: user.createdAt.toISOString(),
     };
   }
@@ -43,7 +43,7 @@ export class AuthService {
     return {
       accessToken, accessExpiresInSeconds: this.config.accessTtl,
       refreshToken, refreshExpiresAt: session.expiresAt.toISOString(), tokenType: 'Bearer',
-      user: this.userSummary(user),
+      user: await this.userSummary(user, manager),
     };
   }
 

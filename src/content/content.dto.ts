@@ -13,7 +13,7 @@ export class ContentCreateDto {
   @IsUUID('4') categoryId!: string;
   @Optional() @IsString() @Length(0, 64) authorName?: string;
   @Optional() @IsArray() @ArrayMaxSize(10) @ArrayUnique() @IsString({ each: true }) @Length(1, 20, { each: true }) tags?: string[];
-  @IsIn(['FREE', 'PURCHASE']) accessPolicy!: 'FREE' | 'PURCHASE';
+  @IsIn(['FREE', 'PURCHASE', 'MEMBER']) accessPolicy!: 'FREE' | 'PURCHASE' | 'MEMBER';
   @IsInt() @Min(0) @Max(100000000) priceCents!: number;
 }
 export class ContentPatchDto extends VersionDto {
@@ -24,7 +24,7 @@ export class ContentPatchDto extends VersionDto {
   @Optional() @IsUUID('4') categoryId?: string;
   @Optional() @IsString() @Length(0, 64) authorName?: string;
   @Optional() @IsArray() @ArrayMaxSize(10) @ArrayUnique() @IsString({ each: true }) @Length(1, 20, { each: true }) tags?: string[];
-  @Optional() @IsIn(['FREE', 'PURCHASE']) accessPolicy?: 'FREE' | 'PURCHASE';
+  @Optional() @IsIn(['FREE', 'PURCHASE', 'MEMBER']) accessPolicy?: 'FREE' | 'PURCHASE' | 'MEMBER';
   @Optional() @IsInt() @Min(0) @Max(100000000) priceCents?: number;
 }
 export class BodyDto extends VersionDto {
@@ -48,7 +48,7 @@ export class ContentQueryDto extends PageDto {
   @Optional() @IsUUID('4') columnId?: string;
   @Optional() @IsString() @Length(1, 120) keyword?: string;
   @Optional() @IsString() @Length(1, 20) tag?: string;
-  @Optional() @IsIn(['FREE', 'PURCHASE']) accessPolicy?: 'FREE' | 'PURCHASE';
+  @Optional() @IsIn(['FREE', 'PURCHASE', 'MEMBER']) accessPolicy?: 'FREE' | 'PURCHASE' | 'MEMBER';
   @Optional() @IsIn(['publishedAt:desc', 'publishedAt:asc', 'createdAt:desc', 'createdAt:asc', 'priceCents:asc', 'priceCents:desc']) sort?: string;
 }
 export class AdminContentQueryDto extends ContentQueryDto { @Optional() @IsIn(['DRAFT', 'PUBLISHED', 'OFFLINE']) status?: PublishStatus; }
@@ -74,4 +74,10 @@ export class VideoUploadQueryDto {
   @IsInt() @Min(1) @Max(86400) durationSeconds!: number;
 }
 export class PlaybackQueryDto { @IsString() @Length(1, 4096) token!: string; }
+export class ExternalVideoDto {
+  @IsIn(['BILIBILI', 'FEISHU']) provider!: 'BILIBILI' | 'FEISHU';
+  @IsString() @Length(1, 2048) externalUrl!: string;
+  @Optional() @IsString() @Length(1, 128) @Matches(/\S/) accessPassword?: string;
+  @IsInt() @Min(0) @Max(86400) durationSeconds!: number;
+}
 export class PurchasedQueryDto extends PageDto { @Optional() @IsIn(['ACTIVE', 'REVOKED']) status?: 'ACTIVE' | 'REVOKED'; }

@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "两性健康服务平台 · 已实现认证、交易与内容 API",
-    "version": "1.3.0",
-    "description": "已实现用户与管理员认证、产品、实物订单、人工物流、售后和测试收付款。x-implementation-status 表示仓库实现状态；线上可用范围以部署版本为准。短信及外部支付／物流暂未接入。"
+    "version": "1.4.0",
+    "description": "已实现认证、实物交易、科普与课程、专栏、网站有效期会员管理、OSS 封面登记与 B 站／飞书视频外链授权。x-implementation-status 表示仓库实现状态；线上可用范围以部署版本为准。短信、会员方案购买及外部支付／物流暂未接入。"
   },
   "servers": [
     {
@@ -55,6 +55,9 @@
     },
     {
       "name": "16 订单、物流与售后管理"
+    },
+    {
+      "name": "17 用户与会员管理"
     }
   ],
   "components": {
@@ -221,6 +224,18 @@
             "description": "仅视频返回，处理前可不返回。",
             "minimum": 0,
             "example": 180
+          },
+          "provider": {
+            "type": "string",
+            "description": "内容素材来源；产品素材可省略。不会暴露外部视频链接或密码。",
+            "enum": [
+              "LOCAL",
+              "OSS",
+              "EXTERNAL_IMAGE",
+              "BILIBILI",
+              "FEISHU"
+            ],
+            "example": "OSS"
           }
         },
         "required": [
@@ -244,7 +259,7 @@
           },
           "expiresAt": {
             "type": "string",
-            "description": "UTC 时间；未发生时为 null。",
+            "description": "有记录时返回存储的到期时间，包括未来、已过期或已撤销记录；无记录时为 null。有效性以 active 为准。",
             "format": "date-time",
             "example": "2026-11-21T02:00:00Z",
             "nullable": true
@@ -253,10 +268,13 @@
             "type": "array",
             "items": {
               "type": "string",
-              "description": "权益编码。",
-              "example": "MEMBER_COURSES"
+              "description": "当前会员内容权益。",
+              "enum": [
+                "MEMBER_CONTENT"
+              ],
+              "example": "MEMBER_CONTENT"
             },
-            "description": "当前权益；过期为 []"
+            "description": "有效时为 [MEMBER_CONTENT]，无效时为 []"
           }
         },
         "required": [
@@ -858,10 +876,11 @@
           },
           "accessPolicy": {
             "type": "string",
-            "description": "已实现免费与单独购买；会员服务尚未接入。",
+            "description": "FREE 免费、PURCHASE 独立购买、MEMBER 按网站会员有效期；MEMBER 仅课程且 priceCents=0。",
             "enum": [
               "FREE",
-              "PURCHASE"
+              "PURCHASE",
+              "MEMBER"
             ],
             "example": "FREE"
           },
@@ -920,7 +939,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "授权原因或阻断原因；ADMIN 仅管理端。",
+            "description": "授权或阻断原因；MEMBERSHIP_REQUIRED 表示需要有效网站会员。",
             "enum": [
               "FREE",
               "PURCHASED",
@@ -929,6 +948,7 @@
               "ADMIN",
               "LOGIN_REQUIRED",
               "PURCHASE_REQUIRED",
+              "MEMBERSHIP_REQUIRED",
               "CONTENT_UNAVAILABLE"
             ],
             "example": "FREE"
@@ -995,10 +1015,11 @@
           },
           "accessPolicy": {
             "type": "string",
-            "description": "已实现免费与单独购买；会员服务尚未接入。",
+            "description": "FREE 免费、PURCHASE 独立购买、MEMBER 按网站会员有效期；MEMBER 仅课程且 priceCents=0。",
             "enum": [
               "FREE",
-              "PURCHASE"
+              "PURCHASE",
+              "MEMBER"
             ],
             "example": "FREE"
           },
@@ -1114,7 +1135,7 @@
       },
       "PlaybackGrant": {
         "type": "object",
-        "description": "5 分钟播放 URL；每次请求重新校验会话、内容状态、章节预览与购买权益。成功退款或退出会话后旧链接失效。",
+        "description": "统一视频访问结果。STREAM 使用 5 分钟本地播放授权；EXTERNAL_LINK 跳转第三方页面。FEISHU 的 externalUrl/accessPassword 仅在会员或管理员预览授权通过后返回，禁止缓存。已返回的外部链接不会随网站会员撤销而在第三方自动失效。",
         "additionalProperties": false,
         "properties": {
           "contentId": {
@@ -1136,15 +1157,17 @@
           },
           "playbackUrl": {
             "type": "string",
-            "description": "HTTPS URL。",
+            "description": "仅 LOCAL/STREAM 有值；外部模式为 null。",
             "format": "uri",
-            "example": "https://media.example.com/play.m3u8?token=demo"
+            "example": "http://localhost:3000/api/v1/content-playback/media-id?token=example",
+            "nullable": true
           },
           "expiresAt": {
             "type": "string",
-            "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+            "description": "本地播放授权到期时间；外链为 null，不表示第三方分享永久有效。",
             "format": "date-time",
-            "example": "2026-10-22T02:05:00Z"
+            "example": "2026-10-22T02:05:00Z",
+            "nullable": true
           },
           "durationSeconds": {
             "type": "integer",
@@ -1156,6 +1179,40 @@
             "type": "boolean",
             "description": "整章免费预览；不是在完整付费视频上做客户端限时。",
             "example": false
+          },
+          "provider": {
+            "type": "string",
+            "description": "视频提供方。",
+            "enum": [
+              "LOCAL",
+              "BILIBILI",
+              "FEISHU"
+            ],
+            "example": "LOCAL"
+          },
+          "mode": {
+            "type": "string",
+            "description": "前端按此字段选择播放器或外部页面跳转。",
+            "enum": [
+              "STREAM",
+              "EXTERNAL_LINK"
+            ],
+            "example": "STREAM"
+          },
+          "externalUrl": {
+            "type": "string",
+            "description": "外部跳转地址；STREAM 为 null。FEISHU 视为敏感数据。",
+            "format": "uri",
+            "example": null,
+            "nullable": true
+          },
+          "accessPassword": {
+            "type": "string",
+            "description": "仅授权 FEISHU 返回网盘访问密码；其他模式为 null。",
+            "minLength": 1,
+            "maxLength": 128,
+            "nullable": true,
+            "example": null
           }
         },
         "required": [
@@ -1164,7 +1221,11 @@
           "playbackUrl",
           "expiresAt",
           "durationSeconds",
-          "preview"
+          "preview",
+          "provider",
+          "mode",
+          "externalUrl",
+          "accessPassword"
         ]
       },
       "ChapterSummary": {
@@ -1539,10 +1600,11 @@
           },
           "accessPolicy": {
             "type": "string",
-            "description": "已实现免费与单独购买；会员服务尚未接入。",
+            "description": "FREE 免费、PURCHASE 独立购买、MEMBER 按网站会员有效期；MEMBER 仅课程且 priceCents=0。",
             "enum": [
               "FREE",
-              "PURCHASE"
+              "PURCHASE",
+              "MEMBER"
             ],
             "example": "FREE"
           },
@@ -1566,7 +1628,7 @@
       },
       "ContentPatch": {
         "type": "object",
-        "description": "部分更新；accessPolicy 与 priceCents 改动需同时提交；发布内容即时生效并留审计。",
+        "description": "部分更新；accessPolicy 与 priceCents 改动需同时提交；发布内容即时生效并留审计。 已有购买订单历史的课程不能改为 MEMBER，返回 RESOURCE_IN_USE，保留原有购买权益。",
         "additionalProperties": false,
         "properties": {
           "title": {
@@ -1624,10 +1686,11 @@
           },
           "accessPolicy": {
             "type": "string",
-            "description": "已实现免费与单独购买；会员服务尚未接入。",
+            "description": "FREE 免费、PURCHASE 独立购买、MEMBER 按网站会员有效期；MEMBER 仅课程且 priceCents=0。",
             "enum": [
               "FREE",
-              "PURCHASE"
+              "PURCHASE",
+              "MEMBER"
             ],
             "example": "FREE"
           },
@@ -1706,10 +1769,11 @@
           },
           "accessPolicy": {
             "type": "string",
-            "description": "已实现免费与单独购买；会员服务尚未接入。",
+            "description": "FREE 免费、PURCHASE 独立购买、MEMBER 按网站会员有效期；MEMBER 仅课程且 priceCents=0。",
             "enum": [
               "FREE",
-              "PURCHASE"
+              "PURCHASE",
+              "MEMBER"
             ],
             "example": "FREE"
           },
@@ -5083,6 +5147,100 @@
           "orderVersion"
         ]
       },
+      "MembershipDetail": {
+        "type": "object",
+        "description": "当前网站会员状态和期限记录；会员资格每次按服务器时间、撤销状态与账号状态判断。",
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "type": "boolean",
+            "description": "当前是否为有效会员。",
+            "example": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "有记录时返回存储的到期时间，包括未来、已过期或已撤销记录；无记录时为 null。有效性以 active 为准。",
+            "format": "date-time",
+            "example": "2026-11-21T02:00:00Z",
+            "nullable": true
+          },
+          "benefitCodes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "当前会员内容权益。",
+              "enum": [
+                "MEMBER_CONTENT"
+              ],
+              "example": "MEMBER_CONTENT"
+            },
+            "description": "有效时为 [MEMBER_CONTENT]，无效时为 []"
+          },
+          "membership": {
+            "type": "object",
+            "description": "没有会员记录时为 null。",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "不透明业务 ID；前端必须按字符串保存。",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                "example": "id_10001"
+              },
+              "userId": {
+                "type": "string",
+                "description": "不透明业务 ID；前端必须按字符串保存。",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                "example": "id_10001"
+              },
+              "startsAt": {
+                "type": "string",
+                "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                "format": "date-time",
+                "example": "2026-10-22T02:00:00Z"
+              },
+              "expiresAt": {
+                "type": "string",
+                "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                "format": "date-time",
+                "example": "2026-10-22T02:00:00Z"
+              },
+              "revokedAt": {
+                "type": "string",
+                "description": "UTC 时间；未发生时为 null。",
+                "format": "date-time",
+                "example": "2026-10-22T02:00:00Z",
+                "nullable": true
+              },
+              "version": {
+                "type": "integer",
+                "description": "乐观锁版本；写操作必须提交最近读取的版本。",
+                "minimum": 1,
+                "example": 1
+              }
+            },
+            "required": [
+              "id",
+              "userId",
+              "startsAt",
+              "expiresAt",
+              "revokedAt",
+              "version"
+            ],
+            "nullable": true
+          }
+        },
+        "required": [
+          "active",
+          "expiresAt",
+          "benefitCodes",
+          "membership"
+        ]
+      },
       "CourseEntitlement": {
         "type": "object",
         "description": "独立购买课程的永久阅读权；退款后撤销。会员可读内容不混入已购列表。",
@@ -5465,7 +5623,7 @@
               "active": true,
               "expiresAt": "2026-11-21T02:00:00Z",
               "benefitCodes": [
-                "MEMBER_COURSES"
+                "MEMBER_CONTENT"
               ]
             },
             "createdAt": "2026-10-22T02:00:00Z"
@@ -5680,7 +5838,7 @@
       },
       "VideoBodyWrite": {
         "type": "object",
-        "description": "仅已上传的 MP4 素材，CONTENT_VIDEO 用途；服务端不抓取远程视频，不进行转码。",
+        "description": "引用 CONTENT_VIDEO 素材。LOCAL 为已上传 MP4；BILIBILI 仅科普；FEISHU 仅 MEMBER 视频课程非预览章。服务端不抓取远程视频、不转码。",
         "additionalProperties": false,
         "properties": {
           "version": {
@@ -6915,9 +7073,73 @@
           }
         }
       },
+      "MembershipWrite": {
+        "type": "object",
+        "description": "开通、续期或重新开通会员；从 GET 读取 version，无记录用 0。expiresAt 必须晚于 startsAt 且晚于当前时间。",
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "type": "integer",
+            "description": "创建用 0，已有记录用当前版本。",
+            "minimum": 0,
+            "example": 0,
+            "maximum": 4294967294
+          },
+          "startsAt": {
+            "type": "string",
+            "description": "ISO 8601 时间，必须包含秒和明确时区；可含至多 3 位小数。会员区间为 startsAt <= now < expiresAt。",
+            "format": "date-time",
+            "example": "2026-10-22T02:00:00Z"
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "ISO 8601 时间，必须包含秒和明确时区；可含至多 3 位小数。会员区间为 startsAt <= now < expiresAt。",
+            "format": "date-time",
+            "example": "2026-11-21T02:00:00Z"
+          },
+          "reason": {
+            "type": "string",
+            "description": "管理员操作原因，写入审计。",
+            "minLength": 1,
+            "maxLength": 500,
+            "example": "cs开通30天测试会员"
+          }
+        },
+        "required": [
+          "version",
+          "startsAt",
+          "expiresAt",
+          "reason"
+        ]
+      },
+      "MembershipRevoke": {
+        "type": "object",
+        "description": "撤销会员；立即停止签发受会员保护的访问数据。",
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "type": "integer",
+            "description": "乐观锁版本；写操作必须提交最近读取的版本。",
+            "minimum": 1,
+            "example": 1,
+            "maximum": 4294967294
+          },
+          "reason": {
+            "type": "string",
+            "description": "撤销原因。",
+            "minLength": 1,
+            "maxLength": 500,
+            "example": "cs撤销测试会员"
+          }
+        },
+        "required": [
+          "version",
+          "reason"
+        ]
+      },
       "ContentImageCreate": {
         "type": "object",
-        "description": "登记已托管公开 HTTPS 图片元数据；限制内容封面、专栏封面或正文图片用途。",
+        "description": "登记已托管公开 HTTPS 图片元数据。CONTENT_COVER/COLUMN_COVER 仅允许 CONTENT_IMAGE_OSS_HOST（默认 chunai-photo.oss-cn-hangzhou.aliyuncs.com），正文图片仍允许已有 HTTPS 地址。不会上传或下载文件。",
         "additionalProperties": false,
         "properties": {
           "publicUrl": {
@@ -6925,7 +7147,7 @@
             "description": "HTTPS 公开图片地址，不得含用户名或密码。",
             "format": "uri",
             "maxLength": 2048,
-            "example": "https://example.com/product.jpg"
+            "example": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/covers/replace-with-existing-object.jpg"
           },
           "mimeType": {
             "type": "string",
@@ -6961,6 +7183,102 @@
           "sizeBytes",
           "purpose"
         ]
+      },
+      "BilibiliVideoCreate": {
+        "type": "object",
+        "description": "登记 B 站科普视频，禁止传 accessPassword。",
+        "additionalProperties": false,
+        "properties": {
+          "provider": {
+            "type": "string",
+            "description": "外部视频提供方。",
+            "enum": [
+              "BILIBILI"
+            ],
+            "example": "BILIBILI"
+          },
+          "externalUrl": {
+            "type": "string",
+            "description": "B 站仅 bilibili.com/www.bilibili.com 的 /video/BV+10位字母数字或 /video/av数字，及 b23.tv 的 4–64 位字母数字短链；飞书仅 feishu.cn 或一层租户子域，路径 /file/、/drive/file/、/drive/folder/ 加分享 token。拒绝用户名密码、显式端口、非空 fragment；保留普通 query。示例仅格式占位。",
+            "format": "uri",
+            "minLength": 1,
+            "maxLength": 2048,
+            "example": "https://www.bilibili.com/video/BV0000000000"
+          },
+          "durationSeconds": {
+            "type": "integer",
+            "description": "时长秒数；未知可填 0。",
+            "minimum": 0,
+            "example": 0,
+            "maximum": 86400
+          }
+        },
+        "required": [
+          "provider",
+          "externalUrl",
+          "durationSeconds"
+        ]
+      },
+      "FeishuVideoCreate": {
+        "type": "object",
+        "description": "登记飞书会员视频，必须提供 accessPassword。",
+        "additionalProperties": false,
+        "properties": {
+          "provider": {
+            "type": "string",
+            "description": "外部视频提供方。",
+            "enum": [
+              "FEISHU"
+            ],
+            "example": "FEISHU"
+          },
+          "externalUrl": {
+            "type": "string",
+            "description": "B 站仅 bilibili.com/www.bilibili.com 的 /video/BV+10位字母数字或 /video/av数字，及 b23.tv 的 4–64 位字母数字短链；飞书仅 feishu.cn 或一层租户子域，路径 /file/、/drive/file/、/drive/folder/ 加分享 token。拒绝用户名密码、显式端口、非空 fragment；保留普通 query。示例仅格式占位。",
+            "format": "uri",
+            "minLength": 1,
+            "maxLength": 2048,
+            "example": "https://example.feishu.cn/file/replace_with_real_share_id"
+          },
+          "durationSeconds": {
+            "type": "integer",
+            "description": "时长秒数；未知可填 0。",
+            "minimum": 0,
+            "example": 0,
+            "maximum": 86400
+          },
+          "accessPassword": {
+            "type": "string",
+            "description": "飞书网盘访问密码，必须提供；与链接一起加密保存，不在素材响应或审计中返回。",
+            "minLength": 1,
+            "maxLength": 128,
+            "example": "replace-with-real-share-password"
+          }
+        },
+        "required": [
+          "provider",
+          "externalUrl",
+          "durationSeconds",
+          "accessPassword"
+        ]
+      },
+      "ExternalVideoCreate": {
+        "description": "外部视频来源二选一；链接与密码均加密保存。",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/BilibiliVideoCreate"
+          },
+          {
+            "$ref": "#/components/schemas/FeishuVideoCreate"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "provider",
+          "mapping": {
+            "BILIBILI": "#/components/schemas/BilibiliVideoCreate",
+            "FEISHU": "#/components/schemas/FeishuVideoCreate"
+          }
+        }
       },
       "ContentCategory": {
         "type": "object",
@@ -7149,7 +7467,8 @@
             "description": "课程当前访问策略；编辑价格不会改写历史订单。",
             "enum": [
               "FREE",
-              "PURCHASE"
+              "PURCHASE",
+              "MEMBER"
             ],
             "example": "FREE"
           },
@@ -7765,7 +8084,7 @@
                         "active": true,
                         "expiresAt": "2026-11-21T02:00:00Z",
                         "benefitCodes": [
-                          "MEMBER_COURSES"
+                          "MEMBER_CONTENT"
                         ]
                       },
                       "createdAt": "2026-10-22T02:00:00Z"
@@ -8006,7 +8325,7 @@
                         "active": true,
                         "expiresAt": "2026-11-21T02:00:00Z",
                         "benefitCodes": [
-                          "MEMBER_COURSES"
+                          "MEMBER_CONTENT"
                         ]
                       },
                       "createdAt": "2026-10-22T02:00:00Z"
@@ -8246,7 +8565,7 @@
                         "active": true,
                         "expiresAt": "2026-11-21T02:00:00Z",
                         "benefitCodes": [
-                          "MEMBER_COURSES"
+                          "MEMBER_CONTENT"
                         ]
                       },
                       "createdAt": "2026-10-22T02:00:00Z"
@@ -8683,7 +9002,7 @@
                       "active": true,
                       "expiresAt": "2026-11-21T02:00:00Z",
                       "benefitCodes": [
-                        "MEMBER_COURSES"
+                        "MEMBER_CONTENT"
                       ]
                     },
                     "createdAt": "2026-10-22T02:00:00Z"
@@ -11117,15 +11436,15 @@
             "required": false,
             "schema": {
               "type": "string",
-              "description": "访问策略：免费／单独购买／会员或购买。",
+              "description": "访问策略：免费／单独购买／网站有效期会员；科普只能 FREE。",
               "enum": [
                 "FREE",
                 "PURCHASE",
-                "MEMBER_OR_PURCHASE"
+                "MEMBER"
               ],
               "example": "FREE"
             },
-            "description": "访问策略：免费／单独购买／会员或购买。"
+            "description": "访问策略：免费／单独购买／网站有效期会员；科普只能 FREE。"
           },
           {
             "name": "sort",
@@ -11753,15 +12072,15 @@
             "required": false,
             "schema": {
               "type": "string",
-              "description": "访问策略：免费／单独购买／会员或购买。",
+              "description": "访问策略：免费／单独购买／网站有效期会员；科普只能 FREE。",
               "enum": [
                 "FREE",
                 "PURCHASE",
-                "MEMBER_OR_PURCHASE"
+                "MEMBER"
               ],
               "example": "FREE"
             },
-            "description": "访问策略：免费／单独购买／会员或购买。"
+            "description": "访问策略：免费／单独购买／网站有效期会员；科普只能 FREE。"
           },
           {
             "name": "sort",
@@ -12295,7 +12614,7 @@
       "get": {
         "operationId": "get_videos_id_playback",
         "summary": "获取科普视频播放授权",
-        "description": "仅 SCIENCE_VIDEO；短时 URL 建议 5 分钟。课程视频走章节接口。",
+        "description": "仅 SCIENCE_VIDEO。按 mode 分支：STREAM 返回本地短时 playbackUrl；EXTERNAL_LINK 返回 BILIBILI externalUrl，不能当作视频文件 URL 播放。响应禁止缓存。",
         "tags": [
           "03 视频、图文与专栏"
         ],
@@ -12349,6 +12668,13 @@
                   "type": "string"
                 },
                 "description": "请求追踪号。"
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "private, no-store"
+                },
+                "description": "包含授权链接的结果禁止缓存。"
               }
             },
             "content": {
@@ -12399,10 +12725,14 @@
                   "data": {
                     "contentId": "id_10001",
                     "chapterId": "id_10001",
-                    "playbackUrl": "https://media.example.com/play.m3u8?token=demo",
+                    "playbackUrl": "http://localhost:3000/api/v1/content-playback/media-id?token=example",
                     "expiresAt": "2026-10-22T02:05:00Z",
                     "durationSeconds": 180,
-                    "preview": false
+                    "preview": false,
+                    "provider": "LOCAL",
+                    "mode": "STREAM",
+                    "externalUrl": null,
+                    "accessPassword": null
                   },
                   "requestId": "req_demo_001",
                   "timestamp": "2026-10-22T02:00:00Z"
@@ -13030,7 +13360,7 @@
       "get": {
         "operationId": "get_chapters_id_body",
         "summary": "读取课程图文章节",
-        "description": "仅 ARTICLE 章节；免费预览可匿名，否则校验课程购买权益。返回 contentId 为所属课程 ID。",
+        "description": "仅 ARTICLE 章节；免费预览可匿名，否则校验课程购买／会员权益。返回 contentId 为所属课程 ID。",
         "tags": [
           "03 视频、图文与专栏"
         ],
@@ -13261,7 +13591,7 @@
       "get": {
         "operationId": "get_chapters_id_playback",
         "summary": "获取课程视频播放授权",
-        "description": "仅 VIDEO 章节；isPreview=true 可匿名播放该完整预览章，其余章校验购买权益。",
+        "description": "仅 VIDEO 章节。LOCAL 保留短时流播放；FEISHU 仅用于 MEMBER 视频课程非预览章节，重新校验有效网站会员后返回链接和密码。无会员返回 403，不泄漏外链。管理员使用专属预览接口。响应禁止缓存。",
         "tags": [
           "03 视频、图文与专栏"
         ],
@@ -13315,6 +13645,13 @@
                   "type": "string"
                 },
                 "description": "请求追踪号。"
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "private, no-store"
+                },
+                "description": "包含授权链接的结果禁止缓存。"
               }
             },
             "content": {
@@ -13365,10 +13702,14 @@
                   "data": {
                     "contentId": "id_10001",
                     "chapterId": "id_10001",
-                    "playbackUrl": "https://media.example.com/play.m3u8?token=demo",
+                    "playbackUrl": "http://localhost:3000/api/v1/content-playback/media-id?token=example",
                     "expiresAt": "2026-10-22T02:05:00Z",
                     "durationSeconds": 180,
-                    "preview": false
+                    "preview": false,
+                    "provider": "LOCAL",
+                    "mode": "STREAM",
+                    "externalUrl": null,
+                    "accessPassword": null
                   },
                   "requestId": "req_demo_001",
                   "timestamp": "2026-10-22T02:00:00Z"
@@ -17382,6 +17723,223 @@
                     "page": 1,
                     "pageSize": 20,
                     "hasNext": false
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/membership": {
+      "get": {
+        "operationId": "get_me_membership",
+        "summary": "本人会员权益",
+        "description": "以服务端时间判断 startsAt <= now < expiresAt，且未撤销、账号有效。会员由管理员开通／续期／撤销；当前不提供会员方案购买。",
+        "tags": [
+          "07 会员与已购课程"
+        ],
+        "security": [
+          {
+            "ClientBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": false,
+        "x-auth-mode": "user",
+        "x-permissions": [],
+        "x-idempotency-required": false,
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/MembershipDetail"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "active": true,
+                    "expiresAt": "2026-11-21T02:00:00Z",
+                    "benefitCodes": [
+                      "MEMBER_CONTENT"
+                    ],
+                    "membership": null
                   },
                   "requestId": "req_demo_001",
                   "timestamp": "2026-10-22T02:00:00Z"
@@ -23338,7 +23896,7 @@
       "get": {
         "operationId": "get_admin_contents_id_body",
         "summary": "查询科普正文／视频引用",
-        "description": "图文传 bodyHtml + imageMediaIds，视频只传 videoMediaId，不能混用。正文图片必须是 CONTENT_BODY_IMAGE 素材；禁止任意源地址。视频为管理员上传的可直接播放 MP4，当前无转码。",
+        "description": "图文传 bodyHtml + imageMediaIds，视频只传 videoMediaId，不能混用。BILIBILI 仅可绑定 SCIENCE_VIDEO；FEISHU 仅可绑定 MEMBER 视频课程且 isPreview=false；LOCAL 保留。正文图片必须是 CONTENT_BODY_IMAGE 素材。",
         "tags": [
           "13 分类与内容管理"
         ],
@@ -23569,7 +24127,7 @@
       "put": {
         "operationId": "put_admin_contents_id_body",
         "summary": "替换科普正文／视频引用",
-        "description": "图文传 bodyHtml + imageMediaIds，视频只传 videoMediaId，不能混用。正文图片必须是 CONTENT_BODY_IMAGE 素材；禁止任意源地址。视频为管理员上传的可直接播放 MP4，当前无转码。",
+        "description": "图文传 bodyHtml + imageMediaIds，视频只传 videoMediaId，不能混用。BILIBILI 仅可绑定 SCIENCE_VIDEO；FEISHU 仅可绑定 MEMBER 视频课程且 isPreview=false；LOCAL 保留。正文图片必须是 CONTENT_BODY_IMAGE 素材。",
         "tags": [
           "13 分类与内容管理"
         ],
@@ -25100,7 +25658,7 @@
       "get": {
         "operationId": "get_admin_chapters_id_body",
         "summary": "查询章节正文／视频引用",
-        "description": "图文传 bodyHtml + imageMediaIds，视频只传 videoMediaId，不能混用。正文图片必须是 CONTENT_BODY_IMAGE 素材；禁止任意源地址。视频为管理员上传的可直接播放 MP4，当前无转码。",
+        "description": "图文传 bodyHtml + imageMediaIds，视频只传 videoMediaId，不能混用。BILIBILI 仅可绑定 SCIENCE_VIDEO；FEISHU 仅可绑定 MEMBER 视频课程且 isPreview=false；LOCAL 保留。正文图片必须是 CONTENT_BODY_IMAGE 素材。",
         "tags": [
           "13 分类与内容管理"
         ],
@@ -25331,7 +25889,7 @@
       "put": {
         "operationId": "put_admin_chapters_id_body",
         "summary": "替换章节正文／视频引用",
-        "description": "图文传 bodyHtml + imageMediaIds，视频只传 videoMediaId，不能混用。正文图片必须是 CONTENT_BODY_IMAGE 素材；禁止任意源地址。视频为管理员上传的可直接播放 MP4，当前无转码。",
+        "description": "图文传 bodyHtml + imageMediaIds，视频只传 videoMediaId，不能混用。BILIBILI 仅可绑定 SCIENCE_VIDEO；FEISHU 仅可绑定 MEMBER 视频课程且 isPreview=false；LOCAL 保留。正文图片必须是 CONTENT_BODY_IMAGE 素材。",
         "tags": [
           "13 分类与内容管理"
         ],
@@ -26146,6 +26704,13 @@
                   "type": "string"
                 },
                 "description": "请求追踪号。"
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "private, no-store"
+                },
+                "description": "包含授权链接的结果禁止缓存。"
               }
             },
             "content": {
@@ -26196,10 +26761,14 @@
                   "data": {
                     "contentId": "id_10001",
                     "chapterId": "id_10001",
-                    "playbackUrl": "https://media.example.com/play.m3u8?token=demo",
+                    "playbackUrl": "http://localhost:3000/api/v1/content-playback/media-id?token=example",
                     "expiresAt": "2026-10-22T02:05:00Z",
                     "durationSeconds": 180,
-                    "preview": false
+                    "preview": false,
+                    "provider": "LOCAL",
+                    "mode": "STREAM",
+                    "externalUrl": null,
+                    "accessPassword": null
                   },
                   "requestId": "req_demo_001",
                   "timestamp": "2026-10-22T02:00:00Z"
@@ -26379,6 +26948,13 @@
                   "type": "string"
                 },
                 "description": "请求追踪号。"
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "private, no-store"
+                },
+                "description": "包含授权链接的结果禁止缓存。"
               }
             },
             "content": {
@@ -26429,10 +27005,14 @@
                   "data": {
                     "contentId": "id_10001",
                     "chapterId": "id_10001",
-                    "playbackUrl": "https://media.example.com/play.m3u8?token=demo",
+                    "playbackUrl": "http://localhost:3000/api/v1/content-playback/media-id?token=example",
                     "expiresAt": "2026-10-22T02:05:00Z",
                     "durationSeconds": 180,
-                    "preview": false
+                    "preview": false,
+                    "provider": "LOCAL",
+                    "mode": "STREAM",
+                    "externalUrl": null,
+                    "accessPassword": null
                   },
                   "requestId": "req_demo_001",
                   "timestamp": "2026-10-22T02:00:00Z"
@@ -26597,10 +27177,244 @@
                 "$ref": "#/components/schemas/ContentImageCreate"
               },
               "example": {
-                "publicUrl": "https://example.com/product.jpg",
+                "publicUrl": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/covers/replace-with-existing-object.jpg",
                 "mimeType": "image/jpeg",
                 "sizeBytes": 1024,
                 "purpose": "CONTENT_COVER"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/MediaSummary"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "id": "id_10001",
+                    "kind": "IMAGE",
+                    "status": "READY",
+                    "mimeType": "image/jpeg",
+                    "sizeBytes": 102400,
+                    "publicUrl": "https://cdn.example.com/cover.jpg"
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/content-media/external-videos": {
+      "post": {
+        "operationId": "post_admin_content_media_external_videos",
+        "summary": "登记 B 站／飞书视频",
+        "description": "只保存素材元数据与加密外部链接，响应不含 externalUrl/accessPassword；随后用返回 id 写入内容或章节 videoMediaId。需配置 CONTENT_MEDIA_ENCRYPTION_KEY。",
+        "tags": [
+          "13 分类与内容管理"
+        ],
+        "security": [
+          {
+            "AdminBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": true,
+        "x-auth-mode": "admin",
+        "x-permissions": [
+          "content:write"
+        ],
+        "x-idempotency-required": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExternalVideoCreate"
+              },
+              "example": {
+                "provider": "BILIBILI",
+                "externalUrl": "https://www.bilibili.com/video/BV0000000000",
+                "durationSeconds": 0
               }
             }
           }
@@ -34072,7 +34886,7 @@
                             "active": true,
                             "expiresAt": "2026-11-21T02:00:00Z",
                             "benefitCodes": [
-                              "MEMBER_COURSES"
+                              "MEMBER_CONTENT"
                             ]
                           },
                           "createdAt": "2026-10-22T02:00:00Z"
@@ -34367,7 +35181,7 @@
                         "active": true,
                         "expiresAt": "2026-11-21T02:00:00Z",
                         "benefitCodes": [
-                          "MEMBER_COURSES"
+                          "MEMBER_CONTENT"
                         ]
                       },
                       "createdAt": "2026-10-22T02:00:00Z"
@@ -37507,7 +38321,7 @@
                         "active": true,
                         "expiresAt": "2026-11-21T02:00:00Z",
                         "benefitCodes": [
-                          "MEMBER_COURSES"
+                          "MEMBER_CONTENT"
                         ]
                       },
                       "createdAt": "2026-10-22T02:00:00Z"
@@ -38313,6 +39127,733 @@
                     "page": 1,
                     "pageSize": 20,
                     "hasNext": false
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/users/{id}/membership": {
+      "get": {
+        "operationId": "get_admin_users_id_membership",
+        "summary": "用户会员权益详情",
+        "description": "以服务端时间判断 startsAt <= now < expiresAt，且未撤销、账号有效。会员由管理员开通／续期／撤销；当前不提供会员方案购买。",
+        "tags": [
+          "17 用户与会员管理"
+        ],
+        "security": [
+          {
+            "AdminBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "schema": {
+              "type": "string",
+              "description": "不透明业务 ID；前端必须按字符串保存。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "id_10001"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": true,
+        "x-auth-mode": "admin",
+        "x-permissions": [
+          "membership:write"
+        ],
+        "x-idempotency-required": false,
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/MembershipDetail"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "active": true,
+                    "expiresAt": "2026-11-21T02:00:00Z",
+                    "benefitCodes": [
+                      "MEMBER_CONTENT"
+                    ],
+                    "membership": null
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "put_admin_users_id_membership",
+        "summary": "开通／续期网站会员",
+        "description": "首次 version=0；续期先读取当前记录，再设置完整起止时间和 version。用户、会员记录与管理员权限在事务内校验；乐观锁避免覆盖并发更新。此操作不创建订单或收款。",
+        "tags": [
+          "17 用户与会员管理"
+        ],
+        "security": [
+          {
+            "AdminBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "schema": {
+              "type": "string",
+              "description": "不透明业务 ID；前端必须按字符串保存。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "id_10001"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": true,
+        "x-auth-mode": "admin",
+        "x-permissions": [
+          "membership:write"
+        ],
+        "x-idempotency-required": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MembershipWrite"
+              },
+              "example": {
+                "version": 0,
+                "startsAt": "2026-10-22T02:00:00Z",
+                "expiresAt": "2026-11-21T02:00:00Z",
+                "reason": "cs开通30天测试会员"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/MembershipDetail"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "active": true,
+                    "expiresAt": "2026-11-21T02:00:00Z",
+                    "benefitCodes": [
+                      "MEMBER_CONTENT"
+                    ],
+                    "membership": null
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/users/{id}/membership/revoke": {
+      "post": {
+        "operationId": "post_admin_users_id_membership_revoke",
+        "summary": "撤销网站会员",
+        "description": "立即停止新的会员访问授权。本地视频每次 Range 请求重查会员；已经交付的第三方链接／密码需在飞书端另行更新。",
+        "tags": [
+          "17 用户与会员管理"
+        ],
+        "security": [
+          {
+            "AdminBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "schema": {
+              "type": "string",
+              "description": "不透明业务 ID；前端必须按字符串保存。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "id_10001"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": true,
+        "x-auth-mode": "admin",
+        "x-permissions": [
+          "membership:write"
+        ],
+        "x-idempotency-required": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MembershipRevoke"
+              },
+              "example": {
+                "version": 1,
+                "reason": "cs撤销测试会员"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/MembershipDetail"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "active": true,
+                    "expiresAt": "2026-11-21T02:00:00Z",
+                    "benefitCodes": [
+                      "MEMBER_CONTENT"
+                    ],
+                    "membership": null
                   },
                   "requestId": "req_demo_001",
                   "timestamp": "2026-10-22T02:00:00Z"

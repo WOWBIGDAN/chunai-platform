@@ -12,6 +12,7 @@ import { Actor, actorId, CommerceTransaction, canonical, checkVersion, conflict,
 import { CatalogService } from './catalog.service';
 import { testPaymentsEnabled } from './permissions';
 import { courseQuote, grantCourse, validateCourseOrder } from '../content/course-purchase';
+import { membershipSummary } from '../membership/membership-access';
 
 export const CARRIERS: Record<string, string> = { SF: '顺丰速运', YTO: '圆通速递', ZTO: '中通快递', STO: '申通快递', YUNDA: '韵达快递', EMS: '中国邮政', JD: '京东物流' };
 export function carrierName(code: string) { if (!CARRIERS[code]) throw new ApiException(400, 'CARRIER_UNSUPPORTED', '不支持的快递代码'); return CARRIERS[code]; }
@@ -154,7 +155,7 @@ export class OrdersService {
       cancelReason: o.cancelReason, cancelledAt: o.cancelledAt, completedAt: o.completedAt, closedReason: o.closedReason, version: o.version,
       ...(user ? { user: { id: user.id, nickname: user.nickname, avatarUrl: null,
         phoneMasked: `${(user.phone.startsWith('+86') ? user.phone.slice(3) : user.phone).slice(0, 3)}****${user.phone.slice(-4)}`,
-        status: user.status, membership: { active: false, expiresAt: null, benefitCodes: [] }, createdAt: user.createdAt } } : {}) };
+        status: user.status, membership: await membershipSummary(m, user.id), createdAt: user.createdAt } } : {}) };
   }
   async getOrder(id: string, userId?: string) {
     const o = await this.db.getRepository(Order).findOneBy({ id, ...(userId ? { userId } : {}) }); if (!o) throw missing();

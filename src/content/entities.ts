@@ -9,6 +9,9 @@ export const isVideo = (kind: ContentKind) => kind === 'SCIENCE_VIDEO' || kind =
 
 @Entity('content_media')
 export class ContentMedia extends RecordBase {
+  @Column({ type: 'varchar', length: 24, default: 'LOCAL' }) provider!: 'LOCAL' | 'OSS' | 'EXTERNAL_IMAGE' | 'BILIBILI' | 'FEISHU';
+  @Column({ name: 'external_url_encrypted', type: 'text', nullable: true, select: false }) externalUrlEncrypted!: string | null;
+  @Column({ name: 'access_password_encrypted', type: 'text', nullable: true, select: false }) accessPasswordEncrypted!: string | null;
   @Column({ type: 'varchar', length: 16 }) kind!: 'IMAGE' | 'VIDEO';
   @Column({ type: 'varchar', length: 32 }) purpose!: 'CONTENT_COVER' | 'COLUMN_COVER' | 'CONTENT_BODY_IMAGE' | 'CONTENT_VIDEO';
   @Column({ name: 'public_url', type: 'varchar', length: 2048, nullable: true }) publicUrl!: string | null;
@@ -35,7 +38,7 @@ export class Content extends BodyRecord {
   @Column({ name: 'category_id', type: 'varchar', length: 36 }) categoryId!: string;
   @Column({ name: 'author_name', type: 'varchar', length: 64 }) authorName!: string;
   @Column({ type: 'json' }) tags!: string[];
-  @Column({ name: 'access_policy', type: 'varchar', length: 24 }) accessPolicy!: 'FREE' | 'PURCHASE';
+  @Column({ name: 'access_policy', type: 'varchar', length: 24 }) accessPolicy!: 'FREE' | 'PURCHASE' | 'MEMBER';
   @Column({ name: 'price_cents', type: 'int', unsigned: true }) priceCents!: number;
 }
 @Entity('course_chapters')

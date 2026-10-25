@@ -4,7 +4,7 @@
 
 更新时间：2026-10-25。
 
-实物交易模块已通过 CI 部署。新增科普、课程购买访问与专栏的操作说明见 [内容模块](08-content-courses.md)。部署使用增量迁移，保留已有用户、产品与订单。视频目录使用 `/var/lib/chunai/content-media`，需安装当前 Nginx、systemd 模板并配置 `PUBLIC_API_URL`；数据库和私有视频须一起备份。以下首次部署记录保留为历史事实。
+实物交易、科普、课程购买访问与专栏使用同一 CI/CD。外链视频和有效期会员的配置、调用说明见 [内容模块](08-content-courses.md)。部署使用增量迁移，保留已有用户、产品与订单。视频目录使用 `/var/lib/chunai/content-media`，需安装当前 Nginx、systemd 模板并配置 `PUBLIC_API_URL`。新外链视频需要独立的 `CONTENT_MEDIA_ENCRYPTION_KEY`，必须先在服务器配置后再发布；数据库、私有视频及密钥须一起备份。以下首次部署记录保留为历史事实。
 
 ## 当前环境与部署记录
 
@@ -96,6 +96,9 @@ curl --fail http://127.0.0.1:3000/api/v1/health
 | CORS_ORIGINS | 当前允许 `http://47.97.46.242,http://localhost:5173`；新增前端来源以逗号分隔，不带路径 |
 | DB_HOST / DB_PORT / DB_NAME | 127.0.0.1 / 3306 / chunai_platform |
 | DB_PASSWORD / JWT_SECRET | 保存在服务器文件中；修改数据库口令时需同步修改 MySQL 账号 |
+| CONTENT_IMAGE_OSS_HOST | chunai-photo.oss-cn-hangzhou.aliyuncs.com；新内容／专栏封面须为该主机下已存在的公开 HTTPS 对象 |
+| CONTENT_MEDIA_ENCRYPTION_KEY | 32 字节随机密钥的标准 base64；仅存服务器环境文件，用于外链及飞书密码加密，必须备份，不能直接换值 |
+| CONTENT_MEDIA_DIR / PUBLIC_API_URL | /var/lib/chunai/content-media 与 http://47.97.46.242/api/v1；保留本地视频及短时播放授权 |
 | TERMS_VERSION / PRIVACY_VERSION | 当前均为 2026-10-23-test；更新协议时同时更新内容和版本 |
 | TERMS_HTML / PRIVACY_HTML / LEGAL_UPDATED_AT | 协议正文和更新时间，更新时间使用 UTC ISO 8601 |
 
@@ -146,7 +149,7 @@ mysqldump --protocol=socket -uroot --single-transaction --no-tablespaces \
 gzip --test "$backup_file"
 ```
 
-将验证通过的备份复制到服务器外部；仓库当前没有配置定时备份任务。恢复备份前，应核对目标库和备份时间，并先备份当前数据，因为 SQL 导入可能替换同名表。当前数据库包括 users、auth_sessions、refresh_tokens 和 schema_migrations。
+将验证通过的备份复制到服务器外部；仓库当前没有配置定时备份任务。恢复备份前，应核对目标库和备份时间，并先备份当前数据，因为 SQL 导入可能替换同名表。当前数据库有 30 张业务表（认证、交易、内容及会员）和 schema_migrations。另行备份 `/var/lib/chunai/content-media` 与受保护的 `/etc/chunai/api.env`；丢失媒体加密密钥将无法解密数据库中的外链和密码。密钥备份按秘密保管，不能提交 Git。
 
 ## 常见联调与部署问题
 

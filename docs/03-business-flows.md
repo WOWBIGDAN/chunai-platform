@@ -263,6 +263,8 @@ Content-Type: application/json
 
 ## 课程与会员购买
 
+当前实现：课程使用测试付款完成单独购买；网站会员通过管理员的 `PUT /admin/users/{id}/membership` 维护期限，撤销使用 `/revoke`。`GET /me/membership` 返回 `active`、`expiresAt`、`benefitCodes` 和 `membership` 记录，有记录时保留原到期时间，状态以 `active` 为准。当前支持 FREE／PURCHASE／MEMBER 三种独立策略，飞书仅供有效会员访问。调用示例见 [当前内容与会员说明](08-content-courses.md)。**下文会员购买、权益段、会员退款及混合访问策略为后续设计，尚未实现，不用于当前联调。**
+
 课程试算：
 
 ```json

@@ -52,6 +52,7 @@ export class AdminContentController {
   constructor(private readonly content: ContentService, private readonly media: ContentMediaService) {}
   @Post('content-media/images') image(@Req() r: AdminRequest, @Body() d: D.ContentImageDto) { return this.media.image(admin(r), d); }
   @Post('content-media/videos') upload(@Req() r: AdminRequest, @Query() q: D.VideoUploadQueryDto) { return this.media.upload(admin(r), r, q.durationSeconds); }
+  @Post('content-media/external-videos') external(@Req() r: AdminRequest, @Body() d: D.ExternalVideoDto) { return this.media.externalVideo(admin(r), d); }
   @Get('contents') list(@Query() q: D.AdminContentQueryDto) { return this.content.list(q, undefined, true); }
   @Post('contents') create(@Req() r: AdminRequest, @Body() d: D.ContentCreateDto) { return this.content.create(admin(r), d); }
   @Get('contents/:id') get(@Param('id', uuid) id: string) { return this.content.get(id, undefined, undefined, true); }

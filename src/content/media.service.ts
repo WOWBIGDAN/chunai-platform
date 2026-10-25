@@ -15,7 +15,8 @@ import { AuthSession, User } from '../database/entities';
 import { Actor, actorId, CommerceTransaction, missing } from '../commerce/transaction';
 import { ContentMedia } from './entities';
 import { ContentService } from './content.service';
-import { ContentImageDto } from './content.dto';
+import { ContentImageDto, ExternalVideoDto } from './content.dto';
+import { decryptMediaSecret, encryptMediaSecret, validateContentImageUrl, validateExternalVideoUrl } from './media-source';
 
 interface GrantClaims { sub: string; chapter: boolean; mediaId: string; audienceKind: 'guest' | 'user' | 'admin'; actorId?: string; sid?: string }
 export const contentMediaDirectory = () => resolve(process.env.CONTENT_MEDIA_DIR ?? '.data/content-media');
@@ -27,10 +28,28 @@ export class ContentMediaService {
   constructor(private readonly db: DataSource, private readonly tx: CommerceTransaction, private readonly content: ContentService, private readonly jwt: JwtService) {}
   image(actor: Actor, dto: ContentImageDto) {
     return this.tx.run(actor, async m => {
-      const url = new URL(dto.publicUrl);
-      if (url.username || url.password) throw new ApiException(400, 'VALIDATION_ERROR', '图片地址不能包含凭据');
-      const v = m.create(ContentMedia, { id: randomUUID(), ...dto, kind: 'IMAGE', storageKey: null, durationSeconds: 0, operatorId: actorId(actor) });
+      const source = validateContentImageUrl(dto.publicUrl, dto.purpose !== 'CONTENT_BODY_IMAGE');
+      const v = m.create(ContentMedia, { id: randomUUID(), ...dto, ...source, kind: 'IMAGE', storageKey: null,
+        externalUrlEncrypted: null, accessPasswordEncrypted: null, durationSeconds: 0, operatorId: actorId(actor) });
       await m.save(v); await this.tx.audit(m, actor, 'content-media.image', v.id); return this.content.mediaView(v);
+    });
+  }
+  externalVideo(actor: Actor, dto: ExternalVideoDto) {
+    return this.tx.run(actor, async m => {
+      const externalUrl = validateExternalVideoUrl(dto.provider, dto.externalUrl);
+      if (dto.provider === 'FEISHU' && (!dto.accessPassword?.trim() || /[\u0000-\u001f\u007f]/.test(dto.accessPassword)))
+        throw new ApiException(400, 'VALIDATION_ERROR', '加密飞书视频必须提供有效的访问密码');
+      if (dto.provider === 'BILIBILI' && dto.accessPassword !== undefined)
+        throw new ApiException(400, 'VALIDATION_ERROR', 'B 站视频不支持访问密码');
+      const id = randomUUID();
+      const v = m.create(ContentMedia, { id, kind: 'VIDEO', purpose: 'CONTENT_VIDEO', provider: dto.provider,
+        publicUrl: null, storageKey: null, mimeType: 'text/uri-list', sizeBytes: 0, durationSeconds: dto.durationSeconds,
+        externalUrlEncrypted: encryptMediaSecret(externalUrl, id, 'externalUrl'),
+        accessPasswordEncrypted: dto.provider === 'FEISHU' ? encryptMediaSecret(dto.accessPassword!, id, 'accessPassword') : null,
+        operatorId: actorId(actor) });
+      await m.save(v);
+      await this.tx.audit(m, actor, 'content-media.external-video', id, { provider: dto.provider });
+      return this.content.mediaView(v);
     });
   }
   async upload(actor: Actor, req: ApiRequest, durationSeconds: number) {
@@ -49,7 +68,8 @@ export class ContentMediaService {
       if (size < 24 || header.toString('ascii', 4, 8) !== 'ftyp') throw new ApiException(400, 'MEDIA_INVALID', '文件不是 MP4 容器');
       await rename(temp, path);
       return await this.tx.run(actor, async m => {
-        const v = m.create(ContentMedia, { id, kind: 'VIDEO', purpose: 'CONTENT_VIDEO', publicUrl: null, storageKey: key,
+        const v = m.create(ContentMedia, { id, kind: 'VIDEO', purpose: 'CONTENT_VIDEO', provider: 'LOCAL', publicUrl: null, storageKey: key,
+          externalUrlEncrypted: null, accessPasswordEncrypted: null,
           mimeType: 'video/mp4', sizeBytes: size, durationSeconds, operatorId: actorId(actor) });
         await m.save(v); await this.tx.audit(m, actor, 'content-media.video', id, { sizeBytes: size }); return this.content.mediaView(v);
       });
@@ -60,6 +80,21 @@ export class ContentMediaService {
       const { c, ch, record, access } = await this.content.readable(m, id, chapter, true, principal, !!admin);
       if (!record.videoMediaId) throw missing();
       const media = await this.content.media(m, record.videoMediaId, 'CONTENT_VIDEO');
+      if (media.provider === 'BILIBILI' || media.provider === 'FEISHU') {
+        if (!admin) await this.content.assertExternalAccess(m, c, ch, principal, media.provider);
+        // Select encrypted fields only after authorization. Never expose them in summaries or audits.
+        const source = await m.getRepository(ContentMedia).createQueryBuilder('v')
+          .addSelect(['v.externalUrlEncrypted', 'v.accessPasswordEncrypted']).where('v.id = :id', { id: media.id }).getOne();
+        if (!source?.externalUrlEncrypted || (media.provider === 'FEISHU' && !source.accessPasswordEncrypted))
+          throw new ApiException(503, 'MEDIA_SOURCE_UNAVAILABLE', '视频外链配置暂不可用');
+        const externalUrl = decryptMediaSecret(source.externalUrlEncrypted, media.id, 'externalUrl');
+        const accessPassword = media.provider === 'FEISHU' ? decryptMediaSecret(source.accessPasswordEncrypted!, media.id, 'accessPassword') : null;
+        if (admin) await this.tx.audit(m, admin, 'content.admin-playback', id, { provider: media.provider });
+        return { provider: media.provider, mode: 'EXTERNAL_LINK' as const, contentId: c.id, chapterId: ch?.id ?? null,
+          playbackUrl: null, externalUrl, accessPassword, expiresAt: null, durationSeconds: media.durationSeconds,
+          preview: access.reason === 'PREVIEW' };
+      }
+      if (media.provider !== 'LOCAL') throw missing();
       const claims: GrantClaims = { sub: id, chapter, mediaId: media.id, audienceKind: admin ? 'admin' : principal ? 'user' : 'guest',
         ...(admin ? { actorId: actorId(admin), sid: admin.principal.sessionId } : principal ? { actorId: principal.user.id, sid: principal.sessionId } : {}) };
       const config = authConfig();
@@ -67,7 +102,8 @@ export class ContentMediaService {
       const base = (process.env.PUBLIC_API_URL ?? 'http://localhost:3000/api/v1').replace(/\/$/, '');
       if (!/^https?:\/\//.test(base)) throw new Error('PUBLIC_API_URL must be an absolute API URL');
       if (admin) await this.tx.audit(m, admin, 'content.admin-playback', id);
-      return { contentId: c.id, chapterId: ch?.id ?? null, playbackUrl: `${base}/content-playback/${media.id}?token=${encodeURIComponent(token)}`,
+      return { provider: 'LOCAL' as const, mode: 'STREAM' as const, contentId: c.id, chapterId: ch?.id ?? null,
+        playbackUrl: `${base}/content-playback/${media.id}?token=${encodeURIComponent(token)}`, externalUrl: null, accessPassword: null,
         expiresAt: new Date(Date.now() + 300000), durationSeconds: media.durationSeconds, preview: access.reason === 'PREVIEW' };
     };
     return admin ? this.tx.run(admin, work) : this.db.transaction('REPEATABLE READ', work);
@@ -94,7 +130,7 @@ export class ContentMediaService {
       const { record } = await this.content.readable(m, claims.sub, claims.chapter, true, principal, claims.audienceKind === 'admin');
       if (record.videoMediaId !== mediaId) throw invalidGrant();
       const v = await m.getRepository(ContentMedia).createQueryBuilder('v').addSelect('v.storageKey').where('v.id = :mediaId', { mediaId }).getOne();
-      if (!v?.storageKey || !/^[a-f0-9-]{36}\.mp4$/.test(v.storageKey)) throw missing(); return v;
+      if (v?.provider !== 'LOCAL' || !v.storageKey || !/^[a-f0-9-]{36}\.mp4$/.test(v.storageKey)) throw missing(); return v;
     });
     const path = resolve(contentMediaDirectory(), media.storageKey!);
     const info = await stat(path).catch(() => null);

@@ -45,7 +45,7 @@ async function main() {
     async function image(key, purpose) {
       const mediaId = id('image', key);
       if (!await m.existsBy(ContentMedia, { id: mediaId })) {
-        await m.insert(ContentMedia, { id: mediaId, kind: 'IMAGE', purpose, publicUrl: `https://placehold.co/640x360/png?text=cs+${key}`, storageKey: null,
+        await m.insert(ContentMedia, { id: mediaId, kind: 'IMAGE', provider: 'EXTERNAL_IMAGE', purpose, publicUrl: `https://placehold.co/640x360/png?text=cs+${key}`, storageKey: null,
           mimeType: 'image/png', sizeBytes: 1024, durationSeconds: 0, operatorId: operator.id }); counts.images++;
       } return mediaId;
     }

@@ -21,7 +21,7 @@
 
 导入 [认证 OpenAPI](openapi-auth.json) 即可仅查看已实现接口。[完整 OpenAPI](openapi.json) 保留业务设计，每个操作以 `x-implementation-status` 标注 implemented / planned / deferred。
 
-管理员认证、产品、订单、物流及售后已在本次代码中实现，见 [交易后端说明](06-commerce.md)。短信发送、短信登录、忘记密码重置、资料编辑、会员等仍未实现。头像和会员模块接入前，`UserSummary.avatarUrl` 为 null，membership 返回非会员空权益。
+管理员认证、产品、订单、物流及售后已实现，见 [交易后端说明](06-commerce.md)。有效期会员现由管理员开通、续期和撤销，见 [内容与会员说明](08-content-courses.md)；登录、刷新和本人资料中的 `membership` 返回数据库中的当前资格，不固化在 JWT 内。短信发送、短信登录、忘记密码重置、资料编辑及会员方案购买尚未实现；`UserSummary.avatarUrl` 仍为 null。
 
 手机号遵循已有 E.164 契约，例如 `+8613800000000`，当前仅为登录标识；`phone_verified_at` 为 NULL，不代表已核验联系号码。未来短信接入须补充用途绑定、有效期、尝试次数和一次性消费。本实现没有万能验证码或短信绕过开关。
 

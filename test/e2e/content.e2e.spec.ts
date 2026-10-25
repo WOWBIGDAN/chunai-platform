@@ -20,6 +20,7 @@ if (!process.env.TEST_DB_NAME || !/^[A-Za-z0-9_]+_test$/.test(process.env.TEST_D
 Object.assign(process.env, { NODE_ENV: 'test', DB_HOST: process.env.TEST_DB_HOST ?? '127.0.0.1', DB_PORT: process.env.TEST_DB_PORT ?? '3306',
   DB_USER: process.env.TEST_DB_USER ?? 'chunai_test', DB_PASSWORD: process.env.TEST_DB_PASSWORD, DB_NAME: process.env.TEST_DB_NAME,
   JWT_SECRET: randomBytes(48).toString('hex'), TERMS_VERSION: '2026-10-01', PRIVACY_VERSION: '2026-10-01', COMMERCE_TEST_PAYMENTS: 'true',
+  CONTENT_MEDIA_ENCRYPTION_KEY: randomBytes(32).toString('base64'), CONTENT_IMAGE_OSS_HOST: 'chunai-photo.oss-cn-hangzhou.aliyuncs.com',
   CONTENT_MEDIA_DIR: resolve('.tmp/content-e2e-media'), PUBLIC_API_URL: 'http://localhost:3000/api/v1' });
 
 describe('content, paid access, columns and protected video with real MySQL', () => {
@@ -51,7 +52,7 @@ describe('content, paid access, columns and protected video with real MySQL', ()
     users.push(u.user.id); return u;
   }
   async function image(purpose: string) {
-    const v = data(await post('/admin/content-media/images', admin, { purpose, publicUrl: 'https://example.com/cs.png', mimeType: 'image/png', sizeBytes: 1024 }).expect(201));
+    const v = data(await post('/admin/content-media/images', admin, { purpose, publicUrl: purpose === 'CONTENT_BODY_IMAGE' ? 'https://example.com/cs.png' : 'https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/cs.png', mimeType: 'image/png', sizeBytes: 1024 }).expect(201));
     mediaIds.push(v.id); return v;
   }
   async function create(kind = 'ARTICLE_COURSE', extra = {}) {
@@ -78,6 +79,21 @@ describe('content, paid access, columns and protected video with real MySQL', ()
   async function quote(c: any, who = customer) { return data(await post('/order-quotes', who, { type: 'COURSE', courseId: c.id }).expect(201)); }
   async function order(c: any, who = customer) { const q = await quote(c, who); return data(await post('/orders', who, { quoteId: q.quoteId }).expect(201)); }
   async function pay(o: any) { return data(await post(`/admin/orders/${o.id}/test-payment`, admin, { version: o.version, transactionNo: randomUUID() }).expect(200)); }
+  const memberTerm = (version = 0, extra = {}) => ({ version, startsAt: new Date(Date.now() - 60000).toISOString(),
+    expiresAt: new Date(Date.now() + 86400000).toISOString(), reason: 'cs会员测试', ...extra });
+  async function external(provider = 'FEISHU') {
+    const v = data(await post('/admin/content-media/external-videos', admin, { provider, durationSeconds: 60,
+      externalUrl: provider === 'FEISHU' ? 'https://cs-test.feishu.cn/file/csTestFileToken' : 'https://www.bilibili.com/video/BV1xx411c7mD/',
+      ...(provider === 'FEISHU' ? { accessPassword: 'csFilePassword' } : {}) }).expect(201));
+    mediaIds.push(v.id); return v;
+  }
+  async function memberVideo() {
+    let c = await create('VIDEO_COURSE', { accessPolicy: 'MEMBER', priceCents: 0 }); const source = await external();
+    let ch = data(await post(`/admin/courses/${c.id}/chapters`, admin, { title: 'cs会员视频章', sortOrder: 0 }).expect(201));
+    ch.version = data(await call('put', `/admin/chapters/${ch.id}/body`, admin, { version: ch.version, videoMediaId: source.id }).expect(200)).version;
+    ch = data(await post(`/admin/chapters/${ch.id}/publish`, admin, { version: ch.version }).expect(200));
+    c = data(await post(`/admin/contents/${c.id}/publish`, admin, { version: c.version }).expect(200)); return { c, ch, source };
+  }
   async function refund(o: any, result = 'SUCCEEDED') {
     const r = data(await post(`/admin/orders/${o.id}/digital-refund`, admin, { orderVersion: o.version, reason: 'cs退款测试' }).expect(202));
     return data(await post(`/admin/refunds/${r.id}/test-result`, admin, { version: r.version, result }).expect(200));
@@ -100,6 +116,7 @@ describe('content, paid access, columns and protected video with real MySQL', ()
     mkdirSync('.tmp', { recursive: true }); writeFileSync('.tmp/content-contract-responses.json', JSON.stringify(responses));
     if (db?.isInitialized) {
       for (const id of users) {
+        await db.query('DELETE FROM user_memberships WHERE user_id = ?', [id]);
         const orders = 'SELECT id FROM commerce_orders WHERE user_id = ?';
         for (const sql of ['DELETE FROM course_entitlements WHERE user_id = ?', `DELETE FROM refunds WHERE order_id IN (${orders})`, `DELETE FROM payment_records WHERE order_id IN (${orders})`,
           `DELETE FROM order_items WHERE order_id IN (${orders})`, 'DELETE FROM commerce_orders WHERE user_id = ?', 'DELETE FROM order_quotes WHERE user_id = ?']) await db.query(sql, [id]);
@@ -321,5 +338,120 @@ describe('content, paid access, columns and protected video with real MySQL', ()
     try { await post(`/admin/orders/${o.id}/test-payment`, admin, { version: o.version, transactionNo: randomUUID() }).expect(403); }
     finally { process.env.COMMERCE_TEST_PAYMENTS = before; }
     expect(await db.manager.countBy(CourseEntitlement, { orderId: o.id })).toBe(0);
+  });
+  it('requires the configured OSS host for new covers and preserves public cover URLs', async () => {
+    for (const publicUrl of ['https://example.com/cs.png', 'http://chunai-photo.oss-cn-hangzhou.aliyuncs.com/cs.png',
+      'https://chunai-photo.oss-cn-hangzhou.aliyuncs.com.evil.invalid/cs.png', 'https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/cs.png?Signature=secret']) {
+      await post('/admin/content-media/images', admin, { purpose: 'CONTENT_COVER', publicUrl, mimeType: 'image/png', sizeBytes: 100 }).expect(400);
+    }
+    expect(cover.provider).toBe('OSS'); expect(cover.publicUrl).toBe('https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/cs.png');
+    const { c } = await fixture('SCIENCE_ARTICLE'); expect(data(await call('get', `/articles/${c.id}`).expect(200)).cover.publicUrl).toBe(cover.publicUrl);
+    const legacy = await image('CONTENT_COVER');
+    await db.query("UPDATE content_media SET public_url = 'https://example.com/legacy.png', provider = 'EXTERNAL_IMAGE' WHERE id = ?", [legacy.id]);
+    await post('/admin/contents', admin, { kind: 'SCIENCE_ARTICLE', title: 'cs旧封面', summary: '', coverMediaId: legacy.id, categoryId: category.id, accessPolicy: 'FREE', priceCents: 0 }).expect(400);
+    await call('patch', `/admin/contents/${c.id}`, admin, { version: c.version, coverMediaId: legacy.id }).expect(400);
+  });
+  it('stores external sources encrypted and returns Bilibili links only via the playback API', async () => {
+    const source = await external('BILIBILI'); let c = await create('SCIENCE_VIDEO');
+    c.version = data(await call('put', `/admin/contents/${c.id}/body`, admin, { version: c.version, videoMediaId: source.id }).expect(200)).version;
+    c = data(await post(`/admin/contents/${c.id}/publish`, admin, { version: c.version }).expect(200));
+    const grant = data(await call('get', `/videos/${c.id}/playback`).expect(200).expect('Cache-Control', 'private, no-store'));
+    expect(grant).toMatchObject({ provider: 'BILIBILI', mode: 'EXTERNAL_LINK', playbackUrl: null, accessPassword: null, expiresAt: null });
+    expect(grant.externalUrl).toContain('bilibili.com/video/');
+    const [stored] = await db.query('SELECT external_url_encrypted FROM content_media WHERE id = ?', [source.id]);
+    expect(stored.external_url_encrypted).not.toContain('bilibili');
+    for (const path of [`/videos/${c.id}`, '/videos', `/admin/contents/${c.id}`, `/admin/contents/${c.id}/body`]) {
+      expect(JSON.stringify((await call('get', path, path.startsWith('/admin') ? admin : undefined).expect(200)).body)).not.toMatch(/bilibili\.com|externalUrlEncrypted|accessPassword/);
+    }
+    const course = await create('VIDEO_COURSE'); const ch = await chapter(course);
+    await call('put', `/admin/chapters/${ch.id}/body`, admin, { version: ch.version, videoMediaId: source.id }).expect(400);
+  });
+  it('validates external URLs, passwords and administrator permission without exposing secrets', async () => {
+    const valid = { provider: 'FEISHU', externalUrl: 'https://cs-test.feishu.cn/file/csTestFileToken', accessPassword: 'csFilePassword', durationSeconds: 60 };
+    await post('/admin/content-media/external-videos', customer, valid).expect(401);
+    await post('/admin/content-media/external-videos', reader, valid).expect(403);
+    for (const dto of [{ ...valid, externalUrl: 'https://feishu.cn.evil.invalid/file/cs' }, { ...valid, accessPassword: undefined },
+      { ...valid, externalUrl: 'javascript:alert(1)' }, { ...valid, provider: 'BILIBILI', externalUrl: 'https://b23.tv/csAbcd' }, { ...valid, durationSeconds: -1 }])
+      await post('/admin/content-media/external-videos', admin, dto).expect(400);
+    const saved = process.env.CONTENT_MEDIA_ENCRYPTION_KEY; delete process.env.CONTENT_MEDIA_ENCRYPTION_KEY;
+    try { await post('/admin/content-media/external-videos', admin, valid).expect(503).expect(assertCode('MEDIA_SOURCE_UNAVAILABLE')); }
+    finally { process.env.CONTENT_MEDIA_ENCRYPTION_KEY = saved; }
+  });
+  it('only releases Feishu credentials to active members and never leaks them through metadata or audits', async () => {
+    const { c, ch, source } = await memberVideo(); const u = await user();
+    const path = `/chapters/${ch.id}/playback`;
+    await call('get', path).expect(401); await call('get', path, u).expect(403); await call('get', path, admin).expect(401);
+    expect(data(await call('get', `/videos/${c.id}`, u).expect(200)).access.reason).toBe('MEMBERSHIP_REQUIRED');
+    for (const metadata of [`/videos/${c.id}`, `/courses/${c.id}/chapters`, '/videos?accessPolicy=MEMBER', `/admin/chapters/${ch.id}/body`]) {
+      expect(JSON.stringify((await call('get', metadata, metadata.startsWith('/admin') ? admin : u).expect(200)).body)).not.toMatch(/csFilePassword|feishu\.cn|externalUrlEncrypted|accessPasswordEncrypted/);
+    }
+    await call('put', `/admin/users/${u.user.id}/membership`, admin, memberTerm()).expect(200);
+    const grant = data(await call('get', path, u).expect(200).expect('Cache-Control', 'private, no-store'));
+    expect(grant).toMatchObject({ provider: 'FEISHU', mode: 'EXTERNAL_LINK', playbackUrl: null, externalUrl: 'https://cs-test.feishu.cn/file/csTestFileToken', accessPassword: 'csFilePassword', expiresAt: null, preview: false });
+    expect(data(await call('get', '/me', u).expect(200)).membership.active).toBe(true);
+    await call('get', path, stranger).expect(403);
+    expect(data(await call('get', `/admin/chapters/${ch.id}/playback`, admin).expect(200)).accessPassword).toBe('csFilePassword');
+    const [row] = await db.query('SELECT external_url_encrypted, access_password_encrypted FROM content_media WHERE id = ?', [source.id]);
+    expect(JSON.stringify(row)).not.toMatch(/csFilePassword|feishu\.cn/);
+    const audits = await db.query('SELECT details FROM commerce_audit_logs WHERE resource_id IN (?, ?)', [source.id, ch.id]);
+    expect(JSON.stringify(audits)).not.toMatch(/csFilePassword|feishu\.cn|externalUrlEncrypted/);
+    await post('/order-quotes', u, { type: 'COURSE', courseId: c.id }).expect(409);
+  });
+  it('prevents Feishu previews, free bindings and policy changes from bypassing membership', async () => {
+    const { c, ch, source } = await memberVideo();
+    await call('patch', `/admin/chapters/${ch.id}`, admin, { version: ch.version, isPreview: true }).expect(400);
+    await call('patch', `/admin/contents/${c.id}`, admin, { version: c.version, accessPolicy: 'FREE', priceCents: 0 }).expect(400);
+    await call('patch', `/admin/contents/${c.id}`, admin, { version: c.version, accessPolicy: 'PURCHASE', priceCents: 100 }).expect(400);
+    const science = await create('SCIENCE_VIDEO');
+    await call('put', `/admin/contents/${science.id}/body`, admin, { version: science.version, videoMediaId: source.id }).expect(400);
+    const preview = await chapter(c, true);
+    await call('put', `/admin/chapters/${preview.id}/body`, admin, { version: preview.version, videoMediaId: source.id }).expect(400);
+    const purchased = await fixture(); await pay(await order(purchased.c));
+    await call('patch', `/admin/contents/${purchased.c.id}`, admin, { version: purchased.c.version, accessPolicy: 'MEMBER', priceCents: 0 }).expect(409);
+  });
+  it('separates membership management from content permissions and rejects stale or invalid terms', async () => {
+    const u = await user(); const path = `/admin/users/${u.user.id}/membership`;
+    await call('get', '/me/membership').expect(401); await call('get', '/me/membership', admin).expect(401);
+    expect(data(await call('get', '/me/membership', u).expect(200))).toEqual({ active: false, expiresAt: null, benefitCodes: [], membership: null });
+    await call('get', path, u).expect(401); await call('get', path, editor).expect(403);
+    await call('put', path, editor, memberTerm()).expect(403); await post(`${path}/revoke`, editor, { version: 1, reason: 'cs' }).expect(403);
+    await call('put', path, admin, memberTerm(1)).expect(409);
+    await call('put', path, admin, memberTerm(0, { startsAt: '2026-01-01T00:00:00' })).expect(400);
+    await call('put', path, admin, memberTerm(0, { expiresAt: new Date(Date.now() - 120000).toISOString() })).expect(400);
+    const result = data(await call('put', path, admin, memberTerm()).expect(200)); expect(result.active).toBe(true);
+    await call('put', path, admin, memberTerm()).expect(409);
+    expect(data(await call('get', path, admin).expect(200)).membership.version).toBe(1);
+    const changed = await Promise.all([call('put', path, admin, memberTerm(1)), call('put', path, admin, memberTerm(1))]);
+    expect(changed.map(r => r.status).sort()).toEqual([200, 409]);
+    await db.manager.update(AdminAccount, admin.id, { permissions: PERMISSIONS.filter(p => p !== 'membership:write') });
+    try { await call('get', path, admin).expect(403); await call('put', path, admin, memberTerm(2)).expect(403); }
+    finally { await db.manager.update(AdminAccount, admin.id, { permissions: [...PERMISSIONS] }); }
+  });
+  it('applies membership starts, expiry, renewal and revocation immediately to Feishu and local streams', async () => {
+    const { ch } = await memberVideo(); const u = await user(); const path = `/admin/users/${u.user.id}/membership`, playback = `/chapters/${ch.id}/playback`;
+    await call('put', path, admin, memberTerm(0, { startsAt: new Date(Date.now() + 60000).toISOString() })).expect(200);
+    await call('get', playback, u).expect(403);
+    await call('put', path, admin, memberTerm(1)).expect(200); await call('get', playback, u).expect(200);
+    const local = await create('VIDEO_COURSE', { accessPolicy: 'MEMBER', priceCents: 0 }); const localChapter = await chapter(local);
+    await post(`/admin/contents/${local.id}/publish`, admin, { version: local.version }).expect(200);
+    const localGrant = data(await call('get', `/chapters/${localChapter.id}/playback`, u).expect(200)); await play(localGrant.playbackUrl, 'bytes=0-15').expect(206);
+    await db.query('UPDATE user_memberships SET starts_at = ?, expires_at = ? WHERE user_id = ?', [new Date(Date.now() - 120000), new Date(Date.now() - 1000), u.user.id]);
+    await call('get', playback, u).expect(403); await play(localGrant.playbackUrl).expect(403);
+    expect(data(await call('get', '/me/membership', u).expect(200)).active).toBe(false);
+    await call('put', path, admin, memberTerm(2)).expect(200); await call('get', playback, u).expect(200);
+    const revoked = data(await post(`${path}/revoke`, admin, { version: 3, reason: 'cs撤销' }).expect(200)); expect(revoked.active).toBe(false);
+    await call('get', playback, u).expect(403); await play(localGrant.playbackUrl).expect(403);
+    await post(`${path}/revoke`, admin, { version: 3, reason: 'cs旧版本' }).expect(409);
+    await call('put', path, admin, memberTerm(4)).expect(200);
+    await post('/auth/logout', u, {}).expect(200); await call('get', playback, u).expect(401);
+  });
+  it('checks content visibility even for members and does not let membership unlock purchased-only courses', async () => {
+    const { c, ch } = await memberVideo(); const u = await user(); await call('put', `/admin/users/${u.user.id}/membership`, admin, memberTerm()).expect(200);
+    const purchaseOnly = await fixture('VIDEO_COURSE'); await call('get', `/chapters/${purchaseOnly.paid.id}/playback`, u).expect(403);
+    const article = await create('ARTICLE_COURSE', { accessPolicy: 'MEMBER', priceCents: 0 }); const text = await chapter(article);
+    await post(`/admin/contents/${article.id}/publish`, admin, { version: article.version }).expect(200);
+    await call('get', `/chapters/${text.id}/body`).expect(401); await call('get', `/chapters/${text.id}/body`, stranger).expect(403);
+    await call('get', `/chapters/${text.id}/body`, u).expect(200);
+    await post(`/admin/contents/${c.id}/unpublish`, admin, { version: c.version }).expect(200); await call('get', `/chapters/${ch.id}/playback`, u).expect(404);
   });
 });

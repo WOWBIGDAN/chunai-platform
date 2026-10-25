@@ -96,7 +96,7 @@ VERSION = integer("乐观锁版本；写操作必须提交最近读取的版本�
 QTY = integer("件数。", 1, 1, maximum=99)
 CONTENT_KIND = enum("内容类型；课程由章节组成。", "SCIENCE_VIDEO|SCIENCE_ARTICLE|VIDEO_COURSE|ARTICLE_COURSE")
 PUBLISH = enum("发布状态。", "DRAFT|PUBLISHED|OFFLINE")
-ACCESS = enum("访问策略：免费／单独购买／会员或购买。", "FREE|PURCHASE|MEMBER_OR_PURCHASE")
+ACCESS = enum("访问策略：免费／单独购买／网站有效期会员；科普只能 FREE。", "FREE|PURCHASE|MEMBER")
 ORDER_TYPE = enum("一种订单只允许一种业务类型。", "PRODUCT|COURSE|MEMBERSHIP")
 ORDER_STATUS = enum("履约状态；支付与售后另有独立字段。", "PENDING_PAYMENT|PENDING_SHIPMENT|PENDING_RECEIPT|COMPLETED|CANCELLED|CLOSED")
 PAYMENT_STATUS = enum("订单汇总支付状态。", "UNPAID|PAID|PARTIALLY_REFUNDED|REFUNDED")
@@ -1033,8 +1033,8 @@ def operation_id(operation):
 def make_spec():
     spec = {
         "openapi": "3.0.3",
-        "info": {"title": "两性健康服务平台 API", "version": "1.3.0",
-                 "description": "已实现用户与管理员认证、产品、实物订单、人工物流、售后和测试收付款。x-implementation-status 表示仓库实现状态；线上可用范围以部署版本为准。短信及外部支付／物流暂未接入。"},
+        "info": {"title": "两性健康服务平台 API", "version": "1.4.0",
+                 "description": "已实现认证、实物交易、科普与课程、专栏、网站有效期会员管理、OSS 封面登记与 B 站／飞书视频外链授权。x-implementation-status 表示仓库实现状态；线上可用范围以部署版本为准。短信、会员方案购买及外部支付／物流暂未接入。"},
         "servers": [{"url": "http://localhost:3000/api/v1", "description": "本地开发（示例）"},
                     {"url": "http://47.97.46.242/api/v1", "description": "staging 测试服务；可用接口以部署版本为准，协议版本以接口返回值为准"},
                     {"url": "https://api.example.com/api/v1", "description": "生产域名占位，必须替换"}],
@@ -1143,7 +1143,7 @@ def schema_link(name):
 
 
 def build_api_markdown():
-    lines = ["# 接口文档", "", "> 更新：2026-10-25。认证、实物交易、科普、付费课程与专栏已实现；线上范围以部署版本为准。短信、会员及第三方服务暂缓。",
+    lines = ["# 接口文档", "", "> 更新：2026-10-25。已实现认证、实物交易、科普／课程／专栏、有效期会员管理及 OSS／B 站／飞书素材访问；线上范围以部署版本为准。短信、会员购买和第三方收付款暂缓。",
              "", "已实现接口的运行方法见 [后端启动与数据库](04-backend-auth.md)。",
              "", "测试 API：`http://47.97.46.242/api/v1`。详见 [交易模块](06-commerce.md)、[科普与课程](08-content-courses.md) 与 [部署说明](05-deployment.md)。",
              "注册示例采用本地默认协议版本 `2026-10-01`；公网测试环境当前为 `2026-10-23-test`，提交前须读取当前环境的协议接口。",
@@ -1260,7 +1260,7 @@ def finish_examples():
     SCHEMAS["CourseSummary"]["description"] = "已购课程摘要，仅付费课程类型；不含授权正文。"
     SCHEMAS["CourseSummary"]["properties"]["kind"] = enum("课程类型。", "VIDEO_COURSE|ARTICLE_COURSE")
     SCHEMAS["CourseSummary"]["properties"]["priceCents"] = {**MONEY, "minimum": 0}
-    SCHEMAS["CourseSummary"]["properties"]["accessPolicy"] = enum("课程当前访问策略；编辑价格不会改写历史订单。", "FREE|PURCHASE")
+    SCHEMAS["CourseSummary"]["properties"]["accessPolicy"] = enum("课程当前访问策略；编辑价格不会改写历史订单。", "FREE|PURCHASE|MEMBER")
     SCHEMAS["CourseSummary"]["properties"]["chapterCount"]["example"] = 1
     SCHEMAS["CourseEntitlement"]["properties"]["course"] = ref("CourseSummary")
     for name, fields in {"OrderDetail": ["cancelReason", "closedReason"],

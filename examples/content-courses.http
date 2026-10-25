@@ -12,6 +12,17 @@
 @categoryId = replace-with-CONTENT-category-uuid
 @contentId = replace-with-content-uuid
 @version = 1
+@userId = replace-with-client-user-uuid
+@membershipVersion = 0
+@membershipStartsAt = 2026-10-25T00:00:00.000Z
+@membershipExpiresAt = 2026-11-24T00:00:00.000Z
+@ossCoverUrl = https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/replace-with-existing-object.jpg
+@bilibiliUrl = replace-with-real-https-bilibili-video-url
+@feishuUrl = replace-with-real-https-feishu-share-url
+@feishuPassword = replace-with-real-share-password
+@videoMediaId = replace-with-registered-video-media-uuid
+@memberCourseId = replace-with-MEMBER-video-course-uuid
+@memberChapterId = replace-with-non-preview-member-chapter-uuid
 
 ### 管理端查看全部 50 条 cs 样本（保留草稿和下架样本）
 GET {{baseUrl}}/admin/contents?keyword=cs&pageSize=100
@@ -57,7 +68,7 @@ Content-Type: application/json
 GET {{baseUrl}}/me/courses?status=ACTIVE
 Authorization: Bearer {{userToken}}
 
-### 视频课程章节播放授权（获取 playbackUrl 后直接 GET）
+### 视频课程章节访问（mode=STREAM 使用 playbackUrl；EXTERNAL_LINK 使用 externalUrl）
 GET {{baseUrl}}/chapters/{{chapterId}}/playback
 Authorization: Bearer {{userToken}}
 
@@ -126,3 +137,99 @@ Content-Type: application/json
 ### 移除关联
 DELETE {{baseUrl}}/admin/columns/{{columnId}}/contents/{{courseId}}
 Authorization: Bearer {{adminToken}}
+
+### 登记 OSS 已存在的公开封面；返回 id 填入 coverMediaId。专栏封面改 purpose=COLUMN_COVER
+POST {{baseUrl}}/admin/content-media/images
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"publicUrl":"{{ossCoverUrl}}","mimeType":"image/jpeg","sizeBytes":102400,"purpose":"CONTENT_COVER"}
+
+### 登记 B 站科普视频；不传 accessPassword，未知时长填 0
+POST {{baseUrl}}/admin/content-media/external-videos
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"provider":"BILIBILI","externalUrl":"{{bilibiliUrl}}","durationSeconds":0}
+
+### 绑定 B 站素材到 SCIENCE_VIDEO 科普；contentId/videoMediaId/version 使用上一步实际返回值
+PUT {{baseUrl}}/admin/contents/{{contentId}}/body
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"version":{{version}},"videoMediaId":"{{videoMediaId}}"}
+
+### 已发布 B 站科普返回 EXTERNAL_LINK；详情和列表不暴露外链
+GET {{baseUrl}}/videos/{{contentId}}/playback
+
+### 登记飞书网盘视频；返回摘要不包含链接与密码，不要记录请求密码或授权响应
+POST {{baseUrl}}/admin/content-media/external-videos
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"provider":"FEISHU","externalUrl":"{{feishuUrl}}","accessPassword":"{{feishuPassword}}","durationSeconds":0}
+
+### 创建会员视频课程；必须 MEMBER、0 分，不能替换有历史购买订单的课程策略
+POST {{baseUrl}}/admin/contents
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"kind":"VIDEO_COURSE","title":"cs会员视频课程测试","summary":"cs飞书外链访问测试","coverMediaId":"{{coverMediaId}}","categoryId":"{{categoryId}}","accessPolicy":"MEMBER","priceCents":0}
+
+### 会员视频章节必须非预览；返回 id 填入 memberChapterId
+POST {{baseUrl}}/admin/courses/{{memberCourseId}}/chapters
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"title":"cs会员章节","sortOrder":1,"isPreview":false}
+
+### 绑定飞书素材；videoMediaId 使用飞书素材实际 id，version 使用章节当前版本
+PUT {{baseUrl}}/admin/chapters/{{memberChapterId}}/body
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"version":{{version}},"videoMediaId":"{{videoMediaId}}"}
+
+### 先发布章节，version 使用写正文后的章节版本
+POST {{baseUrl}}/admin/chapters/{{memberChapterId}}/publish
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"version":{{version}}}
+
+### 再发布课程，version 使用课程当前版本
+POST {{baseUrl}}/admin/contents/{{memberCourseId}}/publish
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"version":{{version}}}
+
+### 查询指定用户会员；管理员需要 membership:write
+GET {{baseUrl}}/admin/users/{{userId}}/membership
+Authorization: Bearer {{adminToken}}
+
+### 开通/续期：首次会员 version=0；已有会员使用 membership.version。日期示例必须改成实际期限
+PUT {{baseUrl}}/admin/users/{{userId}}/membership
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"version":{{membershipVersion}},"startsAt":"{{membershipStartsAt}}","expiresAt":"{{membershipExpiresAt}}","reason":"cs开通或续期会员测试"}
+
+### 本人会员；用 active 判断有效，expiresAt 保留已过期/撤销记录的原到期时间
+GET {{baseUrl}}/me/membership
+Authorization: Bearer {{userToken}}
+
+### 有效会员才返回飞书 externalUrl/accessPassword；未登录401，无会员403
+GET {{baseUrl}}/chapters/{{memberChapterId}}/playback
+Authorization: Bearer {{userToken}}
+
+### 管理员专属预览，需要 content:write；无需会员
+GET {{baseUrl}}/admin/chapters/{{memberChapterId}}/playback
+Authorization: Bearer {{adminToken}}
+
+### 撤销会员：membershipVersion 改为 GET 返回的当前版本；之后再次授权应403
+POST {{baseUrl}}/admin/users/{{userId}}/membership/revoke
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"version":{{membershipVersion}},"reason":"cs撤销会员测试"}

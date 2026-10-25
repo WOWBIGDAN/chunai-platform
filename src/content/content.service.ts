@@ -9,8 +9,10 @@ import { CatalogService } from '../commerce/catalog.service';
 import { Actor, CommerceTransaction, checkVersion, conflict, defined, missing, page, touch } from '../commerce/transaction';
 import { BodyRecord, Chapter, ColumnContent, Content, ContentColumn, ContentKind, ContentMedia, CourseEntitlement, isCourse, isVideo } from './entities';
 import * as D from './content.dto';
+import { activeMembership } from '../membership/membership-access';
+import { validateContentImageUrl } from './media-source';
 
-export type Access = { canAccess: boolean; reason: 'FREE' | 'PURCHASED' | 'PREVIEW' | 'ADMIN' | 'LOGIN_REQUIRED' | 'PURCHASE_REQUIRED' | 'CONTENT_UNAVAILABLE' };
+export type Access = { canAccess: boolean; reason: 'FREE' | 'PURCHASED' | 'MEMBER' | 'PREVIEW' | 'ADMIN' | 'LOGIN_REQUIRED' | 'PURCHASE_REQUIRED' | 'MEMBERSHIP_REQUIRED' | 'CONTENT_UNAVAILABLE' };
 const emptyBody = { bodyHtml: null, imageMediaIds: [] as string[], videoMediaId: null, publishedAt: null };
 const invalid = (message: string): never => { throw new ApiException(400, 'VALIDATION_ERROR', message); };
 
@@ -22,7 +24,11 @@ export class ContentService {
     if (!v) conflict('MEDIA_UNAVAILABLE', '素材不存在或用途不匹配');
     return v!;
   }
-  mediaView(v: ContentMedia) { return { id: v.id, kind: v.kind, status: 'READY', mimeType: v.mimeType, sizeBytes: v.sizeBytes, publicUrl: v.publicUrl }; }
+  mediaView(v: ContentMedia) { return { id: v.id, kind: v.kind, provider: v.provider, status: 'READY', mimeType: v.mimeType, sizeBytes: v.sizeBytes, publicUrl: v.publicUrl }; }
+  private async newCover(m: EntityManager, id: string, purpose: 'CONTENT_COVER' | 'COLUMN_COVER') {
+    const cover = await this.media(m, id, purpose);
+    validateContentImageUrl(cover.publicUrl ?? '', true);
+  }
   async lockContent(m: EntityManager, id: string) {
     const c = await m.findOne(Content, { where: { id }, lock: { mode: 'pessimistic_write' } });
     if (!c) throw missing(); return c;
@@ -30,7 +36,12 @@ export class ContentService {
   private async references(m: EntityManager, c: Content) {
     if (!await m.existsBy(Category, { id: c.categoryId, scope: 'CONTENT', enabled: true })) conflict('CATEGORY_UNAVAILABLE', '请选择启用的内容分类');
     await this.media(m, c.coverMediaId, 'CONTENT_COVER');
-    if ((!isCourse(c.kind) && c.accessPolicy !== 'FREE') || (c.accessPolicy === 'FREE' ? c.priceCents !== 0 : c.priceCents <= 0)) invalid('科普必须免费；免费课程价格为 0，付费课程价格须大于 0');
+    if ((!isCourse(c.kind) && c.accessPolicy !== 'FREE') || (c.accessPolicy === 'PURCHASE' ? c.priceCents <= 0 : c.priceCents !== 0)) invalid('科普必须免费；免费或会员课程价格为 0，购买课程价格须大于 0');
+    if (c.accessPolicy === 'MEMBER' && await m.existsBy(OrderItem, { courseId: c.id })) conflict('RESOURCE_IN_USE', '已有购买订单的课程不能改为会员专享，请另建会员课程');
+    if (c.videoMediaId) await this.validateVideoSource(m, c, null, c.videoMediaId);
+    if (isVideo(c.kind) && isCourse(c.kind)) for (const ch of await m.findBy(Chapter, { courseId: c.id })) {
+      if (ch.videoMediaId) await this.validateVideoSource(m, c, ch, ch.videoMediaId);
+    }
   }
   async purchased(m: EntityManager, c: Content, principal?: Principal) {
     return !!principal && isCourse(c.kind) && await m.existsBy(CourseEntitlement, { userId: principal.user.id, courseId: c.id, status: 'ACTIVE' });
@@ -40,15 +51,33 @@ export class ContentService {
     const visible = c.status === 'PUBLISHED' && await m.existsBy(Category, { id: c.categoryId, scope: 'CONTENT', enabled: true });
     if ((!visible && !(bought && c.status !== 'DRAFT' && c.publishedAt)) || (ch && (ch.status === 'DRAFT' || (ch.status === 'OFFLINE' && !(bought && ch.publishedAt)))))
       return { canAccess: false, reason: 'CONTENT_UNAVAILABLE' };
-    if (bought) return { canAccess: true, reason: 'PURCHASED' };
+    if (bought && c.accessPolicy !== 'MEMBER') return { canAccess: true, reason: 'PURCHASED' };
     if (c.accessPolicy === 'FREE') return { canAccess: true, reason: 'FREE' };
+    if (c.accessPolicy === 'MEMBER' && principal && await activeMembership(m, principal.user.id)) return { canAccess: true, reason: 'MEMBER' };
     if (ch?.isPreview) return { canAccess: true, reason: 'PREVIEW' };
-    return { canAccess: false, reason: principal ? 'PURCHASE_REQUIRED' : 'LOGIN_REQUIRED' };
+    return { canAccess: false, reason: principal ? c.accessPolicy === 'MEMBER' ? 'MEMBERSHIP_REQUIRED' : 'PURCHASE_REQUIRED' : 'LOGIN_REQUIRED' };
   }
   assertAccess(a: Access) {
     if (a.reason === 'CONTENT_UNAVAILABLE') throw missing();
     if (!a.canAccess) throw new ApiException(a.reason === 'LOGIN_REQUIRED' ? 401 : 403,
-      a.reason === 'LOGIN_REQUIRED' ? 'AUTH_REQUIRED' : 'CONTENT_ACCESS_DENIED', '请登录并购买课程后访问');
+      a.reason === 'LOGIN_REQUIRED' ? 'AUTH_REQUIRED' : 'CONTENT_ACCESS_DENIED', '请登录并取得对应课程或会员访问资格');
+  }
+  private async validateVideoSource(m: EntityManager, c: Content, ch: Chapter | null, mediaId: string) {
+    const media = await this.media(m, mediaId, 'CONTENT_VIDEO');
+    this.validateProvider(c, ch, media.provider);
+    return media;
+  }
+  private validateProvider(c: Content, ch: Chapter | null, provider: ContentMedia['provider']) {
+    if (provider === 'BILIBILI' && c.kind !== 'SCIENCE_VIDEO') invalid('B站来源仅用于免费科普视频');
+    if (provider === 'FEISHU' && (c.kind !== 'VIDEO_COURSE' || c.accessPolicy !== 'MEMBER' || !ch || ch.isPreview))
+      invalid('飞书来源仅用于会员视频课程的非试看章节');
+  }
+  async assertExternalAccess(m: EntityManager, c: Content, ch: Chapter | null, p: Principal | undefined, provider: ContentMedia['provider']) {
+    this.validateProvider(c, ch, provider);
+    if (provider === 'FEISHU') {
+      if (!p) throw new ApiException(401, 'AUTH_REQUIRED', '请登录后访问会员视频');
+      if (!await activeMembership(m, p.user.id)) throw new ApiException(403, 'CONTENT_ACCESS_DENIED', '需要有效的网站会员资格');
+    }
   }
   async view(m: EntityManager, c: Content, detail = false, admin = false, principal?: Principal) {
     const cover = await this.media(m, c.coverMediaId, 'CONTENT_COVER');
@@ -96,6 +125,7 @@ export class ContentService {
     return this.tx.run(actor, async m => {
       const c = m.create(Content, { id: randomUUID(), ...dto, descriptionHtml: this.catalog.clean(dto.descriptionHtml ?? ''),
         authorName: dto.authorName ?? '', tags: dto.tags ?? [], ...emptyBody, status: 'DRAFT', version: 1 });
+      await this.newCover(m, c.coverMediaId, 'CONTENT_COVER');
       await this.references(m, c); await m.save(c); await this.tx.audit(m, actor, 'content.create', c.id);
       return this.view(m, c, true, true);
     });
@@ -105,6 +135,7 @@ export class ContentService {
       const c = await this.lockContent(m, id); checkVersion(c, dto.version);
       if (Object.keys(defined(dto)).length < 2) invalid('请提供修改字段');
       if ((dto.accessPolicy === undefined) !== (dto.priceCents === undefined)) invalid('accessPolicy 和 priceCents 须同时提交');
+      if (dto.coverMediaId !== undefined && dto.coverMediaId !== c.coverMediaId) await this.newCover(m, dto.coverMediaId, 'CONTENT_COVER');
       Object.assign(c, defined(dto)); c.descriptionHtml = this.catalog.clean(c.descriptionHtml);
       await this.references(m, c); touch(c); await m.save(c); await this.tx.audit(m, actor, 'content.update', id);
       return this.view(m, c, true, true);
@@ -158,7 +189,7 @@ export class ContentService {
       const r = ch ?? c; checkVersion(r, dto.version);
       if (isVideo(c.kind)) {
         if (!dto.videoMediaId || dto.bodyHtml !== undefined || dto.imageMediaIds !== undefined) invalid('视频只能提交 videoMediaId');
-        await this.media(m, dto.videoMediaId!, 'CONTENT_VIDEO');
+        await this.validateVideoSource(m, c, ch, dto.videoMediaId!);
         r.videoMediaId = dto.videoMediaId!; r.bodyHtml = null; r.imageMediaIds = [];
       } else {
         if (dto.bodyHtml === undefined || dto.imageMediaIds === undefined || dto.videoMediaId !== undefined) invalid('图文须提交 bodyHtml 和 imageMediaIds');
@@ -206,13 +237,18 @@ export class ContentService {
     return this.tx.run(actor, async m => {
       const { c, ch } = await this.lockChapter(m, id); checkVersion(ch, dto.version);
       if (Object.keys(defined(dto)).length < 2) invalid('请提供修改字段');
-      Object.assign(ch, defined(dto)); touch(ch); await m.save(ch); await this.tx.audit(m, actor, 'chapter.update', id); return this.chapterView(m, c, ch, true);
+      Object.assign(ch, defined(dto));
+      if (ch.videoMediaId) await this.validateVideoSource(m, c, ch, ch.videoMediaId);
+      touch(ch); await m.save(ch); await this.tx.audit(m, actor, 'chapter.update', id); return this.chapterView(m, c, ch, true);
     });
   }
   publishChapter(actor: Actor, id: string, version: number, status: 'PUBLISHED' | 'OFFLINE') {
     return this.tx.run(actor, async m => {
       const { c, ch } = await this.lockChapter(m, id); checkVersion(ch, version);
-      if (status === 'PUBLISHED') { await this.bodyReady(m, ch, isVideo(c.kind)); ch.publishedAt ??= new Date(); }
+      if (status === 'PUBLISHED') {
+        if (ch.videoMediaId) await this.validateVideoSource(m, c, ch, ch.videoMediaId);
+        await this.bodyReady(m, ch, isVideo(c.kind)); ch.publishedAt ??= new Date();
+      }
       else if (ch.status !== 'PUBLISHED') conflict('CONTENT_STATE_INVALID', '只能下架已发布章节');
       ch.status = status; touch(ch); await m.save(ch);
       if (status === 'OFFLINE' && c.status === 'PUBLISHED' && !await m.existsBy(Chapter, { courseId: c.id, status: 'PUBLISHED' })) {
@@ -274,6 +310,7 @@ export class ContentService {
     return this.tx.run(actor, async m => {
       const col = id ? await this.getColumn(m, id, true, true) : m.create(ContentColumn, { id: randomUUID(), description: '', sortOrder: 0, status: 'DRAFT', version: 1 });
       if (id) { checkVersion(col, (dto as D.ColumnPatchDto).version); if (Object.keys(defined(dto)).length < 2) invalid('请提供修改字段'); }
+      if (!id || (dto.coverMediaId !== undefined && dto.coverMediaId !== col.coverMediaId)) await this.newCover(m, dto.coverMediaId!, 'COLUMN_COVER');
       Object.assign(col, defined(dto)); await this.media(m, col.coverMediaId, 'COLUMN_COVER'); if (id) touch(col);
       await m.save(col); await this.tx.audit(m, actor, id ? 'column.update' : 'column.create', col.id); return this.columnView(m, col, true);
     });

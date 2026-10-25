@@ -220,7 +220,13 @@
 - [CommerceAuditLog](#commerceauditlog)
 - [PageCommerceAuditLog](#pagecommerceauditlog)
 - [ImplementedPurchase](#implementedpurchase)
+- [MembershipRecord](#membershiprecord)
+- [MembershipWrite](#membershipwrite)
+- [MembershipRevoke](#membershiprevoke)
 - [ContentImageCreate](#contentimagecreate)
+- [BilibiliVideoCreate](#bilibilivideocreate)
+- [FeishuVideoCreate](#feishuvideocreate)
+- [ExternalVideoCreate](#externalvideocreate)
 - [ContentCategory](#contentcategory)
 - [ProductCategory](#productcategory)
 - [CourseSummary](#coursesummary)
@@ -336,6 +342,7 @@
 | `sizeBytes` | integer | 是 | 字节数。 | 最小: `0` |
 | `publicUrl` | string / null | 是 | 仅公开图片有 URL；私有视频或售后凭证为 null。 | 格式: `uri` |
 | `durationSeconds` | integer | 否 | 仅视频返回，处理前可不返回。 | 最小: `0` |
+| `provider` | string | 否 | 内容素材来源；产品素材可省略。不会暴露外部视频链接或密码。 | 枚举: `LOCAL, OSS, EXTERNAL_IMAGE, BILIBILI, FEISHU` |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
@@ -359,8 +366,8 @@
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
 | `active` | boolean | 是 | 当前是否为有效会员。 |  |
-| `expiresAt` | string / null | 是 | UTC 时间；未发生时为 null。 | 格式: `date-time` |
-| `benefitCodes` | string[] | 是 | 当前权益；过期为 [] |  |
+| `expiresAt` | string / null | 是 | 有记录时返回存储的到期时间，包括未来、已过期或已撤销记录；无记录时为 null。有效性以 active 为准。 | 格式: `date-time` |
+| `benefitCodes` | string[] | 是 | 有效时为 [MEMBER_CONTENT]，无效时为 [] |  |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
@@ -369,7 +376,7 @@
   "active": true,
   "expiresAt": "2026-11-21T02:00:00Z",
   "benefitCodes": [
-    "MEMBER_COURSES"
+    "MEMBER_CONTENT"
   ]
 }
 ```
@@ -403,7 +410,7 @@
     "active": true,
     "expiresAt": "2026-11-21T02:00:00Z",
     "benefitCodes": [
-      "MEMBER_COURSES"
+      "MEMBER_CONTENT"
     ]
   },
   "createdAt": "2026-10-22T02:00:00Z"
@@ -444,7 +451,7 @@
       "active": true,
       "expiresAt": "2026-11-21T02:00:00Z",
       "benefitCodes": [
-        "MEMBER_COURSES"
+        "MEMBER_CONTENT"
       ]
     },
     "createdAt": "2026-10-22T02:00:00Z"
@@ -846,7 +853,7 @@ scope 不可修改；有子分类或引用时不可删除。
 | `cover` | [MediaSummary](#mediasummary) | 是 | 见关联对象。 |  |
 | `category` | [ContentCategory](#contentcategory) | 是 | 见关联对象。 |  |
 | `tags` | string[] | 是 | 标签 | 最多项: `10` |
-| `accessPolicy` | string | 是 | 已实现免费与单独购买；会员服务尚未接入。 | 枚举: `FREE, PURCHASE` |
+| `accessPolicy` | string | 是 | FREE 免费、PURCHASE 独立购买、MEMBER 按网站会员有效期；MEMBER 仅课程且 priceCents=0。 | 枚举: `FREE, PURCHASE, MEMBER` |
 | `priceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `0`；最大: `9007199254740991` |
 | `currency` | string | 是 | 币种。 | 枚举: `CNY` |
 | `chapterCount` | integer | 是 | 科普为 0；课程为已发布章节数。 | 最小: `0` |
@@ -897,7 +904,7 @@ scope 不可修改；有子分类或引用时不可删除。
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
 | `canAccess` | boolean | 是 | 是否可访问完整内容。 |  |
-| `reason` | string | 是 | 授权原因或阻断原因；ADMIN 仅管理端。 | 枚举: `FREE, PURCHASED, MEMBER, PREVIEW, ADMIN, LOGIN_REQUIRED, PURCHASE_REQUIRED, CONTENT_UNAVAILABLE` |
+| `reason` | string | 是 | 授权或阻断原因；MEMBERSHIP_REQUIRED 表示需要有效网站会员。 | 枚举: `FREE, PURCHASED, MEMBER, PREVIEW, ADMIN, LOGIN_REQUIRED, PURCHASE_REQUIRED, MEMBERSHIP_REQUIRED, CONTENT_UNAVAILABLE` |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
@@ -923,7 +930,7 @@ scope 不可修改；有子分类或引用时不可删除。
 | `cover` | [MediaSummary](#mediasummary) | 是 | 见关联对象。 |  |
 | `category` | [ContentCategory](#contentcategory) | 是 | 见关联对象。 |  |
 | `tags` | string[] | 是 | 标签 | 最多项: `10` |
-| `accessPolicy` | string | 是 | 已实现免费与单独购买；会员服务尚未接入。 | 枚举: `FREE, PURCHASE` |
+| `accessPolicy` | string | 是 | FREE 免费、PURCHASE 独立购买、MEMBER 按网站会员有效期；MEMBER 仅课程且 priceCents=0。 | 枚举: `FREE, PURCHASE, MEMBER` |
 | `priceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `0`；最大: `9007199254740991` |
 | `currency` | string | 是 | 币种。 | 枚举: `CNY` |
 | `chapterCount` | integer | 是 | 科普为 0；课程为已发布章节数。 | 最小: `0` |
@@ -1006,16 +1013,20 @@ scope 不可修改；有子分类或引用时不可删除。
 <a id="playbackgrant"></a>
 ## PlaybackGrant
 
-5 分钟播放 URL；每次请求重新校验会话、内容状态、章节预览与购买权益。成功退款或退出会话后旧链接失效。
+统一视频访问结果。STREAM 使用 5 分钟本地播放授权；EXTERNAL_LINK 跳转第三方页面。FEISHU 的 externalUrl/accessPassword 仅在会员或管理员预览授权通过后返回，禁止缓存。已返回的外部链接不会随网站会员撤销而在第三方自动失效。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
 | `contentId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 | `chapterId` | string / null | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
-| `playbackUrl` | string | 是 | HTTPS URL。 | 格式: `uri` |
-| `expiresAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
+| `playbackUrl` | string / null | 是 | 仅 LOCAL/STREAM 有值；外部模式为 null。 | 格式: `uri` |
+| `expiresAt` | string / null | 是 | 本地播放授权到期时间；外链为 null，不表示第三方分享永久有效。 | 格式: `date-time` |
 | `durationSeconds` | integer | 是 | 可播放时长。 | 最小: `0` |
 | `preview` | boolean | 是 | 整章免费预览；不是在完整付费视频上做客户端限时。 |  |
+| `provider` | string | 是 | 视频提供方。 | 枚举: `LOCAL, BILIBILI, FEISHU` |
+| `mode` | string | 是 | 前端按此字段选择播放器或外部页面跳转。 | 枚举: `STREAM, EXTERNAL_LINK` |
+| `externalUrl` | string / null | 是 | 外部跳转地址；STREAM 为 null。FEISHU 视为敏感数据。 | 格式: `uri` |
+| `accessPassword` | string / null | 是 | 仅授权 FEISHU 返回网盘访问密码；其他模式为 null。 | 最短: `1`；最长: `128` |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
@@ -1023,10 +1034,14 @@ scope 不可修改；有子分类或引用时不可删除。
 {
   "contentId": "id_10001",
   "chapterId": "id_10001",
-  "playbackUrl": "https://media.example.com/play.m3u8?token=demo",
+  "playbackUrl": "http://localhost:3000/api/v1/content-playback/media-id?token=example",
   "expiresAt": "2026-10-22T02:05:00Z",
   "durationSeconds": 180,
-  "preview": false
+  "preview": false,
+  "provider": "LOCAL",
+  "mode": "STREAM",
+  "externalUrl": null,
+  "accessPassword": null
 }
 ```
 
@@ -1224,7 +1239,7 @@ scope 不可修改；有子分类或引用时不可删除。
 | `categoryId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 | `authorName` | string | 否 | 作者。 | 最长: `64` |
 | `tags` | string[] | 否 | 标签 | 最多项: `10`；元素不重复 |
-| `accessPolicy` | string | 是 | 已实现免费与单独购买；会员服务尚未接入。 | 枚举: `FREE, PURCHASE` |
+| `accessPolicy` | string | 是 | FREE 免费、PURCHASE 独立购买、MEMBER 按网站会员有效期；MEMBER 仅课程且 priceCents=0。 | 枚举: `FREE, PURCHASE, MEMBER` |
 | `priceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `0`；最大: `9007199254740991` |
 
 示例（仅结构示意，不作为可用业务 ID）：
@@ -1245,7 +1260,7 @@ scope 不可修改；有子分类或引用时不可删除。
 <a id="contentpatch"></a>
 ## ContentPatch
 
-部分更新；accessPolicy 与 priceCents 改动需同时提交；发布内容即时生效并留审计。
+部分更新；accessPolicy 与 priceCents 改动需同时提交；发布内容即时生效并留审计。 已有购买订单历史的课程不能改为 MEMBER，返回 RESOURCE_IN_USE，保留原有购买权益。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
@@ -1256,7 +1271,7 @@ scope 不可修改；有子分类或引用时不可删除。
 | `categoryId` | string | 否 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 | `authorName` | string | 否 | 作者。 | 最长: `64` |
 | `tags` | string[] | 否 | 标签 | 最多项: `10`；元素不重复 |
-| `accessPolicy` | string | 否 | 已实现免费与单独购买；会员服务尚未接入。 | 枚举: `FREE, PURCHASE` |
+| `accessPolicy` | string | 否 | FREE 免费、PURCHASE 独立购买、MEMBER 按网站会员有效期；MEMBER 仅课程且 priceCents=0。 | 枚举: `FREE, PURCHASE, MEMBER` |
 | `priceCents` | integer | 否 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `0`；最大: `9007199254740991` |
 | `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1` |
 
@@ -1286,7 +1301,7 @@ scope 不可修改；有子分类或引用时不可删除。
 | `cover` | [MediaSummary](#mediasummary) | 是 | 见关联对象。 |  |
 | `category` | [ContentCategory](#contentcategory) | 是 | 见关联对象。 |  |
 | `tags` | string[] | 是 | 标签 | 最多项: `10` |
-| `accessPolicy` | string | 是 | 已实现免费与单独购买；会员服务尚未接入。 | 枚举: `FREE, PURCHASE` |
+| `accessPolicy` | string | 是 | FREE 免费、PURCHASE 独立购买、MEMBER 按网站会员有效期；MEMBER 仅课程且 priceCents=0。 | 枚举: `FREE, PURCHASE, MEMBER` |
 | `priceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `0`；最大: `9007199254740991` |
 | `currency` | string | 是 | 币种。 | 枚举: `CNY` |
 | `chapterCount` | integer | 是 | 科普为 0；课程为已发布章节数。 | 最小: `0` |
@@ -3173,16 +3188,14 @@ SKU 的规格维度。
 <a id="membershipdetail"></a>
 ## MembershipDetail
 
-当前会员及最近权益来源；会员资格由购买流水投影产生。
+当前网站会员状态和期限记录；会员资格每次按服务器时间、撤销状态与账号状态判断。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
 | `active` | boolean | 是 | 当前是否为有效会员。 |  |
-| `expiresAt` | string / null | 是 | UTC 时间；未发生时为 null。 | 格式: `date-time` |
-| `benefitCodes` | string[] | 是 | 当前权益；过期为 [] |  |
-| `currentPlanName` | string / null | 是 | 当前时段生效方案名。 |  |
-| `aiDailyLimit` | integer | 是 | 当前时段日限额；非会员使用基础额度。 | 最小: `0` |
-| `updatedAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
+| `expiresAt` | string / null | 是 | 有记录时返回存储的到期时间，包括未来、已过期或已撤销记录；无记录时为 null。有效性以 active 为准。 | 格式: `date-time` |
+| `benefitCodes` | string[] | 是 | 有效时为 [MEMBER_CONTENT]，无效时为 [] |  |
+| `membership` | object / null | 是 | 没有会员记录时为 null。 |  |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
@@ -3191,11 +3204,9 @@ SKU 的规格维度。
   "active": true,
   "expiresAt": "2026-11-21T02:00:00Z",
   "benefitCodes": [
-    "MEMBER_COURSES"
+    "MEMBER_CONTENT"
   ],
-  "currentPlanName": "30 天会员",
-  "aiDailyLimit": 100,
-  "updatedAt": "2026-10-22T02:00:00Z"
+  "membership": null
 }
 ```
 
@@ -3776,7 +3787,7 @@ PUT 到对象存储，不经过业务 API；必须带返回 headers。
     "active": true,
     "expiresAt": "2026-11-21T02:00:00Z",
     "benefitCodes": [
-      "MEMBER_COURSES"
+      "MEMBER_CONTENT"
     ]
   },
   "createdAt": "2026-10-22T02:00:00Z",
@@ -3923,7 +3934,7 @@ PUT 到对象存储，不经过业务 API；必须带返回 headers。
       "active": true,
       "expiresAt": "2026-11-21T02:00:00Z",
       "benefitCodes": [
-        "MEMBER_COURSES"
+        "MEMBER_CONTENT"
       ]
     },
     "createdAt": "2026-10-22T02:00:00Z"
@@ -4018,7 +4029,7 @@ PUT 到对象存储，不经过业务 API；必须带返回 headers。
       "active": true,
       "expiresAt": "2026-11-21T02:00:00Z",
       "benefitCodes": [
-        "MEMBER_COURSES"
+        "MEMBER_CONTENT"
       ]
     },
     "createdAt": "2026-10-22T02:00:00Z"
@@ -4101,7 +4112,7 @@ PUT 到对象存储，不经过业务 API；必须带返回 headers。
 <a id="videobodywrite"></a>
 ## VideoBodyWrite
 
-仅已上传的 MP4 素材，CONTENT_VIDEO 用途；服务端不抓取远程视频，不进行转码。
+引用 CONTENT_VIDEO 素材。LOCAL 为已上传 MP4；BILIBILI 仅科普；FEISHU 仅 MEMBER 视频课程非预览章。服务端不抓取远程视频、不转码。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
@@ -5202,7 +5213,7 @@ AdminOrderSummary 的分页结果。固定按白名单排序；同值用 id 排�
           "active": true,
           "expiresAt": "2026-11-21T02:00:00Z",
           "benefitCodes": [
-            "MEMBER_COURSES"
+            "MEMBER_CONTENT"
           ]
         },
         "createdAt": "2026-10-22T02:00:00Z"
@@ -5245,7 +5256,7 @@ AdminUser 的分页结果。固定按白名单排序；同值用 id 排序。
         "active": true,
         "expiresAt": "2026-11-21T02:00:00Z",
         "benefitCodes": [
-          "MEMBER_COURSES"
+          "MEMBER_CONTENT"
         ]
       },
       "createdAt": "2026-10-22T02:00:00Z",
@@ -5645,10 +5656,82 @@ CommerceAuditLog 的分页结果。固定按白名单排序；同值用 id 排�
 - [CoursePurchase](#coursepurchase)
 
 
+<a id="membershiprecord"></a>
+## MembershipRecord
+
+管理员维护的一名用户的会员期限；修改须校验 version。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `id` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+| `userId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+| `startsAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
+| `expiresAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
+| `revokedAt` | string / null | 是 | UTC 时间；未发生时为 null。 | 格式: `date-time` |
+| `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "id": "id_10001",
+  "userId": "id_10001",
+  "startsAt": "2026-10-22T02:00:00Z",
+  "expiresAt": "2026-10-22T02:00:00Z",
+  "revokedAt": "2026-10-22T02:00:00Z",
+  "version": 1
+}
+```
+
+
+<a id="membershipwrite"></a>
+## MembershipWrite
+
+开通、续期或重新开通会员；从 GET 读取 version，无记录用 0。expiresAt 必须晚于 startsAt 且晚于当前时间。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `version` | integer | 是 | 创建用 0，已有记录用当前版本。 | 最小: `0`；最大: `4294967294` |
+| `startsAt` | string | 是 | ISO 8601 时间，必须包含秒和明确时区；可含至多 3 位小数。会员区间为 startsAt <= now < expiresAt。 | 格式: `date-time` |
+| `expiresAt` | string | 是 | ISO 8601 时间，必须包含秒和明确时区；可含至多 3 位小数。会员区间为 startsAt <= now < expiresAt。 | 格式: `date-time` |
+| `reason` | string | 是 | 管理员操作原因，写入审计。 | 最短: `1`；最长: `500` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "version": 0,
+  "startsAt": "2026-10-22T02:00:00Z",
+  "expiresAt": "2026-11-21T02:00:00Z",
+  "reason": "cs开通30天测试会员"
+}
+```
+
+
+<a id="membershiprevoke"></a>
+## MembershipRevoke
+
+撤销会员；立即停止签发受会员保护的访问数据。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1`；最大: `4294967294` |
+| `reason` | string | 是 | 撤销原因。 | 最短: `1`；最长: `500` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "version": 1,
+  "reason": "cs撤销测试会员"
+}
+```
+
+
 <a id="contentimagecreate"></a>
 ## ContentImageCreate
 
-登记已托管公开 HTTPS 图片元数据；限制内容封面、专栏封面或正文图片用途。
+登记已托管公开 HTTPS 图片元数据。CONTENT_COVER/COLUMN_COVER 仅允许 CONTENT_IMAGE_OSS_HOST（默认 chunai-photo.oss-cn-hangzhou.aliyuncs.com），正文图片仍允许已有 HTTPS 地址。不会上传或下载文件。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
@@ -5661,12 +5744,69 @@ CommerceAuditLog 的分页结果。固定按白名单排序；同值用 id 排�
 
 ```json
 {
-  "publicUrl": "https://example.com/product.jpg",
+  "publicUrl": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/covers/replace-with-existing-object.jpg",
   "mimeType": "image/jpeg",
   "sizeBytes": 1024,
   "purpose": "CONTENT_COVER"
 }
 ```
+
+
+<a id="bilibilivideocreate"></a>
+## BilibiliVideoCreate
+
+登记 B 站科普视频，禁止传 accessPassword。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `provider` | string | 是 | 外部视频提供方。 | 枚举: `BILIBILI` |
+| `externalUrl` | string | 是 | B 站仅 bilibili.com/www.bilibili.com 的 /video/BV+10位字母数字或 /video/av数字，及 b23.tv 的 4–64 位字母数字短链；飞书仅 feishu.cn 或一层租户子域，路径 /file/、/drive/file/、/drive/folder/ 加分享 token。拒绝用户名密码、显式端口、非空 fragment；保留普通 query。示例仅格式占位。 | 格式: `uri`；最短: `1`；最长: `2048` |
+| `durationSeconds` | integer | 是 | 时长秒数；未知可填 0。 | 最小: `0`；最大: `86400` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "provider": "BILIBILI",
+  "externalUrl": "https://www.bilibili.com/video/BV0000000000",
+  "durationSeconds": 0
+}
+```
+
+
+<a id="feishuvideocreate"></a>
+## FeishuVideoCreate
+
+登记飞书会员视频，必须提供 accessPassword。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `provider` | string | 是 | 外部视频提供方。 | 枚举: `FEISHU` |
+| `externalUrl` | string | 是 | B 站仅 bilibili.com/www.bilibili.com 的 /video/BV+10位字母数字或 /video/av数字，及 b23.tv 的 4–64 位字母数字短链；飞书仅 feishu.cn 或一层租户子域，路径 /file/、/drive/file/、/drive/folder/ 加分享 token。拒绝用户名密码、显式端口、非空 fragment；保留普通 query。示例仅格式占位。 | 格式: `uri`；最短: `1`；最长: `2048` |
+| `durationSeconds` | integer | 是 | 时长秒数；未知可填 0。 | 最小: `0`；最大: `86400` |
+| `accessPassword` | string | 是 | 飞书网盘访问密码，必须提供；与链接一起加密保存，不在素材响应或审计中返回。 | 最短: `1`；最长: `128` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "provider": "FEISHU",
+  "externalUrl": "https://example.feishu.cn/file/replace_with_real_share_id",
+  "durationSeconds": 0,
+  "accessPassword": "replace-with-real-share-password"
+}
+```
+
+
+<a id="externalvideocreate"></a>
+## ExternalVideoCreate
+
+外部视频来源二选一；链接与密码均加密保存。
+
+仅允许以下一种结构：
+
+- [BilibiliVideoCreate](#bilibilivideocreate)
+- [FeishuVideoCreate](#feishuvideocreate)
 
 
 <a id="contentcategory"></a>
@@ -5743,7 +5883,7 @@ CommerceAuditLog 的分页结果。固定按白名单排序；同值用 id 排�
 | `cover` | [MediaSummary](#mediasummary) | 是 | 见关联对象。 |  |
 | `category` | [ContentCategory](#contentcategory) | 是 | 见关联对象。 |  |
 | `tags` | string[] | 是 | 标签 | 最多项: `10` |
-| `accessPolicy` | string | 是 | 课程当前访问策略；编辑价格不会改写历史订单。 | 枚举: `FREE, PURCHASE` |
+| `accessPolicy` | string | 是 | 课程当前访问策略；编辑价格不会改写历史订单。 | 枚举: `FREE, PURCHASE, MEMBER` |
 | `priceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `0`；最大: `9007199254740991` |
 | `currency` | string | 是 | 币种。 | 枚举: `CNY` |
 | `chapterCount` | integer | 是 | 科普为 0；课程为已发布章节数。 | 最小: `0` |

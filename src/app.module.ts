@@ -7,6 +7,7 @@ import { databaseOptions } from './database/data-source';
 import { HealthController } from './health.controller';
 import { CommerceModule } from './commerce/commerce.module';
 import { ContentModule } from './content/content.module';
+import { MembershipModule } from './membership/membership.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { ContentModule } from './content/content.module';
     AuthModule,
     CommerceModule,
     ContentModule,
+    MembershipModule,
   ],
   controllers: [HealthController],
   providers: [ThrottlerGuard, { provide: APP_GUARD, useExisting: ThrottlerGuard }],
