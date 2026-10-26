@@ -23,7 +23,7 @@ export class AuthService {
   async userSummary(user: User, manager = this.db.manager) {
     const phone = user.phone.startsWith('+86') ? user.phone.slice(3) : user.phone;
     return {
-      id: user.id, nickname: user.nickname, avatarUrl: null,
+      id: user.id, nickname: user.nickname, avatarUrl: user.avatarUrl ?? null, version: user.version,
       phoneMasked: `${phone.slice(0, 3)}****${phone.slice(-4)}`,
       status: user.status,
       membership: await membershipSummary(manager, user.id),
@@ -68,6 +68,7 @@ export class AuthService {
         const user = manager.create(User, {
           id: randomUUID(), phone: dto.phone, passwordHash,
           nickname: dto.nickname?.trim() ?? '新用户', status: 'ACTIVE', phoneVerifiedAt: null,
+          avatarUrl: null, version: 1, bannedReason: null, bannedAt: null,
           termsVersion: dto.termsVersion, privacyVersion: dto.privacyVersion,
           consentedAt: new Date(), passwordChangedAt: null, lastLoginAt: new Date(),
         });

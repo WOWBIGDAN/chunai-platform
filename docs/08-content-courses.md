@@ -1,6 +1,6 @@
 # 科普、课程访问与专栏后端
 
-本模块与现有 NestJS / MySQL、管理员权限、订单和测试退款共用一套后端。支持图文科普、视频科普、图文课程、视频课程，以及 `FREE`、`PURCHASE`、`MEMBER` 三种访问策略。封面登记阿里云 OSS 地址；科普视频可跳转 B 站，会员视频可在校验有效期后返回飞书链接与密码；原有本地私有 MP4 保留。真实收付款、会员方案购买和视频转码暂未接入。
+本模块与现有 NestJS / MySQL、管理员权限、订单和测试退款共用一套后端。支持图文科普、视频科普、图文课程、视频课程，以及 `FREE`、`PURCHASE`、`MEMBER` 三种访问策略。封面登记阿里云 OSS 地址；科普视频可跳转 B 站，会员视频可在校验有效期后返回飞书链接与密码；原有本地私有 MP4 保留。会员支持管理员开通及套餐购买，详细规则见 [会员购买与用户管理](09-membership-users.md)。真实收付款和视频转码暂未接入。
 
 ## 权限与业务关系
 
@@ -64,7 +64,7 @@
 
 ## 网站会员开通、续期和撤销
 
-会员是用户账号的一条期限记录，和单门课程购买权益分别保存。有效条件为账号有效、没有撤销、`startsAt <= 当前服务器时间 < expiresAt`。未开始、已过期、已撤销都不能访问会员内容，不需要等待定时任务刷新状态。已购买的 `PURCHASE` 课程不受会员到期影响。
+会员资格来自管理员维护的期限记录或套餐购买产生的 ACTIVE 权益段，和单门课程购买权益分别保存。有效条件为账号有效、对应期限没有撤销、`startsAt <= 当前服务器时间 < expiresAt`。未开始、已过期、已撤销或退款冻结的段不提供访问资格，不需要等待定时任务刷新状态。已购买的 `PURCHASE` 课程不受会员到期影响。以下接口只维护手工期限；套餐和付费段见 [会员购买说明](09-membership-users.md)。
 
 管理员先 `GET /admin/users/{userId}/membership`。没有记录时 `membership=null`，首次 PUT 使用 `version=0`；已有记录使用返回的 `membership.version`。PUT 请求为：
 
@@ -74,7 +74,7 @@
 
 日期为结构示例，请替换为实际期限；必须带秒及明确时区，小数最多 3 位。到期时间必须晚于起始时间且晚于当前时间。续期读取最新版本，保留原起始时间并延长到期时间，再 PUT 完整区间；过期重开可设置新的起始时间。PUT 会清除已有撤销标记。不同管理员并发修改由版本号保护，冲突返回 `409 VERSION_CONFLICT`。
 
-撤销使用 POST `/admin/users/{userId}/membership/revoke`，请求 `{"version":1,"reason":"cs撤销测试会员"}`。返回与 GET、PUT 相同的结构：`active`、`expiresAt`、`benefitCodes`、`membership`。`expiresAt` 在有记录时始终是存储的到期时间，包括过期或撤销状态；应使用 `active` 判断当前资格。有效时 `benefitCodes=["MEMBER_CONTENT"]`，否则为 `[]`。普通用户只能读取本人会员，不能写入期限。
+撤销使用 POST `/admin/users/{userId}/membership/revoke`，请求 `{"version":1,"reason":"cs撤销测试会员"}`。返回与 GET、PUT 相同的结构：`active`、`expiresAt`、`benefitCodes`、`membership`。`expiresAt` 为未撤销手工期限及 ACTIVE 付费段的最晚到期时间，可能已过期，无候选记录时为 null；应使用 `active` 判断当前资格。有效时 `benefitCodes=["MEMBER_CONTENT"]`，否则为 `[]`。`membership` 仅为手工记录，购买历史通过 `/me/membership/periods` 分页查询。普通用户不能写入期限；存在未到期付费段或处理中的退款时，手工改期与撤销返回 `MEMBERSHIP_PAID_TERM_EXISTS`，须从对应订单办理退款。
 
 撤销或到期后，新的飞书授权请求立即拒绝，本地视频的后续 Range 请求也重新校验会员。已经返回给用户的第三方分享链接和密码无法由网站接口远程收回；需要在飞书分享设置中修改密码或停止分享。
 

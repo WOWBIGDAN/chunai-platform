@@ -149,7 +149,7 @@ mysqldump --protocol=socket -uroot --single-transaction --no-tablespaces \
 gzip --test "$backup_file"
 ```
 
-将验证通过的备份复制到服务器外部；仓库当前没有配置定时备份任务。恢复备份前，应核对目标库和备份时间，并先备份当前数据，因为 SQL 导入可能替换同名表。当前数据库有 30 张业务表（认证、交易、内容及会员）和 schema_migrations。另行备份 `/var/lib/chunai/content-media` 与受保护的 `/etc/chunai/api.env`；丢失媒体加密密钥将无法解密数据库中的外链和密码。密钥备份按秘密保管，不能提交 Git。
+将验证通过的备份复制到服务器外部；仓库当前没有配置定时备份任务。恢复备份前，应核对目标库和备份时间，并先备份当前数据，因为 SQL 导入可能替换同名表。当前数据库有 32 张业务表（认证、交易、内容及会员）和 schema_migrations。另行备份 `/var/lib/chunai/content-media` 与受保护的 `/etc/chunai/api.env`；丢失媒体加密密钥将无法解密数据库中的外链和密码。密钥备份按秘密保管，不能提交 Git。
 
 ## 常见联调与部署问题
 

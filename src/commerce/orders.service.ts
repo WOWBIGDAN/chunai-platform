@@ -13,6 +13,7 @@ import { CatalogService } from './catalog.service';
 import { testPaymentsEnabled } from './permissions';
 import { courseQuote, grantCourse, validateCourseOrder } from '../content/course-purchase';
 import { membershipSummary } from '../membership/membership-access';
+import { membershipQuote, grantMembership, validateMembershipOrder } from '../membership/membership-purchase';
 
 export const CARRIERS: Record<string, string> = { SF: '顺丰速运', YTO: '圆通速递', ZTO: '中通快递', STO: '申通快递', YUNDA: '韵达快递', EMS: '中国邮政', JD: '京东物流' };
 export function carrierName(code: string) { if (!CARRIERS[code]) throw new ApiException(400, 'CARRIER_UNSUPPORTED', '不支持的快递代码'); return CARRIERS[code]; }
@@ -75,6 +76,11 @@ export class OrdersService {
   }
   createQuote(actor: Actor, dto: QuoteDto) {
     return this.tx.run(actor, async m => {
+      if (dto.type === 'MEMBERSHIP') {
+        if (dto.addressId !== undefined || dto.items !== undefined || dto.courseId !== undefined) throw new ApiException(400, 'VALIDATION_ERROR', '会员订单只能指定会员套餐');
+        return membershipQuote(m, actorId(actor), dto.planId!);
+      }
+      if (dto.planId !== undefined) throw new ApiException(400, 'VALIDATION_ERROR', '非会员订单不能包含会员套餐');
       if (dto.type === 'COURSE') {
         if (dto.addressId !== undefined || dto.items !== undefined) throw new ApiException(400, 'VALIDATION_ERROR', '课程订单不能包含地址或 SKU');
         return courseQuote(m, actorId(actor), dto.courseId!);
@@ -109,6 +115,7 @@ export class OrdersService {
       if (existing) return this.view(m, existing);
       if (q.expiresAt.getTime() <= Date.now()) conflict('QUOTE_EXPIRED', '报价已过期，请重新试算');
       if (q.type === 'COURSE') await validateCourseOrder(m, q);
+      if (q.type === 'MEMBERSHIP') await validateMembershipOrder(m, q);
       const { products, skus } = q.type === 'PRODUCT' ? await this.lockSkus(m, q.items.map(i => i.resourceId)) : { products: new Map<string, Product>(), skus: new Map<string, Sku>() };
       for (const i of q.type === 'PRODUCT' ? q.items : []) {
         const s = skus.get(i.resourceId)!; await this.sellable(m, products.get(s.productId)!, s, i.quantity);
@@ -123,14 +130,19 @@ export class OrdersService {
       await m.save(order);
       for (const i of q.items) {
         const { resourceType: _type, ...snapshot } = i;
-        await m.save(m.create(OrderItem, { ...snapshot, resourceId: q.type === 'COURSE' ? null : i.resourceId,
-          courseId: q.type === 'COURSE' ? i.resourceId : null, id: randomUUID(), orderId: id }));
+        await m.save(m.create(OrderItem, { ...snapshot, resourceId: q.type === 'PRODUCT' ? i.resourceId : null,
+          courseId: q.type === 'COURSE' ? i.resourceId : null, membershipPlanId: q.type === 'MEMBERSHIP' ? i.resourceId : null,
+          membershipSnapshot: q.type === 'MEMBERSHIP' ? i.membershipSnapshot : null, id: randomUUID(), orderId: id }));
         if (q.type === 'PRODUCT') await this.catalog.moveStock(m, skus.get(i.resourceId)!, 0, i.quantity, 'ORDER_RESERVED', actorId(actor), id);
       }
       await this.tx.audit(m, actor, 'order.create', id); return this.view(m, order);
     }, { key, action: 'order.create', body: dto });
   }
   async lockOrder(m: EntityManager, id: string, userId?: string) {
+    // Membership scheduling and moderation share the stable user lock before any order lock.
+    const candidate = await m.findOneBy(Order, { id, ...(userId ? { userId } : {}) });
+    if (!candidate) throw missing();
+    if (candidate.type === 'MEMBERSHIP') await m.findOneOrFail(User, { where: { id: candidate.userId }, lock: { mode: 'pessimistic_write' } });
     const o = await m.findOne(Order, { where: { id, ...(userId ? { userId } : {}) }, lock: { mode: 'pessimistic_write' } });
     if (!o) throw missing(); return o;
   }
@@ -140,9 +152,10 @@ export class OrdersService {
       .andWhere('a.status IN (:...statuses)', { statuses: ACTIVE_AFTERSALES }).getExists();
   }
   async view(m: EntityManager, o: Order, admin = false) {
-    const items = (await this.items(m, o.id)).map(i => ({ id: i.id, resourceId: i.courseId ?? i.resourceId, resourceType: i.resourceType, productId: i.productId,
+    const items = (await this.items(m, o.id)).map(i => ({ id: i.id, resourceId: i.membershipPlanId ?? i.courseId ?? i.resourceId, resourceType: i.resourceType, productId: i.productId,
       title: i.title, skuAttributes: i.skuAttributes, coverUrl: i.coverUrl, quantity: i.quantity, unitPriceCents: i.unitPriceCents,
-      subtotalCents: i.subtotalCents, refundedQuantity: i.refundedQuantity, refundedAmountCents: i.refundedAmountCents }));
+      subtotalCents: i.subtotalCents, refundedQuantity: i.refundedQuantity, refundedAmountCents: i.refundedAmountCents,
+      ...(i.membershipSnapshot ? { membershipSnapshot: i.membershipSnapshot } : {}) }));
     const active = o.afterSaleStatus === 'PROCESSING'; const withinWindow = !o.completedAt || Date.now() <= o.completedAt.getTime() + 7 * 86400000;
     const user = admin ? await m.findOneByOrFail(User, { id: o.userId }) : null;
     return { id: o.id, orderNo: o.orderNo, type: o.type, status: o.status, paymentStatus: o.paymentStatus,
@@ -153,7 +166,7 @@ export class OrdersService {
         canConfirmReceipt: o.status === 'PENDING_RECEIPT' && !active,
         canApplyAfterSale: o.type === 'PRODUCT' && ['PENDING_SHIPMENT', 'PENDING_RECEIPT', 'COMPLETED'].includes(o.status) && !active && withinWindow },
       cancelReason: o.cancelReason, cancelledAt: o.cancelledAt, completedAt: o.completedAt, closedReason: o.closedReason, version: o.version,
-      ...(user ? { user: { id: user.id, nickname: user.nickname, avatarUrl: null,
+      ...(user ? { user: { id: user.id, nickname: user.nickname, avatarUrl: user.avatarUrl, version: user.version,
         phoneMasked: `${(user.phone.startsWith('+86') ? user.phone.slice(3) : user.phone).slice(0, 3)}****${user.phone.slice(-4)}`,
         status: user.status, membership: await membershipSummary(m, user.id), createdAt: user.createdAt } } : {}) };
   }
@@ -179,7 +192,7 @@ export class OrdersService {
     });
   }
   private async release(m: EntityManager, o: Order, operatorId: string) {
-    if (o.type === 'COURSE') return;
+    if (o.type !== 'PRODUCT') return;
     const items = await this.items(m, o.id); const { skus } = await this.lockSkus(m, items.map(i => i.resourceId!));
     for (const i of items) await this.catalog.moveStock(m, skus.get(i.resourceId!)!, 0, -(i.quantity - i.refundedQuantity), 'ORDER_RELEASED', operatorId, o.id);
   }
@@ -212,9 +225,10 @@ export class OrdersService {
       testMode(); const o = await this.lockOrder(m, id); checkVersion(o, dto.version);
       if (o.status !== 'PENDING_PAYMENT' || o.paymentDeadlineAt.getTime() <= Date.now()) conflict('ORDER_STATE_INVALID', '订单不是有效的待支付订单');
       if (o.type === 'COURSE') await grantCourse(m, o);
+      if (o.type === 'MEMBERSHIP') await grantMembership(m, o);
       await m.insert(PaymentRecord, { id: randomUUID(), orderId: id, provider: 'TEST', transactionNo: dto.transactionNo, amountCents: o.payableAmountCents, operatorId: actorId(actor) });
-      o.status = o.type === 'COURSE' ? 'COMPLETED' : 'PENDING_SHIPMENT'; o.paymentStatus = 'PAID'; o.paidAmountCents = o.payableAmountCents; o.paidAt = new Date();
-      if (o.type === 'COURSE') o.completedAt = o.paidAt;
+      o.status = o.type !== 'PRODUCT' ? 'COMPLETED' : 'PENDING_SHIPMENT'; o.paymentStatus = 'PAID'; o.paidAmountCents = o.payableAmountCents; o.paidAt = new Date();
+      if (o.type !== 'PRODUCT') o.completedAt = o.paidAt;
       touch(o); await m.save(o);
       await this.tx.audit(m, actor, 'payment.test-confirm', id, { transactionNo: dto.transactionNo, amountCents: o.paidAmountCents });
       return this.view(m, o, true);

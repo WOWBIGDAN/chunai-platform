@@ -1,10 +1,10 @@
 # 接口文档
 
-> 更新：2026-10-25。已实现认证、实物交易、科普／课程／专栏、有效期会员管理及 OSS／B 站／飞书素材访问；线上范围以部署版本为准。短信、会员购买和第三方收付款暂缓。
+> 更新：2026-10-26。已实现认证、用户资料与后台用户管理、实物交易、科普／课程／专栏、会员方案购买及 OSS／B 站／飞书访问；线上以部署版本为准。支付退款使用测试模式，短信及第三方收付款暂缓。
 
 已实现接口的运行方法见 [后端启动与数据库](04-backend-auth.md)。
 
-测试 API：`http://47.97.46.242/api/v1`。详见 [交易模块](06-commerce.md)、[科普与课程](08-content-courses.md) 与 [部署说明](05-deployment.md)。
+测试 API：`http://47.97.46.242/api/v1`。详见 [交易模块](06-commerce.md)、[科普与课程](08-content-courses.md)、[会员购买与用户管理](09-membership-users.md) 及 [部署说明](05-deployment.md)。
 注册示例采用本地默认协议版本 `2026-10-01`；公网测试环境当前为 `2026-10-23-test`，提交前须读取当前环境的协议接口。
 
 所有下列 URL 统一加前缀 `/api/v1`。请求默认 `application/json`；返回默认使用统一响应结构，表中的响应类型指 `data`。
@@ -198,7 +198,9 @@
 
 `PATCH /api/v1/me`
 
-**实现状态：** 设计中（尚未实现）
+**实现状态：** 已实现
+
+先 GET /me 读取 version，再修改 nickname 或 avatarUrl；头像只登记现有 OSS HTTPS 对象地址，null 清空。至少一个修改字段；版本冲突返回 409。
 
 请求体：[UserPatch](02-data-models.md#userpatch)，完整字段及必填规则见对应对象。
 
@@ -620,7 +622,7 @@ id 必须是课程。游客／普通会员只展示 PUBLISHED 章节；持有该
 
 | 编号 | 接口名称 | 方法 | URL | 是否登录 | 是否管理员 | 额外权限 | 请求体 | 成功 data | HTTP |
 |---|---|---|---|---|---|---|---|---|---|
-| [A036](#a036) | 商品／课程下单试算 | `POST` | `/order-quotes` | 是 | 否 | `—` | [ImplementedPurchase](02-data-models.md#implementedpurchase) | [OrderQuote](02-data-models.md#orderquote) | 201 |
+| [A036](#a036) | 商品／课程／会员下单试算 | `POST` | `/order-quotes` | 是 | 否 | `—` | [ImplementedPurchase](02-data-models.md#implementedpurchase) | [OrderQuote](02-data-models.md#orderquote) | 201 |
 | [A037](#a037) | 创建订单 | `POST` | `/orders` | 是 | 否 | `—` | [OrderCreate](02-data-models.md#ordercreate) | [OrderDetail](02-data-models.md#orderdetail) | 201 |
 | [A038](#a038) | 本人订单列表 | `GET` | `/orders` | 是 | 否 | `—` | — | [PageOrderSummary](02-data-models.md#pageordersummary) | 200 |
 | [A039](#a039) | 本人订单详情 | `GET` | `/orders/{id}` | 是 | 否 | `—` | — | [OrderDetail](02-data-models.md#orderdetail) | 200 |
@@ -635,13 +637,13 @@ id 必须是课程。游客／普通会员只展示 PUBLISHED 章节；持有该
 ### 参数与业务约束
 
 <a id="a036"></a>
-#### A036 商品／课程下单试算
+#### A036 商品／课程／会员下单试算
 
 `POST /api/v1/order-quotes`
 
 **实现状态：** 已实现
 
-PRODUCT 或 COURSE 二选一，不混单。报价 10 分钟有效；课程不含地址和运费。价格变动后下单返回 QUOTE_CHANGED。
+PRODUCT、COURSE、MEMBERSHIP 三选一。会员只传 type 和 planId；单份数量 1，无地址和运费。报价有效 10 分钟，方案停用或价格、天数、权益改变后须重新报价。
 
 请求体：[ImplementedPurchase](02-data-models.md#implementedpurchase)，完整字段及必填规则见对应对象。
 
@@ -654,7 +656,7 @@ PRODUCT 或 COURSE 二选一，不混单。报价 10 分钟有效；课程不含
 
 **实现状态：** 已实现
 
-报价最多一单；重新校验可售状态与价格。产品预占库存，课程阻止同用户重复待付款单及重复已购。30 分钟付款超时可取消。课程支付成功原子授予永久访问权并完成订单。
+报价归属本人且最多创建一单；重校验可售和成交条款，待付款 30 分钟。会员允许续购；同用户同方案最多一份有效待付款会员订单。付款按订单快照追加完整会员段。
 
 **必填请求头：** `Idempotency-Key`，16–128 位字母、数字、下划线或连字符；相同业务意图重试复用。
 
@@ -862,6 +864,7 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 | [A050](#a050) | 会员方案详情 | `GET` | `/membership-plans/{id}` | 否 | 否 | `—` | — | [MembershipPlan](02-data-models.md#membershipplan) | 200 |
 | [A051](#a051) | 本人会员权益 | `GET` | `/me/membership` | 是 | 否 | `—` | — | [MembershipDetail](02-data-models.md#membershipdetail) | 200 |
 | [A052](#a052) | 本人独立购买课程 | `GET` | `/me/courses` | 是 | 否 | `—` | — | [PageCourseEntitlement](02-data-models.md#pagecourseentitlement) | 200 |
+| [A053](#a053) | 本人会员购买权益段 | `GET` | `/me/membership/periods` | 是 | 否 | `—` | — | [PageMembershipPeriod](02-data-models.md#pagemembershipperiod) | 200 |
 
 ### 参数与业务约束
 
@@ -870,14 +873,15 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 `GET /api/v1/membership-plans`
 
-**实现状态：** 设计中（尚未实现）
+**实现状态：** 已实现
 
-仅启用方案，按 sortOrder,id 升序。
+按 sortOrder 升序、createdAt 降序、id 升序；公共接口只显示启用方案。
 
 | 位置 | 名称 | 类型 | 必填 | 说明与约束 |
 |---|---|---|---|---|
 | query | `page` | integer | 否 | 页码，默认 1。 最小: `1`；默认: `1` |
 | query | `pageSize` | integer | 否 | 每页条数，默认 20，最多 100。 最小: `1`；最大: `100`；默认: `20` |
+| query | `keyword` | string | 否 | 方案名称子串。 最短: `1`；最长: `64` |
 
 成功：HTTP `200`，`data` 为 [PageMembershipPlan](02-data-models.md#pagemembershipplan)。
 
@@ -886,7 +890,9 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 `GET /api/v1/membership-plans/{id}`
 
-**实现状态：** 设计中（尚未实现）
+**实现状态：** 已实现
+
+仅启用方案可见；未启用或不存在返回 404。
 
 | 位置 | 名称 | 类型 | 必填 | 说明与约束 |
 |---|---|---|---|---|
@@ -901,7 +907,7 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 **实现状态：** 已实现
 
-以服务端时间判断 startsAt <= now < expiresAt，且未撤销、账号有效。会员由管理员开通／续期／撤销；当前不提供会员方案购买。
+有效账号且管理员期限或 ACTIVE 购买权益段覆盖当前时间才 active=true；只覆盖 MEMBER 内容。membership 字段专指手工期限，购买明细见 /membership/periods。
 
 无额外参数或请求体。
 
@@ -922,22 +928,38 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [PageCourseEntitlement](02-data-models.md#pagecourseentitlement)。
 
+<a id="a053"></a>
+#### A053 本人会员购买权益段
+
+`GET /api/v1/me/membership/periods`
+
+**实现状态：** 已实现
+
+仅本人，按 createdAt 降序、id 升序；保留未来、过期和已退款历史。资格以 GET /me/membership 的 active 为准。
+
+| 位置 | 名称 | 类型 | 必填 | 说明与约束 |
+|---|---|---|---|---|
+| query | `page` | integer | 否 | 页码，默认 1。 最小: `1`；默认: `1` |
+| query | `pageSize` | integer | 否 | 每页条数，默认 20，最多 100。 最小: `1`；最大: `100`；默认: `20` |
+
+成功：HTTP `200`，`data` 为 [PageMembershipPeriod](02-data-models.md#pagemembershipperiod)。
+
 
 <a id="module-08"></a>
 ## 08 产品售后
 
 | 编号 | 接口名称 | 方法 | URL | 是否登录 | 是否管理员 | 额外权限 | 请求体 | 成功 data | HTTP |
 |---|---|---|---|---|---|---|---|---|---|
-| [A053](#a053) | 申请产品售后 | `POST` | `/aftersales` | 是 | 否 | `—` | [AfterSaleCreate](02-data-models.md#aftersalecreate) | [AfterSale](02-data-models.md#aftersale) | 201 |
-| [A054](#a054) | 本人售后列表 | `GET` | `/aftersales` | 是 | 否 | `—` | — | [PageAfterSale](02-data-models.md#pageaftersale) | 200 |
-| [A055](#a055) | 本人售后详情 | `GET` | `/aftersales/{id}` | 是 | 否 | `—` | — | [AfterSale](02-data-models.md#aftersale) | 200 |
-| [A056](#a056) | 撤销售后申请 | `POST` | `/aftersales/{id}/cancel` | 是 | 否 | `—` | [VersionInput](02-data-models.md#versioninput) | [AfterSale](02-data-models.md#aftersale) | 200 |
-| [A057](#a057) | 填写退货物流 | `POST` | `/aftersales/{id}/return-shipment` | 是 | 否 | `—` | [ReturnShipmentInput](02-data-models.md#returnshipmentinput) | [AfterSale](02-data-models.md#aftersale) | 200 |
+| [A054](#a054) | 申请产品售后 | `POST` | `/aftersales` | 是 | 否 | `—` | [AfterSaleCreate](02-data-models.md#aftersalecreate) | [AfterSale](02-data-models.md#aftersale) | 201 |
+| [A055](#a055) | 本人售后列表 | `GET` | `/aftersales` | 是 | 否 | `—` | — | [PageAfterSale](02-data-models.md#pageaftersale) | 200 |
+| [A056](#a056) | 本人售后详情 | `GET` | `/aftersales/{id}` | 是 | 否 | `—` | — | [AfterSale](02-data-models.md#aftersale) | 200 |
+| [A057](#a057) | 撤销售后申请 | `POST` | `/aftersales/{id}/cancel` | 是 | 否 | `—` | [VersionInput](02-data-models.md#versioninput) | [AfterSale](02-data-models.md#aftersale) | 200 |
+| [A058](#a058) | 填写退货物流 | `POST` | `/aftersales/{id}/return-shipment` | 是 | 否 | `—` | [ReturnShipmentInput](02-data-models.md#returnshipmentinput) | [AfterSale](02-data-models.md#aftersale) | 200 |
 
 ### 参数与业务约束
 
-<a id="a053"></a>
-#### A053 申请产品售后
+<a id="a054"></a>
+#### A054 申请产品售后
 
 `POST /api/v1/aftersales`
 
@@ -951,8 +973,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `201`，`data` 为 [AfterSale](02-data-models.md#aftersale)。
 
-<a id="a054"></a>
-#### A054 本人售后列表
+<a id="a055"></a>
+#### A055 本人售后列表
 
 `GET /api/v1/aftersales`
 
@@ -967,8 +989,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [PageAfterSale](02-data-models.md#pageaftersale)。
 
-<a id="a055"></a>
-#### A055 本人售后详情
+<a id="a056"></a>
+#### A056 本人售后详情
 
 `GET /api/v1/aftersales/{id}`
 
@@ -980,8 +1002,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AfterSale](02-data-models.md#aftersale)。
 
-<a id="a056"></a>
-#### A056 撤销售后申请
+<a id="a057"></a>
+#### A057 撤销售后申请
 
 `POST /api/v1/aftersales/{id}/cancel`
 
@@ -999,8 +1021,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AfterSale](02-data-models.md#aftersale)。
 
-<a id="a057"></a>
-#### A057 填写退货物流
+<a id="a058"></a>
+#### A058 填写退货物流
 
 `POST /api/v1/aftersales/{id}/return-shipment`
 
@@ -1024,22 +1046,22 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 | 编号 | 接口名称 | 方法 | URL | 是否登录 | 是否管理员 | 额外权限 | 请求体 | 成功 data | HTTP |
 |---|---|---|---|---|---|---|---|---|---|
-| [A058](#a058) | 本人问答额度 | `GET` | `/ai/quota` | 是 | 否 | `—` | — | [AiQuota](02-data-models.md#aiquota) | 200 |
-| [A059](#a059) | 本人会话列表 | `GET` | `/ai/conversations` | 是 | 否 | `—` | — | [PageAiConversation](02-data-models.md#pageaiconversation) | 200 |
-| [A060](#a060) | 创建问答会话 | `POST` | `/ai/conversations` | 是 | 否 | `—` | [AiConversationInput](02-data-models.md#aiconversationinput) | [AiConversation](02-data-models.md#aiconversation) | 201 |
-| [A061](#a061) | 会话详情 | `GET` | `/ai/conversations/{id}` | 是 | 否 | `—` | — | [AiConversation](02-data-models.md#aiconversation) | 200 |
-| [A062](#a062) | 会话改名 | `PATCH` | `/ai/conversations/{id}` | 是 | 否 | `—` | [AiConversationPatch](02-data-models.md#aiconversationpatch) | [AiConversation](02-data-models.md#aiconversation) | 200 |
-| [A063](#a063) | 删除本人会话 | `DELETE` | `/ai/conversations/{id}` | 是 | 否 | `—` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
-| [A064](#a064) | 会话历史消息 | `GET` | `/ai/conversations/{id}/messages` | 是 | 否 | `—` | — | [AiMessagePage](02-data-models.md#aimessagepage) | 200 |
-| [A065](#a065) | 提问并创建生成任务 | `POST` | `/ai/conversations/{id}/messages` | 是 | 否 | `—` | [AiMessageInput](02-data-models.md#aimessageinput) | [AiGeneration](02-data-models.md#aigeneration) | 202 |
-| [A066](#a066) | 查询生成任务 | `GET` | `/ai/generations/{id}` | 是 | 否 | `—` | — | [AiGeneration](02-data-models.md#aigeneration) | 200 |
-| [A067](#a067) | 订阅生成任务 SSE | `GET` | `/ai/generations/{id}/events` | 是 | 否 | `—` | — | SSE 事件 | 200 |
-| [A068](#a068) | 停止生成 | `POST` | `/ai/generations/{id}/cancel` | 是 | 否 | `—` | — | [AiGeneration](02-data-models.md#aigeneration) | 200 |
+| [A059](#a059) | 本人问答额度 | `GET` | `/ai/quota` | 是 | 否 | `—` | — | [AiQuota](02-data-models.md#aiquota) | 200 |
+| [A060](#a060) | 本人会话列表 | `GET` | `/ai/conversations` | 是 | 否 | `—` | — | [PageAiConversation](02-data-models.md#pageaiconversation) | 200 |
+| [A061](#a061) | 创建问答会话 | `POST` | `/ai/conversations` | 是 | 否 | `—` | [AiConversationInput](02-data-models.md#aiconversationinput) | [AiConversation](02-data-models.md#aiconversation) | 201 |
+| [A062](#a062) | 会话详情 | `GET` | `/ai/conversations/{id}` | 是 | 否 | `—` | — | [AiConversation](02-data-models.md#aiconversation) | 200 |
+| [A063](#a063) | 会话改名 | `PATCH` | `/ai/conversations/{id}` | 是 | 否 | `—` | [AiConversationPatch](02-data-models.md#aiconversationpatch) | [AiConversation](02-data-models.md#aiconversation) | 200 |
+| [A064](#a064) | 删除本人会话 | `DELETE` | `/ai/conversations/{id}` | 是 | 否 | `—` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
+| [A065](#a065) | 会话历史消息 | `GET` | `/ai/conversations/{id}/messages` | 是 | 否 | `—` | — | [AiMessagePage](02-data-models.md#aimessagepage) | 200 |
+| [A066](#a066) | 提问并创建生成任务 | `POST` | `/ai/conversations/{id}/messages` | 是 | 否 | `—` | [AiMessageInput](02-data-models.md#aimessageinput) | [AiGeneration](02-data-models.md#aigeneration) | 202 |
+| [A067](#a067) | 查询生成任务 | `GET` | `/ai/generations/{id}` | 是 | 否 | `—` | — | [AiGeneration](02-data-models.md#aigeneration) | 200 |
+| [A068](#a068) | 订阅生成任务 SSE | `GET` | `/ai/generations/{id}/events` | 是 | 否 | `—` | — | SSE 事件 | 200 |
+| [A069](#a069) | 停止生成 | `POST` | `/ai/generations/{id}/cancel` | 是 | 否 | `—` | — | [AiGeneration](02-data-models.md#aigeneration) | 200 |
 
 ### 参数与业务约束
 
-<a id="a058"></a>
-#### A058 本人问答额度
+<a id="a059"></a>
+#### A059 本人问答额度
 
 `GET /api/v1/ai/quota`
 
@@ -1049,8 +1071,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AiQuota](02-data-models.md#aiquota)。
 
-<a id="a059"></a>
-#### A059 本人会话列表
+<a id="a060"></a>
+#### A060 本人会话列表
 
 `GET /api/v1/ai/conversations`
 
@@ -1064,8 +1086,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [PageAiConversation](02-data-models.md#pageaiconversation)。
 
-<a id="a060"></a>
-#### A060 创建问答会话
+<a id="a061"></a>
+#### A061 创建问答会话
 
 `POST /api/v1/ai/conversations`
 
@@ -1075,8 +1097,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `201`，`data` 为 [AiConversation](02-data-models.md#aiconversation)。
 
-<a id="a061"></a>
-#### A061 会话详情
+<a id="a062"></a>
+#### A062 会话详情
 
 `GET /api/v1/ai/conversations/{id}`
 
@@ -1088,8 +1110,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AiConversation](02-data-models.md#aiconversation)。
 
-<a id="a062"></a>
-#### A062 会话改名
+<a id="a063"></a>
+#### A063 会话改名
 
 `PATCH /api/v1/ai/conversations/{id}`
 
@@ -1103,8 +1125,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AiConversation](02-data-models.md#aiconversation)。
 
-<a id="a063"></a>
-#### A063 删除本人会话
+<a id="a064"></a>
+#### A064 删除本人会话
 
 `DELETE /api/v1/ai/conversations/{id}`
 
@@ -1118,8 +1140,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [ActionResult](02-data-models.md#actionresult)。
 
-<a id="a064"></a>
-#### A064 会话历史消息
+<a id="a065"></a>
+#### A065 会话历史消息
 
 `GET /api/v1/ai/conversations/{id}/messages`
 
@@ -1133,8 +1155,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AiMessagePage](02-data-models.md#aimessagepage)。
 
-<a id="a065"></a>
-#### A065 提问并创建生成任务
+<a id="a066"></a>
+#### A066 提问并创建生成任务
 
 `POST /api/v1/ai/conversations/{id}/messages`
 
@@ -1152,8 +1174,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `202`，`data` 为 [AiGeneration](02-data-models.md#aigeneration)。
 
-<a id="a066"></a>
-#### A066 查询生成任务
+<a id="a067"></a>
+#### A067 查询生成任务
 
 `GET /api/v1/ai/generations/{id}`
 
@@ -1165,8 +1187,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AiGeneration](02-data-models.md#aigeneration)。
 
-<a id="a067"></a>
-#### A067 订阅生成任务 SSE
+<a id="a068"></a>
+#### A068 订阅生成任务 SSE
 
 `GET /api/v1/ai/generations/{id}/events`
 
@@ -1179,8 +1201,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 | path | `id` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 | header | `Last-Event-ID` | string | 否 | 已消费的最后事件序号。 正则: `^\d+$` |
 
-<a id="a068"></a>
-#### A068 停止生成
+<a id="a069"></a>
+#### A069 停止生成
 
 `POST /api/v1/ai/generations/{id}/cancel`
 
@@ -1202,17 +1224,17 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 | 编号 | 接口名称 | 方法 | URL | 是否登录 | 是否管理员 | 额外权限 | 请求体 | 成功 data | HTTP |
 |---|---|---|---|---|---|---|---|---|---|
-| [A069](#a069) | 本人消息列表 | `GET` | `/me/notifications` | 是 | 否 | `—` | — | [PageNotification](02-data-models.md#pagenotification) | 200 |
-| [A070](#a070) | 未读数量 | `GET` | `/me/notifications/unread-count` | 是 | 否 | `—` | — | [UnreadCount](02-data-models.md#unreadcount) | 200 |
-| [A071](#a071) | 消息详情 | `GET` | `/me/notifications/{id}` | 是 | 否 | `—` | — | [Notification](02-data-models.md#notification) | 200 |
-| [A072](#a072) | 幂等标记已读 | `PUT` | `/me/notifications/{id}/read` | 是 | 否 | `—` | — | [Notification](02-data-models.md#notification) | 200 |
-| [A073](#a073) | 批量已读 | `PUT` | `/me/notifications/read-all` | 是 | 否 | `—` | [ReadAllInput](02-data-models.md#readallinput) | [ActionResult](02-data-models.md#actionresult) | 200 |
-| [A074](#a074) | 删除本人站内消息 | `DELETE` | `/me/notifications/{id}` | 是 | 否 | `—` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
+| [A070](#a070) | 本人消息列表 | `GET` | `/me/notifications` | 是 | 否 | `—` | — | [PageNotification](02-data-models.md#pagenotification) | 200 |
+| [A071](#a071) | 未读数量 | `GET` | `/me/notifications/unread-count` | 是 | 否 | `—` | — | [UnreadCount](02-data-models.md#unreadcount) | 200 |
+| [A072](#a072) | 消息详情 | `GET` | `/me/notifications/{id}` | 是 | 否 | `—` | — | [Notification](02-data-models.md#notification) | 200 |
+| [A073](#a073) | 幂等标记已读 | `PUT` | `/me/notifications/{id}/read` | 是 | 否 | `—` | — | [Notification](02-data-models.md#notification) | 200 |
+| [A074](#a074) | 批量已读 | `PUT` | `/me/notifications/read-all` | 是 | 否 | `—` | [ReadAllInput](02-data-models.md#readallinput) | [ActionResult](02-data-models.md#actionresult) | 200 |
+| [A075](#a075) | 删除本人站内消息 | `DELETE` | `/me/notifications/{id}` | 是 | 否 | `—` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
 
 ### 参数与业务约束
 
-<a id="a069"></a>
-#### A069 本人消息列表
+<a id="a070"></a>
+#### A070 本人消息列表
 
 `GET /api/v1/me/notifications`
 
@@ -1227,8 +1249,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [PageNotification](02-data-models.md#pagenotification)。
 
-<a id="a070"></a>
-#### A070 未读数量
+<a id="a071"></a>
+#### A071 未读数量
 
 `GET /api/v1/me/notifications/unread-count`
 
@@ -1238,8 +1260,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [UnreadCount](02-data-models.md#unreadcount)。
 
-<a id="a071"></a>
-#### A071 消息详情
+<a id="a072"></a>
+#### A072 消息详情
 
 `GET /api/v1/me/notifications/{id}`
 
@@ -1253,8 +1275,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [Notification](02-data-models.md#notification)。
 
-<a id="a072"></a>
-#### A072 幂等标记已读
+<a id="a073"></a>
+#### A073 幂等标记已读
 
 `PUT /api/v1/me/notifications/{id}/read`
 
@@ -1266,8 +1288,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [Notification](02-data-models.md#notification)。
 
-<a id="a073"></a>
-#### A073 批量已读
+<a id="a074"></a>
+#### A074 批量已读
 
 `PUT /api/v1/me/notifications/read-all`
 
@@ -1277,8 +1299,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [ActionResult](02-data-models.md#actionresult)。
 
-<a id="a074"></a>
-#### A074 删除本人站内消息
+<a id="a075"></a>
+#### A075 删除本人站内消息
 
 `DELETE /api/v1/me/notifications/{id}`
 
@@ -1296,16 +1318,16 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 | 编号 | 接口名称 | 方法 | URL | 是否登录 | 是否管理员 | 额外权限 | 请求体 | 成功 data | HTTP |
 |---|---|---|---|---|---|---|---|---|---|
-| [A075](#a075) | 申请直传地址 | `POST` | `/uploads` | 是（用户或管理员） | 按操作与素材用途 | `管理员: media:write` | [UploadCreate](02-data-models.md#uploadcreate) | [UploadTicket](02-data-models.md#uploadticket) | 201 |
-| [A076](#a076) | 通知上传完成 | `POST` | `/uploads/{id}/complete` | 是（用户或管理员） | 按操作与素材用途 | `管理员: media:write` | — | [MediaSummary](02-data-models.md#mediasummary) | 200 |
-| [A077](#a077) | 读取可管理媒体处理状态 | `GET` | `/media/{id}` | 是（用户或管理员） | 按操作与素材用途 | `管理员: media:write` | — | [MediaSummary](02-data-models.md#mediasummary) | 200 |
-| [A078](#a078) | 申请私有凭证图片读取授权 | `POST` | `/media/{id}/read-grant` | 是（用户或管理员） | 按操作与素材用途 | `管理员: aftersales:review` | — | [MediaReadGrant](02-data-models.md#mediareadgrant) | 200 |
-| [A079](#a079) | 删除未引用的本人素材 | `DELETE` | `/media/{id}` | 是（用户或管理员） | 按操作与素材用途 | `管理员: media:write` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
+| [A076](#a076) | 申请直传地址 | `POST` | `/uploads` | 是（用户或管理员） | 按操作与素材用途 | `管理员: media:write` | [UploadCreate](02-data-models.md#uploadcreate) | [UploadTicket](02-data-models.md#uploadticket) | 201 |
+| [A077](#a077) | 通知上传完成 | `POST` | `/uploads/{id}/complete` | 是（用户或管理员） | 按操作与素材用途 | `管理员: media:write` | — | [MediaSummary](02-data-models.md#mediasummary) | 200 |
+| [A078](#a078) | 读取可管理媒体处理状态 | `GET` | `/media/{id}` | 是（用户或管理员） | 按操作与素材用途 | `管理员: media:write` | — | [MediaSummary](02-data-models.md#mediasummary) | 200 |
+| [A079](#a079) | 申请私有凭证图片读取授权 | `POST` | `/media/{id}/read-grant` | 是（用户或管理员） | 按操作与素材用途 | `管理员: aftersales:review` | — | [MediaReadGrant](02-data-models.md#mediareadgrant) | 200 |
+| [A080](#a080) | 删除未引用的本人素材 | `DELETE` | `/media/{id}` | 是（用户或管理员） | 按操作与素材用途 | `管理员: media:write` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
 
 ### 参数与业务约束
 
-<a id="a075"></a>
-#### A075 申请直传地址
+<a id="a076"></a>
+#### A076 申请直传地址
 
 `POST /api/v1/uploads`
 
@@ -1317,8 +1339,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `201`，`data` 为 [UploadTicket](02-data-models.md#uploadticket)。
 
-<a id="a076"></a>
-#### A076 通知上传完成
+<a id="a077"></a>
+#### A077 通知上传完成
 
 `POST /api/v1/uploads/{id}/complete`
 
@@ -1332,8 +1354,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [MediaSummary](02-data-models.md#mediasummary)。
 
-<a id="a077"></a>
-#### A077 读取可管理媒体处理状态
+<a id="a078"></a>
+#### A078 读取可管理媒体处理状态
 
 `GET /api/v1/media/{id}`
 
@@ -1347,8 +1369,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [MediaSummary](02-data-models.md#mediasummary)。
 
-<a id="a078"></a>
-#### A078 申请私有凭证图片读取授权
+<a id="a079"></a>
+#### A079 申请私有凭证图片读取授权
 
 `POST /api/v1/media/{id}/read-grant`
 
@@ -1362,8 +1384,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [MediaReadGrant](02-data-models.md#mediareadgrant)。
 
-<a id="a079"></a>
-#### A079 删除未引用的本人素材
+<a id="a080"></a>
+#### A080 删除未引用的本人素材
 
 `DELETE /api/v1/media/{id}`
 
@@ -1383,15 +1405,15 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 | 编号 | 接口名称 | 方法 | URL | 是否登录 | 是否管理员 | 额外权限 | 请求体 | 成功 data | HTTP |
 |---|---|---|---|---|---|---|---|---|---|
-| [A080](#a080) | 管理员登录 | `POST` | `/admin/auth/login` | 否 | 是（管理员凭证） | `—` | [AdminLoginInput](02-data-models.md#adminlogininput) | [AdminAuthTokens](02-data-models.md#adminauthtokens) | 200 |
-| [A081](#a081) | 轮换管理员令牌 | `POST` | `/admin/auth/refresh` | 否（需管理员刷新令牌） | 是 | `—` | [RefreshInput](02-data-models.md#refreshinput) | [AdminAuthTokens](02-data-models.md#adminauthtokens) | 200 |
-| [A082](#a082) | 管理员退出 | `POST` | `/admin/auth/logout` | 是 | 是 | `—` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
-| [A083](#a083) | 当前管理员与权限 | `GET` | `/admin/me` | 是 | 是 | `—` | — | [AdminPrincipal](02-data-models.md#adminprincipal) | 200 |
+| [A081](#a081) | 管理员登录 | `POST` | `/admin/auth/login` | 否 | 是（管理员凭证） | `—` | [AdminLoginInput](02-data-models.md#adminlogininput) | [AdminAuthTokens](02-data-models.md#adminauthtokens) | 200 |
+| [A082](#a082) | 轮换管理员令牌 | `POST` | `/admin/auth/refresh` | 否（需管理员刷新令牌） | 是 | `—` | [RefreshInput](02-data-models.md#refreshinput) | [AdminAuthTokens](02-data-models.md#adminauthtokens) | 200 |
+| [A083](#a083) | 管理员退出 | `POST` | `/admin/auth/logout` | 是 | 是 | `—` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
+| [A084](#a084) | 当前管理员与权限 | `GET` | `/admin/me` | 是 | 是 | `—` | — | [AdminPrincipal](02-data-models.md#adminprincipal) | 200 |
 
 ### 参数与业务约束
 
-<a id="a080"></a>
-#### A080 管理员登录
+<a id="a081"></a>
+#### A081 管理员登录
 
 `POST /api/v1/admin/auth/login`
 
@@ -1403,8 +1425,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminAuthTokens](02-data-models.md#adminauthtokens)。
 
-<a id="a081"></a>
-#### A081 轮换管理员令牌
+<a id="a082"></a>
+#### A082 轮换管理员令牌
 
 `POST /api/v1/admin/auth/refresh`
 
@@ -1414,8 +1436,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminAuthTokens](02-data-models.md#adminauthtokens)。
 
-<a id="a082"></a>
-#### A082 管理员退出
+<a id="a083"></a>
+#### A083 管理员退出
 
 `POST /api/v1/admin/auth/logout`
 
@@ -1425,8 +1447,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [ActionResult](02-data-models.md#actionresult)。
 
-<a id="a083"></a>
-#### A083 当前管理员与权限
+<a id="a084"></a>
+#### A084 当前管理员与权限
 
 `GET /api/v1/admin/me`
 
@@ -1442,39 +1464,39 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 | 编号 | 接口名称 | 方法 | URL | 是否登录 | 是否管理员 | 额外权限 | 请求体 | 成功 data | HTTP |
 |---|---|---|---|---|---|---|---|---|---|
-| [A084](#a084) | 查询分类列表 | `GET` | `/admin/categories` | 是 | 是 | `content:write` | — | [PageCategory](02-data-models.md#pagecategory) | 200 |
-| [A085](#a085) | 创建分类 | `POST` | `/admin/categories` | 是 | 是 | `content:write` | [CategoryCreate](02-data-models.md#categorycreate) | [Category](02-data-models.md#category) | 201 |
-| [A086](#a086) | 查询分类详情 | `GET` | `/admin/categories/{id}` | 是 | 是 | `content:write` | — | [Category](02-data-models.md#category) | 200 |
-| [A087](#a087) | 修改分类 | `PATCH` | `/admin/categories/{id}` | 是 | 是 | `content:write` | [CategoryPatch](02-data-models.md#categorypatch) | [Category](02-data-models.md#category) | 200 |
-| [A088](#a088) | 删除分类 | `DELETE` | `/admin/categories/{id}` | 是 | 是 | `content:write` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
-| [A089](#a089) | 查询科普／课程列表 | `GET` | `/admin/contents` | 是 | 是 | `content:write` | — | [PageAdminContent](02-data-models.md#pageadmincontent) | 200 |
-| [A090](#a090) | 创建科普／课程 | `POST` | `/admin/contents` | 是 | 是 | `content:write` | [ContentCreate](02-data-models.md#contentcreate) | [AdminContent](02-data-models.md#admincontent) | 201 |
-| [A091](#a091) | 查询科普／课程详情 | `GET` | `/admin/contents/{id}` | 是 | 是 | `content:write` | — | [AdminContent](02-data-models.md#admincontent) | 200 |
-| [A092](#a092) | 修改科普／课程 | `PATCH` | `/admin/contents/{id}` | 是 | 是 | `content:write` | [ContentPatch](02-data-models.md#contentpatch) | [AdminContent](02-data-models.md#admincontent) | 200 |
-| [A093](#a093) | 删除科普／课程 | `DELETE` | `/admin/contents/{id}` | 是 | 是 | `content:write` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
-| [A094](#a094) | 发布科普／课程 | `POST` | `/admin/contents/{id}/publish` | 是 | 是 | `content:write` | [VersionInput](02-data-models.md#versioninput) | [AdminContent](02-data-models.md#admincontent) | 200 |
-| [A095](#a095) | 下架科普／课程 | `POST` | `/admin/contents/{id}/unpublish` | 是 | 是 | `content:write` | [VersionInput](02-data-models.md#versioninput) | [AdminContent](02-data-models.md#admincontent) | 200 |
-| [A096](#a096) | 查询科普正文／视频引用 | `GET` | `/admin/contents/{id}/body` | 是 | 是 | `content:write` | — | [AdminBody](02-data-models.md#adminbody) | 200 |
-| [A097](#a097) | 替换科普正文／视频引用 | `PUT` | `/admin/contents/{id}/body` | 是 | 是 | `content:write` | [ScienceBodyInput](02-data-models.md#sciencebodyinput) | [AdminBody](02-data-models.md#adminbody) | 200 |
-| [A098](#a098) | 管理课程章节列表 | `GET` | `/admin/courses/{id}/chapters` | 是 | 是 | `content:write` | — | [PageAdminChapter](02-data-models.md#pageadminchapter) | 200 |
-| [A099](#a099) | 创建课程章节草稿 | `POST` | `/admin/courses/{id}/chapters` | 是 | 是 | `content:write` | [ChapterCreate](02-data-models.md#chaptercreate) | [AdminChapter](02-data-models.md#adminchapter) | 201 |
-| [A100](#a100) | 章节详情 | `GET` | `/admin/chapters/{id}` | 是 | 是 | `content:write` | — | [AdminChapter](02-data-models.md#adminchapter) | 200 |
-| [A101](#a101) | 修改章节 | `PATCH` | `/admin/chapters/{id}` | 是 | 是 | `content:write` | [ChapterPatch](02-data-models.md#chapterpatch) | [AdminChapter](02-data-models.md#adminchapter) | 200 |
-| [A102](#a102) | 删除未发布章节 | `DELETE` | `/admin/chapters/{id}` | 是 | 是 | `content:write` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
-| [A103](#a103) | 查询章节正文／视频引用 | `GET` | `/admin/chapters/{id}/body` | 是 | 是 | `content:write` | — | [AdminBody](02-data-models.md#adminbody) | 200 |
-| [A104](#a104) | 替换章节正文／视频引用 | `PUT` | `/admin/chapters/{id}/body` | 是 | 是 | `content:write` | [ScienceBodyInput](02-data-models.md#sciencebodyinput) | [AdminBody](02-data-models.md#adminbody) | 200 |
-| [A105](#a105) | 发布课程章节 | `POST` | `/admin/chapters/{id}/publish` | 是 | 是 | `content:write` | [VersionInput](02-data-models.md#versioninput) | [AdminChapter](02-data-models.md#adminchapter) | 200 |
-| [A106](#a106) | 下架课程章节 | `POST` | `/admin/chapters/{id}/unpublish` | 是 | 是 | `content:write` | [VersionInput](02-data-models.md#versioninput) | [AdminChapter](02-data-models.md#adminchapter) | 200 |
-| [A107](#a107) | 预览科普视频（含草稿） | `GET` | `/admin/contents/{id}/playback` | 是 | 是 | `content:write` | — | [PlaybackGrant](02-data-models.md#playbackgrant) | 200 |
-| [A108](#a108) | 预览视频章节（含草稿） | `GET` | `/admin/chapters/{id}/playback` | 是 | 是 | `content:write` | — | [PlaybackGrant](02-data-models.md#playbackgrant) | 200 |
-| [A109](#a109) | 登记公开内容图片 | `POST` | `/admin/content-media/images` | 是 | 是 | `content:write` | [ContentImageCreate](02-data-models.md#contentimagecreate) | [MediaSummary](02-data-models.md#mediasummary) | 201 |
-| [A110](#a110) | 登记 B 站／飞书视频 | `POST` | `/admin/content-media/external-videos` | 是 | 是 | `content:write` | [ExternalVideoCreate](02-data-models.md#externalvideocreate) | [MediaSummary](02-data-models.md#mediasummary) | 201 |
-| [A111](#a111) | 上传私有 MP4 | `POST` | `/admin/content-media/videos` | 是 | 是 | `content:write` | — | [MediaSummary](02-data-models.md#mediasummary) | 201 |
+| [A085](#a085) | 查询分类列表 | `GET` | `/admin/categories` | 是 | 是 | `content:write` | — | [PageCategory](02-data-models.md#pagecategory) | 200 |
+| [A086](#a086) | 创建分类 | `POST` | `/admin/categories` | 是 | 是 | `content:write` | [CategoryCreate](02-data-models.md#categorycreate) | [Category](02-data-models.md#category) | 201 |
+| [A087](#a087) | 查询分类详情 | `GET` | `/admin/categories/{id}` | 是 | 是 | `content:write` | — | [Category](02-data-models.md#category) | 200 |
+| [A088](#a088) | 修改分类 | `PATCH` | `/admin/categories/{id}` | 是 | 是 | `content:write` | [CategoryPatch](02-data-models.md#categorypatch) | [Category](02-data-models.md#category) | 200 |
+| [A089](#a089) | 删除分类 | `DELETE` | `/admin/categories/{id}` | 是 | 是 | `content:write` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
+| [A090](#a090) | 查询科普／课程列表 | `GET` | `/admin/contents` | 是 | 是 | `content:write` | — | [PageAdminContent](02-data-models.md#pageadmincontent) | 200 |
+| [A091](#a091) | 创建科普／课程 | `POST` | `/admin/contents` | 是 | 是 | `content:write` | [ContentCreate](02-data-models.md#contentcreate) | [AdminContent](02-data-models.md#admincontent) | 201 |
+| [A092](#a092) | 查询科普／课程详情 | `GET` | `/admin/contents/{id}` | 是 | 是 | `content:write` | — | [AdminContent](02-data-models.md#admincontent) | 200 |
+| [A093](#a093) | 修改科普／课程 | `PATCH` | `/admin/contents/{id}` | 是 | 是 | `content:write` | [ContentPatch](02-data-models.md#contentpatch) | [AdminContent](02-data-models.md#admincontent) | 200 |
+| [A094](#a094) | 删除科普／课程 | `DELETE` | `/admin/contents/{id}` | 是 | 是 | `content:write` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
+| [A095](#a095) | 发布科普／课程 | `POST` | `/admin/contents/{id}/publish` | 是 | 是 | `content:write` | [VersionInput](02-data-models.md#versioninput) | [AdminContent](02-data-models.md#admincontent) | 200 |
+| [A096](#a096) | 下架科普／课程 | `POST` | `/admin/contents/{id}/unpublish` | 是 | 是 | `content:write` | [VersionInput](02-data-models.md#versioninput) | [AdminContent](02-data-models.md#admincontent) | 200 |
+| [A097](#a097) | 查询科普正文／视频引用 | `GET` | `/admin/contents/{id}/body` | 是 | 是 | `content:write` | — | [AdminBody](02-data-models.md#adminbody) | 200 |
+| [A098](#a098) | 替换科普正文／视频引用 | `PUT` | `/admin/contents/{id}/body` | 是 | 是 | `content:write` | [ScienceBodyInput](02-data-models.md#sciencebodyinput) | [AdminBody](02-data-models.md#adminbody) | 200 |
+| [A099](#a099) | 管理课程章节列表 | `GET` | `/admin/courses/{id}/chapters` | 是 | 是 | `content:write` | — | [PageAdminChapter](02-data-models.md#pageadminchapter) | 200 |
+| [A100](#a100) | 创建课程章节草稿 | `POST` | `/admin/courses/{id}/chapters` | 是 | 是 | `content:write` | [ChapterCreate](02-data-models.md#chaptercreate) | [AdminChapter](02-data-models.md#adminchapter) | 201 |
+| [A101](#a101) | 章节详情 | `GET` | `/admin/chapters/{id}` | 是 | 是 | `content:write` | — | [AdminChapter](02-data-models.md#adminchapter) | 200 |
+| [A102](#a102) | 修改章节 | `PATCH` | `/admin/chapters/{id}` | 是 | 是 | `content:write` | [ChapterPatch](02-data-models.md#chapterpatch) | [AdminChapter](02-data-models.md#adminchapter) | 200 |
+| [A103](#a103) | 删除未发布章节 | `DELETE` | `/admin/chapters/{id}` | 是 | 是 | `content:write` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
+| [A104](#a104) | 查询章节正文／视频引用 | `GET` | `/admin/chapters/{id}/body` | 是 | 是 | `content:write` | — | [AdminBody](02-data-models.md#adminbody) | 200 |
+| [A105](#a105) | 替换章节正文／视频引用 | `PUT` | `/admin/chapters/{id}/body` | 是 | 是 | `content:write` | [ScienceBodyInput](02-data-models.md#sciencebodyinput) | [AdminBody](02-data-models.md#adminbody) | 200 |
+| [A106](#a106) | 发布课程章节 | `POST` | `/admin/chapters/{id}/publish` | 是 | 是 | `content:write` | [VersionInput](02-data-models.md#versioninput) | [AdminChapter](02-data-models.md#adminchapter) | 200 |
+| [A107](#a107) | 下架课程章节 | `POST` | `/admin/chapters/{id}/unpublish` | 是 | 是 | `content:write` | [VersionInput](02-data-models.md#versioninput) | [AdminChapter](02-data-models.md#adminchapter) | 200 |
+| [A108](#a108) | 预览科普视频（含草稿） | `GET` | `/admin/contents/{id}/playback` | 是 | 是 | `content:write` | — | [PlaybackGrant](02-data-models.md#playbackgrant) | 200 |
+| [A109](#a109) | 预览视频章节（含草稿） | `GET` | `/admin/chapters/{id}/playback` | 是 | 是 | `content:write` | — | [PlaybackGrant](02-data-models.md#playbackgrant) | 200 |
+| [A110](#a110) | 登记公开内容图片 | `POST` | `/admin/content-media/images` | 是 | 是 | `content:write` | [ContentImageCreate](02-data-models.md#contentimagecreate) | [MediaSummary](02-data-models.md#mediasummary) | 201 |
+| [A111](#a111) | 登记 B 站／飞书视频 | `POST` | `/admin/content-media/external-videos` | 是 | 是 | `content:write` | [ExternalVideoCreate](02-data-models.md#externalvideocreate) | [MediaSummary](02-data-models.md#mediasummary) | 201 |
+| [A112](#a112) | 上传私有 MP4 | `POST` | `/admin/content-media/videos` | 是 | 是 | `content:write` | — | [MediaSummary](02-data-models.md#mediasummary) | 201 |
 
 ### 参数与业务约束
 
-<a id="a084"></a>
-#### A084 查询分类列表
+<a id="a085"></a>
+#### A085 查询分类列表
 
 `GET /api/v1/admin/categories`
 
@@ -1491,8 +1513,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [PageCategory](02-data-models.md#pagecategory)。
 
-<a id="a085"></a>
-#### A085 创建分类
+<a id="a086"></a>
+#### A086 创建分类
 
 `POST /api/v1/admin/categories`
 
@@ -1504,8 +1526,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `201`，`data` 为 [Category](02-data-models.md#category)。
 
-<a id="a086"></a>
-#### A086 查询分类详情
+<a id="a087"></a>
+#### A087 查询分类详情
 
 `GET /api/v1/admin/categories/{id}`
 
@@ -1517,8 +1539,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [Category](02-data-models.md#category)。
 
-<a id="a087"></a>
-#### A087 修改分类
+<a id="a088"></a>
+#### A088 修改分类
 
 `PATCH /api/v1/admin/categories/{id}`
 
@@ -1532,8 +1554,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [Category](02-data-models.md#category)。
 
-<a id="a088"></a>
-#### A088 删除分类
+<a id="a089"></a>
+#### A089 删除分类
 
 `DELETE /api/v1/admin/categories/{id}`
 
@@ -1548,8 +1570,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [ActionResult](02-data-models.md#actionresult)。
 
-<a id="a089"></a>
-#### A089 查询科普／课程列表
+<a id="a090"></a>
+#### A090 查询科普／课程列表
 
 `GET /api/v1/admin/contents`
 
@@ -1567,8 +1589,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [PageAdminContent](02-data-models.md#pageadmincontent)。
 
-<a id="a090"></a>
-#### A090 创建科普／课程
+<a id="a091"></a>
+#### A091 创建科普／课程
 
 `POST /api/v1/admin/contents`
 
@@ -1578,8 +1600,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `201`，`data` 为 [AdminContent](02-data-models.md#admincontent)。
 
-<a id="a091"></a>
-#### A091 查询科普／课程详情
+<a id="a092"></a>
+#### A092 查询科普／课程详情
 
 `GET /api/v1/admin/contents/{id}`
 
@@ -1591,8 +1613,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminContent](02-data-models.md#admincontent)。
 
-<a id="a092"></a>
-#### A092 修改科普／课程
+<a id="a093"></a>
+#### A093 修改科普／课程
 
 `PATCH /api/v1/admin/contents/{id}`
 
@@ -1606,8 +1628,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminContent](02-data-models.md#admincontent)。
 
-<a id="a093"></a>
-#### A093 删除科普／课程
+<a id="a094"></a>
+#### A094 删除科普／课程
 
 `DELETE /api/v1/admin/contents/{id}`
 
@@ -1622,8 +1644,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [ActionResult](02-data-models.md#actionresult)。
 
-<a id="a094"></a>
-#### A094 发布科普／课程
+<a id="a095"></a>
+#### A095 发布科普／课程
 
 `POST /api/v1/admin/contents/{id}/publish`
 
@@ -1639,8 +1661,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminContent](02-data-models.md#admincontent)。
 
-<a id="a095"></a>
-#### A095 下架科普／课程
+<a id="a096"></a>
+#### A096 下架科普／课程
 
 `POST /api/v1/admin/contents/{id}/unpublish`
 
@@ -1656,8 +1678,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminContent](02-data-models.md#admincontent)。
 
-<a id="a096"></a>
-#### A096 查询科普正文／视频引用
+<a id="a097"></a>
+#### A097 查询科普正文／视频引用
 
 `GET /api/v1/admin/contents/{id}/body`
 
@@ -1671,8 +1693,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminBody](02-data-models.md#adminbody)。
 
-<a id="a097"></a>
-#### A097 替换科普正文／视频引用
+<a id="a098"></a>
+#### A098 替换科普正文／视频引用
 
 `PUT /api/v1/admin/contents/{id}/body`
 
@@ -1688,8 +1710,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminBody](02-data-models.md#adminbody)。
 
-<a id="a098"></a>
-#### A098 管理课程章节列表
+<a id="a099"></a>
+#### A099 管理课程章节列表
 
 `GET /api/v1/admin/courses/{id}/chapters`
 
@@ -1704,8 +1726,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [PageAdminChapter](02-data-models.md#pageadminchapter)。
 
-<a id="a099"></a>
-#### A099 创建课程章节草稿
+<a id="a100"></a>
+#### A100 创建课程章节草稿
 
 `POST /api/v1/admin/courses/{id}/chapters`
 
@@ -1719,8 +1741,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `201`，`data` 为 [AdminChapter](02-data-models.md#adminchapter)。
 
-<a id="a100"></a>
-#### A100 章节详情
+<a id="a101"></a>
+#### A101 章节详情
 
 `GET /api/v1/admin/chapters/{id}`
 
@@ -1734,8 +1756,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminChapter](02-data-models.md#adminchapter)。
 
-<a id="a101"></a>
-#### A101 修改章节
+<a id="a102"></a>
+#### A102 修改章节
 
 `PATCH /api/v1/admin/chapters/{id}`
 
@@ -1751,8 +1773,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminChapter](02-data-models.md#adminchapter)。
 
-<a id="a102"></a>
-#### A102 删除未发布章节
+<a id="a103"></a>
+#### A103 删除未发布章节
 
 `DELETE /api/v1/admin/chapters/{id}`
 
@@ -1767,8 +1789,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [ActionResult](02-data-models.md#actionresult)。
 
-<a id="a103"></a>
-#### A103 查询章节正文／视频引用
+<a id="a104"></a>
+#### A104 查询章节正文／视频引用
 
 `GET /api/v1/admin/chapters/{id}/body`
 
@@ -1782,8 +1804,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminBody](02-data-models.md#adminbody)。
 
-<a id="a104"></a>
-#### A104 替换章节正文／视频引用
+<a id="a105"></a>
+#### A105 替换章节正文／视频引用
 
 `PUT /api/v1/admin/chapters/{id}/body`
 
@@ -1799,8 +1821,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminBody](02-data-models.md#adminbody)。
 
-<a id="a105"></a>
-#### A105 发布课程章节
+<a id="a106"></a>
+#### A106 发布课程章节
 
 `POST /api/v1/admin/chapters/{id}/publish`
 
@@ -1816,8 +1838,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminChapter](02-data-models.md#adminchapter)。
 
-<a id="a106"></a>
-#### A106 下架课程章节
+<a id="a107"></a>
+#### A107 下架课程章节
 
 `POST /api/v1/admin/chapters/{id}/unpublish`
 
@@ -1833,8 +1855,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminChapter](02-data-models.md#adminchapter)。
 
-<a id="a107"></a>
-#### A107 预览科普视频（含草稿）
+<a id="a108"></a>
+#### A108 预览科普视频（含草稿）
 
 `GET /api/v1/admin/contents/{id}/playback`
 
@@ -1848,8 +1870,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [PlaybackGrant](02-data-models.md#playbackgrant)。
 
-<a id="a108"></a>
-#### A108 预览视频章节（含草稿）
+<a id="a109"></a>
+#### A109 预览视频章节（含草稿）
 
 `GET /api/v1/admin/chapters/{id}/playback`
 
@@ -1863,8 +1885,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [PlaybackGrant](02-data-models.md#playbackgrant)。
 
-<a id="a109"></a>
-#### A109 登记公开内容图片
+<a id="a110"></a>
+#### A110 登记公开内容图片
 
 `POST /api/v1/admin/content-media/images`
 
@@ -1874,8 +1896,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `201`，`data` 为 [MediaSummary](02-data-models.md#mediasummary)。
 
-<a id="a110"></a>
-#### A110 登记 B 站／飞书视频
+<a id="a111"></a>
+#### A111 登记 B 站／飞书视频
 
 `POST /api/v1/admin/content-media/external-videos`
 
@@ -1887,8 +1909,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `201`，`data` 为 [MediaSummary](02-data-models.md#mediasummary)。
 
-<a id="a111"></a>
-#### A111 上传私有 MP4
+<a id="a112"></a>
+#### A112 上传私有 MP4
 
 `POST /api/v1/admin/content-media/videos`
 
@@ -1908,21 +1930,21 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 | 编号 | 接口名称 | 方法 | URL | 是否登录 | 是否管理员 | 额外权限 | 请求体 | 成功 data | HTTP |
 |---|---|---|---|---|---|---|---|---|---|
-| [A112](#a112) | 查询专栏列表 | `GET` | `/admin/columns` | 是 | 是 | `content:write` | — | [PageAdminColumn](02-data-models.md#pageadmincolumn) | 200 |
-| [A113](#a113) | 创建专栏 | `POST` | `/admin/columns` | 是 | 是 | `content:write` | [ColumnCreate](02-data-models.md#columncreate) | [AdminColumn](02-data-models.md#admincolumn) | 201 |
-| [A114](#a114) | 查询专栏详情 | `GET` | `/admin/columns/{id}` | 是 | 是 | `content:write` | — | [AdminColumn](02-data-models.md#admincolumn) | 200 |
-| [A115](#a115) | 修改专栏 | `PATCH` | `/admin/columns/{id}` | 是 | 是 | `content:write` | [ColumnPatch](02-data-models.md#columnpatch) | [AdminColumn](02-data-models.md#admincolumn) | 200 |
-| [A116](#a116) | 删除专栏 | `DELETE` | `/admin/columns/{id}` | 是 | 是 | `content:write` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
-| [A117](#a117) | 发布专栏 | `POST` | `/admin/columns/{id}/publish` | 是 | 是 | `content:write` | [VersionInput](02-data-models.md#versioninput) | [AdminColumn](02-data-models.md#admincolumn) | 200 |
-| [A118](#a118) | 下架专栏 | `POST` | `/admin/columns/{id}/unpublish` | 是 | 是 | `content:write` | [VersionInput](02-data-models.md#versioninput) | [AdminColumn](02-data-models.md#admincolumn) | 200 |
-| [A119](#a119) | 专栏已关联内容 | `GET` | `/admin/columns/{id}/contents` | 是 | 是 | `content:write` | — | [PageAdminContent](02-data-models.md#pageadmincontent) | 200 |
-| [A120](#a120) | 关联内容／修改专栏内排序 | `PUT` | `/admin/columns/{id}/contents/{contentId}` | 是 | 是 | `content:write` | [ColumnContentInput](02-data-models.md#columncontentinput) | [ActionResult](02-data-models.md#actionresult) | 200 |
-| [A121](#a121) | 移除专栏内内容关联 | `DELETE` | `/admin/columns/{id}/contents/{contentId}` | 是 | 是 | `content:write` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
+| [A113](#a113) | 查询专栏列表 | `GET` | `/admin/columns` | 是 | 是 | `content:write` | — | [PageAdminColumn](02-data-models.md#pageadmincolumn) | 200 |
+| [A114](#a114) | 创建专栏 | `POST` | `/admin/columns` | 是 | 是 | `content:write` | [ColumnCreate](02-data-models.md#columncreate) | [AdminColumn](02-data-models.md#admincolumn) | 201 |
+| [A115](#a115) | 查询专栏详情 | `GET` | `/admin/columns/{id}` | 是 | 是 | `content:write` | — | [AdminColumn](02-data-models.md#admincolumn) | 200 |
+| [A116](#a116) | 修改专栏 | `PATCH` | `/admin/columns/{id}` | 是 | 是 | `content:write` | [ColumnPatch](02-data-models.md#columnpatch) | [AdminColumn](02-data-models.md#admincolumn) | 200 |
+| [A117](#a117) | 删除专栏 | `DELETE` | `/admin/columns/{id}` | 是 | 是 | `content:write` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
+| [A118](#a118) | 发布专栏 | `POST` | `/admin/columns/{id}/publish` | 是 | 是 | `content:write` | [VersionInput](02-data-models.md#versioninput) | [AdminColumn](02-data-models.md#admincolumn) | 200 |
+| [A119](#a119) | 下架专栏 | `POST` | `/admin/columns/{id}/unpublish` | 是 | 是 | `content:write` | [VersionInput](02-data-models.md#versioninput) | [AdminColumn](02-data-models.md#admincolumn) | 200 |
+| [A120](#a120) | 专栏已关联内容 | `GET` | `/admin/columns/{id}/contents` | 是 | 是 | `content:write` | — | [PageAdminContent](02-data-models.md#pageadmincontent) | 200 |
+| [A121](#a121) | 关联内容／修改专栏内排序 | `PUT` | `/admin/columns/{id}/contents/{contentId}` | 是 | 是 | `content:write` | [ColumnContentInput](02-data-models.md#columncontentinput) | [ActionResult](02-data-models.md#actionresult) | 200 |
+| [A122](#a122) | 移除专栏内内容关联 | `DELETE` | `/admin/columns/{id}/contents/{contentId}` | 是 | 是 | `content:write` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
 
 ### 参数与业务约束
 
-<a id="a112"></a>
-#### A112 查询专栏列表
+<a id="a113"></a>
+#### A113 查询专栏列表
 
 `GET /api/v1/admin/columns`
 
@@ -1937,8 +1959,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [PageAdminColumn](02-data-models.md#pageadmincolumn)。
 
-<a id="a113"></a>
-#### A113 创建专栏
+<a id="a114"></a>
+#### A114 创建专栏
 
 `POST /api/v1/admin/columns`
 
@@ -1948,8 +1970,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `201`，`data` 为 [AdminColumn](02-data-models.md#admincolumn)。
 
-<a id="a114"></a>
-#### A114 查询专栏详情
+<a id="a115"></a>
+#### A115 查询专栏详情
 
 `GET /api/v1/admin/columns/{id}`
 
@@ -1961,8 +1983,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminColumn](02-data-models.md#admincolumn)。
 
-<a id="a115"></a>
-#### A115 修改专栏
+<a id="a116"></a>
+#### A116 修改专栏
 
 `PATCH /api/v1/admin/columns/{id}`
 
@@ -1976,8 +1998,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminColumn](02-data-models.md#admincolumn)。
 
-<a id="a116"></a>
-#### A116 删除专栏
+<a id="a117"></a>
+#### A117 删除专栏
 
 `DELETE /api/v1/admin/columns/{id}`
 
@@ -1992,8 +2014,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [ActionResult](02-data-models.md#actionresult)。
 
-<a id="a117"></a>
-#### A117 发布专栏
+<a id="a118"></a>
+#### A118 发布专栏
 
 `POST /api/v1/admin/columns/{id}/publish`
 
@@ -2009,8 +2031,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminColumn](02-data-models.md#admincolumn)。
 
-<a id="a118"></a>
-#### A118 下架专栏
+<a id="a119"></a>
+#### A119 下架专栏
 
 `POST /api/v1/admin/columns/{id}/unpublish`
 
@@ -2026,8 +2048,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminColumn](02-data-models.md#admincolumn)。
 
-<a id="a119"></a>
-#### A119 专栏已关联内容
+<a id="a120"></a>
+#### A120 专栏已关联内容
 
 `GET /api/v1/admin/columns/{id}/contents`
 
@@ -2043,8 +2065,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [PageAdminContent](02-data-models.md#pageadmincontent)。
 
-<a id="a120"></a>
-#### A120 关联内容／修改专栏内排序
+<a id="a121"></a>
+#### A121 关联内容／修改专栏内排序
 
 `PUT /api/v1/admin/columns/{id}/contents/{contentId}`
 
@@ -2061,8 +2083,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [ActionResult](02-data-models.md#actionresult)。
 
-<a id="a121"></a>
-#### A121 移除专栏内内容关联
+<a id="a122"></a>
+#### A122 移除专栏内内容关联
 
 `DELETE /api/v1/admin/columns/{id}/contents/{contentId}`
 
@@ -2081,26 +2103,26 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 | 编号 | 接口名称 | 方法 | URL | 是否登录 | 是否管理员 | 额外权限 | 请求体 | 成功 data | HTTP |
 |---|---|---|---|---|---|---|---|---|---|
-| [A122](#a122) | 查询产品列表 | `GET` | `/admin/products` | 是 | 是 | `products:write` | — | [PageAdminProduct](02-data-models.md#pageadminproduct) | 200 |
-| [A123](#a123) | 创建产品 | `POST` | `/admin/products` | 是 | 是 | `products:write` | [ProductCreate](02-data-models.md#productcreate) | [AdminProduct](02-data-models.md#adminproduct) | 201 |
-| [A124](#a124) | 查询产品详情 | `GET` | `/admin/products/{id}` | 是 | 是 | `products:write` | — | [AdminProduct](02-data-models.md#adminproduct) | 200 |
-| [A125](#a125) | 修改产品 | `PATCH` | `/admin/products/{id}` | 是 | 是 | `products:write` | [ProductPatch](02-data-models.md#productpatch) | [AdminProduct](02-data-models.md#adminproduct) | 200 |
-| [A126](#a126) | 删除产品 | `DELETE` | `/admin/products/{id}` | 是 | 是 | `products:write` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
-| [A127](#a127) | 发布产品 | `POST` | `/admin/products/{id}/publish` | 是 | 是 | `products:write` | [VersionInput](02-data-models.md#versioninput) | [AdminProduct](02-data-models.md#adminproduct) | 200 |
-| [A128](#a128) | 下架产品 | `POST` | `/admin/products/{id}/unpublish` | 是 | 是 | `products:write` | [VersionInput](02-data-models.md#versioninput) | [AdminProduct](02-data-models.md#adminproduct) | 200 |
-| [A129](#a129) | 产品全部 SKU | `GET` | `/admin/products/{id}/skus` | 是 | 是 | `products:write` | — | [PageAdminSku](02-data-models.md#pageadminsku) | 200 |
-| [A130](#a130) | 创建 SKU | `POST` | `/admin/products/{id}/skus` | 是 | 是 | `products:write` | [SkuCreate](02-data-models.md#skucreate) | [AdminSku](02-data-models.md#adminsku) | 201 |
-| [A131](#a131) | SKU 详情 | `GET` | `/admin/skus/{id}` | 是 | 是 | `products:write` | — | [AdminSku](02-data-models.md#adminsku) | 200 |
-| [A132](#a132) | 修改 SKU | `PATCH` | `/admin/skus/{id}` | 是 | 是 | `products:write` | [SkuPatch](02-data-models.md#skupatch) | [AdminSku](02-data-models.md#adminsku) | 200 |
-| [A133](#a133) | 删除未引用 SKU | `DELETE` | `/admin/skus/{id}` | 是 | 是 | `products:write` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
-| [A134](#a134) | 调整实物库存 | `POST` | `/admin/skus/{id}/stock-adjustments` | 是 | 是 | `products:write` | [StockAdjustmentInput](02-data-models.md#stockadjustmentinput) | [StockAdjustment](02-data-models.md#stockadjustment) | 201 |
-| [A135](#a135) | 库存调整记录 | `GET` | `/admin/skus/{id}/stock-adjustments` | 是 | 是 | `products:write` | — | [PageStockAdjustment](02-data-models.md#pagestockadjustment) | 200 |
-| [A136](#a136) | 登记公开产品图片 | `POST` | `/admin/product-images` | 是 | 是 | `products:write` | [ProductImageCreate](02-data-models.md#productimagecreate) | [MediaSummary](02-data-models.md#mediasummary) | 201 |
+| [A123](#a123) | 查询产品列表 | `GET` | `/admin/products` | 是 | 是 | `products:write` | — | [PageAdminProduct](02-data-models.md#pageadminproduct) | 200 |
+| [A124](#a124) | 创建产品 | `POST` | `/admin/products` | 是 | 是 | `products:write` | [ProductCreate](02-data-models.md#productcreate) | [AdminProduct](02-data-models.md#adminproduct) | 201 |
+| [A125](#a125) | 查询产品详情 | `GET` | `/admin/products/{id}` | 是 | 是 | `products:write` | — | [AdminProduct](02-data-models.md#adminproduct) | 200 |
+| [A126](#a126) | 修改产品 | `PATCH` | `/admin/products/{id}` | 是 | 是 | `products:write` | [ProductPatch](02-data-models.md#productpatch) | [AdminProduct](02-data-models.md#adminproduct) | 200 |
+| [A127](#a127) | 删除产品 | `DELETE` | `/admin/products/{id}` | 是 | 是 | `products:write` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
+| [A128](#a128) | 发布产品 | `POST` | `/admin/products/{id}/publish` | 是 | 是 | `products:write` | [VersionInput](02-data-models.md#versioninput) | [AdminProduct](02-data-models.md#adminproduct) | 200 |
+| [A129](#a129) | 下架产品 | `POST` | `/admin/products/{id}/unpublish` | 是 | 是 | `products:write` | [VersionInput](02-data-models.md#versioninput) | [AdminProduct](02-data-models.md#adminproduct) | 200 |
+| [A130](#a130) | 产品全部 SKU | `GET` | `/admin/products/{id}/skus` | 是 | 是 | `products:write` | — | [PageAdminSku](02-data-models.md#pageadminsku) | 200 |
+| [A131](#a131) | 创建 SKU | `POST` | `/admin/products/{id}/skus` | 是 | 是 | `products:write` | [SkuCreate](02-data-models.md#skucreate) | [AdminSku](02-data-models.md#adminsku) | 201 |
+| [A132](#a132) | SKU 详情 | `GET` | `/admin/skus/{id}` | 是 | 是 | `products:write` | — | [AdminSku](02-data-models.md#adminsku) | 200 |
+| [A133](#a133) | 修改 SKU | `PATCH` | `/admin/skus/{id}` | 是 | 是 | `products:write` | [SkuPatch](02-data-models.md#skupatch) | [AdminSku](02-data-models.md#adminsku) | 200 |
+| [A134](#a134) | 删除未引用 SKU | `DELETE` | `/admin/skus/{id}` | 是 | 是 | `products:write` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
+| [A135](#a135) | 调整实物库存 | `POST` | `/admin/skus/{id}/stock-adjustments` | 是 | 是 | `products:write` | [StockAdjustmentInput](02-data-models.md#stockadjustmentinput) | [StockAdjustment](02-data-models.md#stockadjustment) | 201 |
+| [A136](#a136) | 库存调整记录 | `GET` | `/admin/skus/{id}/stock-adjustments` | 是 | 是 | `products:write` | — | [PageStockAdjustment](02-data-models.md#pagestockadjustment) | 200 |
+| [A137](#a137) | 登记公开产品图片 | `POST` | `/admin/product-images` | 是 | 是 | `products:write` | [ProductImageCreate](02-data-models.md#productimagecreate) | [MediaSummary](02-data-models.md#mediasummary) | 201 |
 
 ### 参数与业务约束
 
-<a id="a122"></a>
-#### A122 查询产品列表
+<a id="a123"></a>
+#### A123 查询产品列表
 
 `GET /api/v1/admin/products`
 
@@ -2116,8 +2138,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [PageAdminProduct](02-data-models.md#pageadminproduct)。
 
-<a id="a123"></a>
-#### A123 创建产品
+<a id="a124"></a>
+#### A124 创建产品
 
 `POST /api/v1/admin/products`
 
@@ -2127,8 +2149,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `201`，`data` 为 [AdminProduct](02-data-models.md#adminproduct)。
 
-<a id="a124"></a>
-#### A124 查询产品详情
+<a id="a125"></a>
+#### A125 查询产品详情
 
 `GET /api/v1/admin/products/{id}`
 
@@ -2140,8 +2162,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminProduct](02-data-models.md#adminproduct)。
 
-<a id="a125"></a>
-#### A125 修改产品
+<a id="a126"></a>
+#### A126 修改产品
 
 `PATCH /api/v1/admin/products/{id}`
 
@@ -2155,8 +2177,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminProduct](02-data-models.md#adminproduct)。
 
-<a id="a126"></a>
-#### A126 删除产品
+<a id="a127"></a>
+#### A127 删除产品
 
 `DELETE /api/v1/admin/products/{id}`
 
@@ -2171,8 +2193,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [ActionResult](02-data-models.md#actionresult)。
 
-<a id="a127"></a>
-#### A127 发布产品
+<a id="a128"></a>
+#### A128 发布产品
 
 `POST /api/v1/admin/products/{id}/publish`
 
@@ -2188,8 +2210,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminProduct](02-data-models.md#adminproduct)。
 
-<a id="a128"></a>
-#### A128 下架产品
+<a id="a129"></a>
+#### A129 下架产品
 
 `POST /api/v1/admin/products/{id}/unpublish`
 
@@ -2205,8 +2227,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminProduct](02-data-models.md#adminproduct)。
 
-<a id="a129"></a>
-#### A129 产品全部 SKU
+<a id="a130"></a>
+#### A130 产品全部 SKU
 
 `GET /api/v1/admin/products/{id}/skus`
 
@@ -2220,8 +2242,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [PageAdminSku](02-data-models.md#pageadminsku)。
 
-<a id="a130"></a>
-#### A130 创建 SKU
+<a id="a131"></a>
+#### A131 创建 SKU
 
 `POST /api/v1/admin/products/{id}/skus`
 
@@ -2235,8 +2257,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `201`，`data` 为 [AdminSku](02-data-models.md#adminsku)。
 
-<a id="a131"></a>
-#### A131 SKU 详情
+<a id="a132"></a>
+#### A132 SKU 详情
 
 `GET /api/v1/admin/skus/{id}`
 
@@ -2248,8 +2270,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminSku](02-data-models.md#adminsku)。
 
-<a id="a132"></a>
-#### A132 修改 SKU
+<a id="a133"></a>
+#### A133 修改 SKU
 
 `PATCH /api/v1/admin/skus/{id}`
 
@@ -2263,8 +2285,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminSku](02-data-models.md#adminsku)。
 
-<a id="a133"></a>
-#### A133 删除未引用 SKU
+<a id="a134"></a>
+#### A134 删除未引用 SKU
 
 `DELETE /api/v1/admin/skus/{id}`
 
@@ -2279,8 +2301,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [ActionResult](02-data-models.md#actionresult)。
 
-<a id="a134"></a>
-#### A134 调整实物库存
+<a id="a135"></a>
+#### A135 调整实物库存
 
 `POST /api/v1/admin/skus/{id}/stock-adjustments`
 
@@ -2296,8 +2318,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `201`，`data` 为 [StockAdjustment](02-data-models.md#stockadjustment)。
 
-<a id="a135"></a>
-#### A135 库存调整记录
+<a id="a136"></a>
+#### A136 库存调整记录
 
 `GET /api/v1/admin/skus/{id}/stock-adjustments`
 
@@ -2313,8 +2335,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [PageStockAdjustment](02-data-models.md#pagestockadjustment)。
 
-<a id="a136"></a>
-#### A136 登记公开产品图片
+<a id="a137"></a>
+#### A137 登记公开产品图片
 
 `POST /api/v1/admin/product-images`
 
@@ -2330,27 +2352,27 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 | 编号 | 接口名称 | 方法 | URL | 是否登录 | 是否管理员 | 额外权限 | 请求体 | 成功 data | HTTP |
 |---|---|---|---|---|---|---|---|---|---|
-| [A137](#a137) | 查询用户订单 | `GET` | `/admin/orders` | 是 | 是 | `orders:read` | — | [PageAdminOrderSummary](02-data-models.md#pageadminordersummary) | 200 |
-| [A138](#a138) | 用户订单详情 | `GET` | `/admin/orders/{id}` | 是 | 是 | `orders:read` | — | [AdminOrder](02-data-models.md#adminorder) | 200 |
-| [A139](#a139) | 查询订单物流 | `GET` | `/admin/orders/{id}/logistics` | 是 | 是 | `orders:read` | — | [LogisticsResult](02-data-models.md#logisticsresult) | 200 |
-| [A140](#a140) | 订单发货 | `POST` | `/admin/orders/{id}/shipment` | 是 | 是 | `orders:ship` | [ShipmentCreate](02-data-models.md#shipmentcreate) | [Shipment](02-data-models.md#shipment) | 201 |
-| [A141](#a141) | 纠正出库物流单号 | `PATCH` | `/admin/shipments/{id}` | 是 | 是 | `orders:ship` | [ShipmentPatch](02-data-models.md#shipmentpatch) | [Shipment](02-data-models.md#shipment) | 200 |
-| [A142](#a142) | 查询用户售后 | `GET` | `/admin/aftersales` | 是 | 是 | `aftersales:review` | — | [PageAfterSale](02-data-models.md#pageaftersale) | 200 |
-| [A143](#a143) | 用户售后详情 | `GET` | `/admin/aftersales/{id}` | 是 | 是 | `aftersales:review` | — | [AfterSale](02-data-models.md#aftersale) | 200 |
-| [A144](#a144) | 批准／驳回售后 | `POST` | `/admin/aftersales/{id}/review` | 是 | 是 | `aftersales:review` | [AfterSaleReview](02-data-models.md#aftersalereview) | [AfterSale](02-data-models.md#aftersale) | 200 |
-| [A145](#a145) | 验收退货并退款 | `POST` | `/admin/aftersales/{id}/confirm-return` | 是 | 是 | `aftersales:review` | [ReturnReceiptInput](02-data-models.md#returnreceiptinput) | [AfterSale](02-data-models.md#aftersale) | 200 |
-| [A146](#a146) | 重试失败退款 | `POST` | `/admin/aftersales/{id}/retry-refund` | 是 | 是 | `aftersales:review` | [VersionInput](02-data-models.md#versioninput) | [AfterSale](02-data-models.md#aftersale) | 200 |
-| [A147](#a147) | 查询退款流水 | `GET` | `/admin/refunds` | 是 | 是 | `aftersales:review` | — | [PageRefund](02-data-models.md#pagerefund) | 200 |
-| [A148](#a148) | 数字订单人工全额退款 | `POST` | `/admin/orders/{id}/digital-refund` | 是 | 是 | `aftersales:review` | [DigitalRefundInput](02-data-models.md#digitalrefundinput) | [Refund](02-data-models.md#refund) | 202 |
-| [A149](#a149) | 测试确认订单付款 | `POST` | `/admin/orders/{id}/test-payment` | 是 | 是 | `payments:test` | [TestPaymentInput](02-data-models.md#testpaymentinput) | [AdminOrder](02-data-models.md#adminorder) | 200 |
-| [A150](#a150) | 测试确认退款结果 | `POST` | `/admin/refunds/{id}/test-result` | 是 | 是 | `payments:test` | [TestRefundInput](02-data-models.md#testrefundinput) | [Refund](02-data-models.md#refund) | 200 |
-| [A151](#a151) | 登记人工物流轨迹 | `POST` | `/admin/shipments/{id}/events` | 是 | 是 | `orders:ship` | [ManualLogisticsInput](02-data-models.md#manuallogisticsinput) | [Shipment](02-data-models.md#shipment) | 200 |
-| [A152](#a152) | 交易审计日志 | `GET` | `/admin/commerce-audit-logs` | 是 | 是 | `audit:read` | — | [PageCommerceAuditLog](02-data-models.md#pagecommerceauditlog) | 200 |
+| [A138](#a138) | 查询用户订单 | `GET` | `/admin/orders` | 是 | 是 | `orders:read` | — | [PageAdminOrderSummary](02-data-models.md#pageadminordersummary) | 200 |
+| [A139](#a139) | 用户订单详情 | `GET` | `/admin/orders/{id}` | 是 | 是 | `orders:read` | — | [AdminOrder](02-data-models.md#adminorder) | 200 |
+| [A140](#a140) | 查询订单物流 | `GET` | `/admin/orders/{id}/logistics` | 是 | 是 | `orders:read` | — | [LogisticsResult](02-data-models.md#logisticsresult) | 200 |
+| [A141](#a141) | 订单发货 | `POST` | `/admin/orders/{id}/shipment` | 是 | 是 | `orders:ship` | [ShipmentCreate](02-data-models.md#shipmentcreate) | [Shipment](02-data-models.md#shipment) | 201 |
+| [A142](#a142) | 纠正出库物流单号 | `PATCH` | `/admin/shipments/{id}` | 是 | 是 | `orders:ship` | [ShipmentPatch](02-data-models.md#shipmentpatch) | [Shipment](02-data-models.md#shipment) | 200 |
+| [A143](#a143) | 查询用户售后 | `GET` | `/admin/aftersales` | 是 | 是 | `aftersales:review` | — | [PageAfterSale](02-data-models.md#pageaftersale) | 200 |
+| [A144](#a144) | 用户售后详情 | `GET` | `/admin/aftersales/{id}` | 是 | 是 | `aftersales:review` | — | [AfterSale](02-data-models.md#aftersale) | 200 |
+| [A145](#a145) | 批准／驳回售后 | `POST` | `/admin/aftersales/{id}/review` | 是 | 是 | `aftersales:review` | [AfterSaleReview](02-data-models.md#aftersalereview) | [AfterSale](02-data-models.md#aftersale) | 200 |
+| [A146](#a146) | 验收退货并退款 | `POST` | `/admin/aftersales/{id}/confirm-return` | 是 | 是 | `aftersales:review` | [ReturnReceiptInput](02-data-models.md#returnreceiptinput) | [AfterSale](02-data-models.md#aftersale) | 200 |
+| [A147](#a147) | 重试失败退款 | `POST` | `/admin/aftersales/{id}/retry-refund` | 是 | 是 | `aftersales:review` | [VersionInput](02-data-models.md#versioninput) | [AfterSale](02-data-models.md#aftersale) | 200 |
+| [A148](#a148) | 查询退款流水 | `GET` | `/admin/refunds` | 是 | 是 | `aftersales:review` | — | [PageRefund](02-data-models.md#pagerefund) | 200 |
+| [A149](#a149) | 数字订单人工全额退款 | `POST` | `/admin/orders/{id}/digital-refund` | 是 | 是 | `aftersales:review` | [DigitalRefundInput](02-data-models.md#digitalrefundinput) | [Refund](02-data-models.md#refund) | 202 |
+| [A150](#a150) | 测试确认订单付款 | `POST` | `/admin/orders/{id}/test-payment` | 是 | 是 | `payments:test` | [TestPaymentInput](02-data-models.md#testpaymentinput) | [AdminOrder](02-data-models.md#adminorder) | 200 |
+| [A151](#a151) | 测试确认退款结果 | `POST` | `/admin/refunds/{id}/test-result` | 是 | 是 | `payments:test` | [TestRefundInput](02-data-models.md#testrefundinput) | [Refund](02-data-models.md#refund) | 200 |
+| [A152](#a152) | 登记人工物流轨迹 | `POST` | `/admin/shipments/{id}/events` | 是 | 是 | `orders:ship` | [ManualLogisticsInput](02-data-models.md#manuallogisticsinput) | [Shipment](02-data-models.md#shipment) | 200 |
+| [A153](#a153) | 交易审计日志 | `GET` | `/admin/commerce-audit-logs` | 是 | 是 | `audit:read` | — | [PageCommerceAuditLog](02-data-models.md#pagecommerceauditlog) | 200 |
 
 ### 参数与业务约束
 
-<a id="a137"></a>
-#### A137 查询用户订单
+<a id="a138"></a>
+#### A138 查询用户订单
 
 `GET /api/v1/admin/orders`
 
@@ -2372,8 +2394,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [PageAdminOrderSummary](02-data-models.md#pageadminordersummary)。
 
-<a id="a138"></a>
-#### A138 用户订单详情
+<a id="a139"></a>
+#### A139 用户订单详情
 
 `GET /api/v1/admin/orders/{id}`
 
@@ -2385,8 +2407,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminOrder](02-data-models.md#adminorder)。
 
-<a id="a139"></a>
-#### A139 查询订单物流
+<a id="a140"></a>
+#### A140 查询订单物流
 
 `GET /api/v1/admin/orders/{id}/logistics`
 
@@ -2400,8 +2422,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [LogisticsResult](02-data-models.md#logisticsresult)。
 
-<a id="a140"></a>
-#### A140 订单发货
+<a id="a141"></a>
+#### A141 订单发货
 
 `POST /api/v1/admin/orders/{id}/shipment`
 
@@ -2419,8 +2441,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `201`，`data` 为 [Shipment](02-data-models.md#shipment)。
 
-<a id="a141"></a>
-#### A141 纠正出库物流单号
+<a id="a142"></a>
+#### A142 纠正出库物流单号
 
 `PATCH /api/v1/admin/shipments/{id}`
 
@@ -2434,8 +2456,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [Shipment](02-data-models.md#shipment)。
 
-<a id="a142"></a>
-#### A142 查询用户售后
+<a id="a143"></a>
+#### A143 查询用户售后
 
 `GET /api/v1/admin/aftersales`
 
@@ -2453,8 +2475,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [PageAfterSale](02-data-models.md#pageaftersale)。
 
-<a id="a143"></a>
-#### A143 用户售后详情
+<a id="a144"></a>
+#### A144 用户售后详情
 
 `GET /api/v1/admin/aftersales/{id}`
 
@@ -2466,8 +2488,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AfterSale](02-data-models.md#aftersale)。
 
-<a id="a144"></a>
-#### A144 批准／驳回售后
+<a id="a145"></a>
+#### A145 批准／驳回售后
 
 `POST /api/v1/admin/aftersales/{id}/review`
 
@@ -2485,8 +2507,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AfterSale](02-data-models.md#aftersale)。
 
-<a id="a145"></a>
-#### A145 验收退货并退款
+<a id="a146"></a>
+#### A146 验收退货并退款
 
 `POST /api/v1/admin/aftersales/{id}/confirm-return`
 
@@ -2504,8 +2526,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AfterSale](02-data-models.md#aftersale)。
 
-<a id="a146"></a>
-#### A146 重试失败退款
+<a id="a147"></a>
+#### A147 重试失败退款
 
 `POST /api/v1/admin/aftersales/{id}/retry-refund`
 
@@ -2523,8 +2545,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AfterSale](02-data-models.md#aftersale)。
 
-<a id="a147"></a>
-#### A147 查询退款流水
+<a id="a148"></a>
+#### A148 查询退款流水
 
 `GET /api/v1/admin/refunds`
 
@@ -2541,14 +2563,14 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [PageRefund](02-data-models.md#pagerefund)。
 
-<a id="a148"></a>
-#### A148 数字订单人工全额退款
+<a id="a149"></a>
+#### A149 数字订单人工全额退款
 
 `POST /api/v1/admin/orders/{id}/digital-refund`
 
 **实现状态：** 已实现
 
-当前只支持 COURSE 全额退款；orderVersion 为订单版本。创建 PROCESSING 退款不会撤销访问权；测试退款成功才原子撤权并关闭订单。FAILED 可用同接口和最新订单版本重试，重用退款 ID。
+COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整段：目标转 REFUND_PENDING，其他未来付费段转 SUSPENDED；已开始段继续。处理中阻止会员结算与手工改期。成功撤销目标并按完整时长整理后续段；失败恢复。已开始或已过期段返回 MEMBERSHIP_REFUND_NOT_ALLOWED。
 
 **必填请求头：** `Idempotency-Key`，16–128 位字母、数字、下划线或连字符；相同业务意图重试复用。
 
@@ -2560,14 +2582,14 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `202`，`data` 为 [Refund](02-data-models.md#refund)。
 
-<a id="a149"></a>
-#### A149 测试确认订单付款
+<a id="a150"></a>
+#### A150 测试确认订单付款
 
 `POST /api/v1/admin/orders/{id}/test-payment`
 
 **实现状态：** 已实现
 
-仅显式启用的 development/test/staging 环境。生产环境总是拒绝。订单须未过期且待支付；测试流水唯一，无真实资金流。
+仅测试环境且显式开启测试支付。会员付款、订单 COMPLETED 和权益段追加在同一事务完成；从 max(now,未撤销手工期限,现有付费段结束) 开始，不提前生效未来方案。方案修改不改已下单条款，停用阻止结算。
 
 **必填请求头：** `Idempotency-Key`，16–128 位字母、数字、下划线或连字符；相同业务意图重试复用。
 
@@ -2579,14 +2601,14 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminOrder](02-data-models.md#adminorder)。
 
-<a id="a150"></a>
-#### A150 测试确认退款结果
+<a id="a151"></a>
+#### A151 测试确认退款结果
 
 `POST /api/v1/admin/refunds/{id}/test-result`
 
 **实现状态：** 已实现
 
-仅 TEST 支付；课程退款 version 为退款流水版本，产品售后仍为售后单版本。成功才改金额并撤销本订单课程权益，失败保留权益。
+仅 TEST 支付；数字订单 version 为退款流水版本，产品售后为售后单版本。会员成功撤销目标段并整理其余未来段；失败恢复，重试须目标仍未开始。
 
 **必填请求头：** `Idempotency-Key`，16–128 位字母、数字、下划线或连字符；相同业务意图重试复用。
 
@@ -2598,8 +2620,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [Refund](02-data-models.md#refund)。
 
-<a id="a151"></a>
-#### A151 登记人工物流轨迹
+<a id="a152"></a>
+#### A152 登记人工物流轨迹
 
 `POST /api/v1/admin/shipments/{id}/events`
 
@@ -2617,8 +2639,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [Shipment](02-data-models.md#shipment)。
 
-<a id="a152"></a>
-#### A152 交易审计日志
+<a id="a153"></a>
+#### A153 交易审计日志
 
 `GET /api/v1/admin/commerce-audit-logs`
 
@@ -2637,46 +2659,51 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 | 编号 | 接口名称 | 方法 | URL | 是否登录 | 是否管理员 | 额外权限 | 请求体 | 成功 data | HTTP |
 |---|---|---|---|---|---|---|---|---|---|
-| [A153](#a153) | 查询用户及会员状态 | `GET` | `/admin/users` | 是 | 是 | `users:read` | — | [PageAdminUser](02-data-models.md#pageadminuser) | 200 |
-| [A154](#a154) | 用户详情及会员信息 | `GET` | `/admin/users/{id}` | 是 | 是 | `users:read` | — | [AdminUser](02-data-models.md#adminuser) | 200 |
-| [A155](#a155) | 用户会员权益详情 | `GET` | `/admin/users/{id}/membership` | 是 | 是 | `membership:write` | — | [MembershipDetail](02-data-models.md#membershipdetail) | 200 |
-| [A156](#a156) | 封禁用户 | `POST` | `/admin/users/{id}/ban` | 是 | 是 | `users:ban` | [UserBanInput](02-data-models.md#userbaninput) | [AdminUser](02-data-models.md#adminuser) | 200 |
-| [A157](#a157) | 解除用户封禁 | `POST` | `/admin/users/{id}/unban` | 是 | 是 | `users:ban` | [UserUnbanInput](02-data-models.md#userunbaninput) | [AdminUser](02-data-models.md#adminuser) | 200 |
-| [A158](#a158) | 管理会员方案 | `GET` | `/admin/membership-plans` | 是 | 是 | `membership:write` | — | [PageAdminMembershipPlan](02-data-models.md#pageadminmembershipplan) | 200 |
-| [A159](#a159) | 创建会员方案（停用） | `POST` | `/admin/membership-plans` | 是 | 是 | `membership:write` | [MembershipPlanCreate](02-data-models.md#membershipplancreate) | [AdminMembershipPlan](02-data-models.md#adminmembershipplan) | 201 |
-| [A160](#a160) | 会员方案详情 | `GET` | `/admin/membership-plans/{id}` | 是 | 是 | `membership:write` | — | [AdminMembershipPlan](02-data-models.md#adminmembershipplan) | 200 |
-| [A161](#a161) | 修改／启停会员方案 | `PATCH` | `/admin/membership-plans/{id}` | 是 | 是 | `membership:write` | [MembershipPlanPatch](02-data-models.md#membershipplanpatch) | [AdminMembershipPlan](02-data-models.md#adminmembershipplan) | 200 |
-| [A162](#a162) | 开通／续期网站会员 | `PUT` | `/admin/users/{id}/membership` | 是 | 是 | `membership:write` | [MembershipWrite](02-data-models.md#membershipwrite) | [MembershipDetail](02-data-models.md#membershipdetail) | 200 |
-| [A163](#a163) | 撤销网站会员 | `POST` | `/admin/users/{id}/membership/revoke` | 是 | 是 | `membership:write` | [MembershipRevoke](02-data-models.md#membershiprevoke) | [MembershipDetail](02-data-models.md#membershipdetail) | 200 |
+| [A154](#a154) | 查询用户及会员状态 | `GET` | `/admin/users` | 是 | 是 | `users:read` | — | [PageAdminUser](02-data-models.md#pageadminuser) | 200 |
+| [A155](#a155) | 用户详情及会员信息 | `GET` | `/admin/users/{id}` | 是 | 是 | `users:read` | — | [AdminUser](02-data-models.md#adminuser) | 200 |
+| [A156](#a156) | 用户会员权益详情 | `GET` | `/admin/users/{id}/membership` | 是 | 是 | `membership:write` | — | [MembershipDetail](02-data-models.md#membershipdetail) | 200 |
+| [A157](#a157) | 封禁用户 | `POST` | `/admin/users/{id}/ban` | 是 | 是 | `users:ban` | [UserBanInput](02-data-models.md#userbaninput) | [AdminUser](02-data-models.md#adminuser) | 200 |
+| [A158](#a158) | 解除用户封禁 | `POST` | `/admin/users/{id}/unban` | 是 | 是 | `users:ban` | [UserUnbanInput](02-data-models.md#userunbaninput) | [AdminUser](02-data-models.md#adminuser) | 200 |
+| [A159](#a159) | 管理会员方案 | `GET` | `/admin/membership-plans` | 是 | 是 | `membership:write` | — | [PageAdminMembershipPlan](02-data-models.md#pageadminmembershipplan) | 200 |
+| [A160](#a160) | 创建会员方案（停用） | `POST` | `/admin/membership-plans` | 是 | 是 | `membership:write` | [MembershipPlanCreate](02-data-models.md#membershipplancreate) | [AdminMembershipPlan](02-data-models.md#adminmembershipplan) | 201 |
+| [A161](#a161) | 会员方案详情 | `GET` | `/admin/membership-plans/{id}` | 是 | 是 | `membership:write` | — | [AdminMembershipPlan](02-data-models.md#adminmembershipplan) | 200 |
+| [A162](#a162) | 修改／启停会员方案 | `PATCH` | `/admin/membership-plans/{id}` | 是 | 是 | `membership:write` | [MembershipPlanPatch](02-data-models.md#membershipplanpatch) | [AdminMembershipPlan](02-data-models.md#adminmembershipplan) | 200 |
+| [A163](#a163) | 开通／续期网站会员 | `PUT` | `/admin/users/{id}/membership` | 是 | 是 | `membership:write` | [MembershipWrite](02-data-models.md#membershipwrite) | [MembershipDetail](02-data-models.md#membershipdetail) | 200 |
+| [A164](#a164) | 撤销网站会员 | `POST` | `/admin/users/{id}/membership/revoke` | 是 | 是 | `membership:write` | [MembershipRevoke](02-data-models.md#membershiprevoke) | [MembershipDetail](02-data-models.md#membershipdetail) | 200 |
+| [A165](#a165) | 用户会员购买权益段 | `GET` | `/admin/users/{id}/membership/periods` | 是 | 是 | `membership:write` | — | [PageMembershipPeriod](02-data-models.md#pagemembershipperiod) | 200 |
 
 ### 参数与业务约束
 
-<a id="a153"></a>
-#### A153 查询用户及会员状态
+<a id="a154"></a>
+#### A154 查询用户及会员状态
 
 `GET /api/v1/admin/users`
 
-**实现状态：** 设计中（尚未实现）
+**实现状态：** 已实现
+
+按 createdAt,id 降序；手机号精确匹配，响应仍脱敏；搜索值不写入审计。createdFrom/createdTo 均包含边界，from<=to。仅允许列出的筛选字段。
 
 | 位置 | 名称 | 类型 | 必填 | 说明与约束 |
 |---|---|---|---|---|
 | query | `page` | integer | 否 | 页码，默认 1。 最小: `1`；默认: `1` |
 | query | `pageSize` | integer | 否 | 每页条数，默认 20，最多 100。 最小: `1`；最大: `100`；默认: `20` |
-| query | `userId` | string | 否 | 不透明业务 ID；前端必须按字符串保存。 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
-| query | `nickname` | string | 否 | 昵称关键字。 最长: `32` |
-| query | `status` | string | 否 | 用户状态。 枚举: `ACTIVE, BANNED, DEACTIVATED` |
-| query | `hasMembership` | boolean | 否 | 是否有效会员。  |
+| query | `keyword` | string | 否 | 昵称字面子串；% 和 _ 不作为通配符。 最短: `1`；最长: `64` |
+| query | `phone` | string | 否 | E.164 手机号；默认支持 +86，其他地区由短信配置决定。 正则: `^\+[1-9]\d{7,14}$` |
+| query | `status` | string | 否 | 账号状态。 枚举: `ACTIVE, BANNED, DEACTIVATED` |
+| query | `hasMembership` | boolean | 否 | 按当前时间及账号状态过滤有效会员。  |
 | query | `createdFrom` | string | 否 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 格式: `date-time` |
 | query | `createdTo` | string | 否 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 格式: `date-time` |
 
 成功：HTTP `200`，`data` 为 [PageAdminUser](02-data-models.md#pageadminuser)。
 
-<a id="a154"></a>
-#### A154 用户详情及会员信息
+<a id="a155"></a>
+#### A155 用户详情及会员信息
 
 `GET /api/v1/admin/users/{id}`
 
-**实现状态：** 设计中（尚未实现）
+**实现状态：** 已实现
+
+返回脱敏用户资料和即时会员摘要，读取记录审计。
 
 | 位置 | 名称 | 类型 | 必填 | 说明与约束 |
 |---|---|---|---|---|
@@ -2684,14 +2711,14 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminUser](02-data-models.md#adminuser)。
 
-<a id="a155"></a>
-#### A155 用户会员权益详情
+<a id="a156"></a>
+#### A156 用户会员权益详情
 
 `GET /api/v1/admin/users/{id}/membership`
 
 **实现状态：** 已实现
 
-以服务端时间判断 startsAt <= now < expiresAt，且未撤销、账号有效。会员由管理员开通／续期／撤销；当前不提供会员方案购买。
+有效账号且管理员期限或 ACTIVE 购买权益段覆盖当前时间才 active=true；只覆盖 MEMBER 内容。membership 字段专指手工期限，购买明细见 /membership/periods。
 
 | 位置 | 名称 | 类型 | 必填 | 说明与约束 |
 |---|---|---|---|---|
@@ -2699,12 +2726,14 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [MembershipDetail](02-data-models.md#membershipdetail)。
 
-<a id="a156"></a>
-#### A156 封禁用户
+<a id="a157"></a>
+#### A157 封禁用户
 
 `POST /api/v1/admin/users/{id}/ban`
 
-**实现状态：** 设计中（尚未实现）
+**实现状态：** 已实现
+
+须 users:ban、最新 version 和 Idempotency-Key；封禁立即撤销全部客户端会话，解封后重新登录。保留订单及会员期限，封禁期间管理员仍可退款；会员计时不暂停。不支持 until。
 
 **必填请求头：** `Idempotency-Key`，16–128 位字母、数字、下划线或连字符；相同业务意图重试复用。
 
@@ -2716,12 +2745,14 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminUser](02-data-models.md#adminuser)。
 
-<a id="a157"></a>
-#### A157 解除用户封禁
+<a id="a158"></a>
+#### A158 解除用户封禁
 
 `POST /api/v1/admin/users/{id}/unban`
 
-**实现状态：** 设计中（尚未实现）
+**实现状态：** 已实现
+
+须 users:ban、最新 version 和 Idempotency-Key；封禁立即撤销全部客户端会话，解封后重新登录。保留订单及会员期限，封禁期间管理员仍可退款；会员计时不暂停。不支持 until。
 
 **必填请求头：** `Idempotency-Key`，16–128 位字母、数字、下划线或连字符；相同业务意图重试复用。
 
@@ -2733,38 +2764,41 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminUser](02-data-models.md#adminuser)。
 
-<a id="a158"></a>
-#### A158 管理会员方案
+<a id="a159"></a>
+#### A159 管理会员方案
 
 `GET /api/v1/admin/membership-plans`
 
-**实现状态：** 设计中（尚未实现）
+**实现状态：** 已实现
+
+按 sortOrder 升序、createdAt 降序、id 升序；公共接口只显示启用方案。
 
 | 位置 | 名称 | 类型 | 必填 | 说明与约束 |
 |---|---|---|---|---|
 | query | `page` | integer | 否 | 页码，默认 1。 最小: `1`；默认: `1` |
 | query | `pageSize` | integer | 否 | 每页条数，默认 20，最多 100。 最小: `1`；最大: `100`；默认: `20` |
-| query | `enabled` | boolean | 否 | 是否启用。  |
+| query | `keyword` | string | 否 | 方案名称子串。 最短: `1`；最长: `64` |
+| query | `enabled` | boolean | 否 | 启用状态。  |
 
 成功：HTTP `200`，`data` 为 [PageAdminMembershipPlan](02-data-models.md#pageadminmembershipplan)。
 
-<a id="a159"></a>
-#### A159 创建会员方案（停用）
+<a id="a160"></a>
+#### A160 创建会员方案（停用）
 
 `POST /api/v1/admin/membership-plans`
 
-**实现状态：** 设计中（尚未实现）
+**实现状态：** 已实现
 
 请求体：[MembershipPlanCreate](02-data-models.md#membershipplancreate)，完整字段及必填规则见对应对象。
 
 成功：HTTP `201`，`data` 为 [AdminMembershipPlan](02-data-models.md#adminmembershipplan)。
 
-<a id="a160"></a>
-#### A160 会员方案详情
+<a id="a161"></a>
+#### A161 会员方案详情
 
 `GET /api/v1/admin/membership-plans/{id}`
 
-**实现状态：** 设计中（尚未实现）
+**实现状态：** 已实现
 
 | 位置 | 名称 | 类型 | 必填 | 说明与约束 |
 |---|---|---|---|---|
@@ -2772,12 +2806,12 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminMembershipPlan](02-data-models.md#adminmembershipplan)。
 
-<a id="a161"></a>
-#### A161 修改／启停会员方案
+<a id="a162"></a>
+#### A162 修改／启停会员方案
 
 `PATCH /api/v1/admin/membership-plans/{id}`
 
-**实现状态：** 设计中（尚未实现）
+**实现状态：** 已实现
 
 | 位置 | 名称 | 类型 | 必填 | 说明与约束 |
 |---|---|---|---|---|
@@ -2787,14 +2821,14 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [AdminMembershipPlan](02-data-models.md#adminmembershipplan)。
 
-<a id="a162"></a>
-#### A162 开通／续期网站会员
+<a id="a163"></a>
+#### A163 开通／续期网站会员
 
 `PUT /api/v1/admin/users/{id}/membership`
 
 **实现状态：** 已实现
 
-首次 version=0；续期先读取当前记录，再设置完整起止时间和 version。用户、会员记录与管理员权限在事务内校验；乐观锁避免覆盖并发更新。此操作不创建订单或收款。
+首次 version=0；续期先读取当前记录，再设置完整起止时间和 version。用户、会员记录与管理员权限在事务内校验；乐观锁避免覆盖并发更新。此操作不创建订单或收款。 存在未到期 ACTIVE 付费段或退款中段时返回 MEMBERSHIP_PAID_TERM_EXISTS，防止覆盖已付费时长。
 
 | 位置 | 名称 | 类型 | 必填 | 说明与约束 |
 |---|---|---|---|---|
@@ -2804,14 +2838,14 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [MembershipDetail](02-data-models.md#membershipdetail)。
 
-<a id="a163"></a>
-#### A163 撤销网站会员
+<a id="a164"></a>
+#### A164 撤销网站会员
 
 `POST /api/v1/admin/users/{id}/membership/revoke`
 
 **实现状态：** 已实现
 
-立即停止新的会员访问授权。本地视频每次 Range 请求重查会员；已经交付的第三方链接／密码需在飞书端另行更新。
+只撤销手工期限，存在未到期付费段或退款中段则返回 MEMBERSHIP_PAID_TERM_EXISTS；付费段通过订单退款维护。会员内容访问每次重查资格。
 
 | 位置 | 名称 | 类型 | 必填 | 说明与约束 |
 |---|---|---|---|---|
@@ -2821,21 +2855,38 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [MembershipDetail](02-data-models.md#membershipdetail)。
 
+<a id="a165"></a>
+#### A165 用户会员购买权益段
+
+`GET /api/v1/admin/users/{id}/membership/periods`
+
+**实现状态：** 已实现
+
+分页读取指定用户权益段，按 createdAt 降序、id 升序，读取审计；无用户返回 404。
+
+| 位置 | 名称 | 类型 | 必填 | 说明与约束 |
+|---|---|---|---|---|
+| path | `id` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+| query | `page` | integer | 否 | 页码，默认 1。 最小: `1`；默认: `1` |
+| query | `pageSize` | integer | 否 | 每页条数，默认 20，最多 100。 最小: `1`；最大: `100`；默认: `20` |
+
+成功：HTTP `200`，`data` 为 [PageMembershipPeriod](02-data-models.md#pagemembershipperiod)。
+
 
 <a id="module-18"></a>
 ## 18 站内通知与审计管理
 
 | 编号 | 接口名称 | 方法 | URL | 是否登录 | 是否管理员 | 额外权限 | 请求体 | 成功 data | HTTP |
 |---|---|---|---|---|---|---|---|---|---|
-| [A164](#a164) | 通知任务列表 | `GET` | `/admin/notification-tasks` | 是 | 是 | `notifications:write` | — | [PageNotificationTask](02-data-models.md#pagenotificationtask) | 200 |
-| [A165](#a165) | 创建站内通知任务 | `POST` | `/admin/notification-tasks` | 是 | 是 | `notifications:write` | [NotificationTaskInput](02-data-models.md#notificationtaskinput) | [NotificationTask](02-data-models.md#notificationtask) | 202 |
-| [A166](#a166) | 通知投递结果 | `GET` | `/admin/notification-tasks/{id}` | 是 | 是 | `notifications:write` | — | [NotificationTask](02-data-models.md#notificationtask) | 200 |
-| [A167](#a167) | 操作审计查询 | `GET` | `/admin/audit-logs` | 是 | 是 | `audit:read` | — | [PageAuditLog](02-data-models.md#pageauditlog) | 200 |
+| [A166](#a166) | 通知任务列表 | `GET` | `/admin/notification-tasks` | 是 | 是 | `notifications:write` | — | [PageNotificationTask](02-data-models.md#pagenotificationtask) | 200 |
+| [A167](#a167) | 创建站内通知任务 | `POST` | `/admin/notification-tasks` | 是 | 是 | `notifications:write` | [NotificationTaskInput](02-data-models.md#notificationtaskinput) | [NotificationTask](02-data-models.md#notificationtask) | 202 |
+| [A168](#a168) | 通知投递结果 | `GET` | `/admin/notification-tasks/{id}` | 是 | 是 | `notifications:write` | — | [NotificationTask](02-data-models.md#notificationtask) | 200 |
+| [A169](#a169) | 操作审计查询 | `GET` | `/admin/audit-logs` | 是 | 是 | `audit:read` | — | [PageAuditLog](02-data-models.md#pageauditlog) | 200 |
 
 ### 参数与业务约束
 
-<a id="a164"></a>
-#### A164 通知任务列表
+<a id="a166"></a>
+#### A166 通知任务列表
 
 `GET /api/v1/admin/notification-tasks`
 
@@ -2848,8 +2899,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [PageNotificationTask](02-data-models.md#pagenotificationtask)。
 
-<a id="a165"></a>
-#### A165 创建站内通知任务
+<a id="a167"></a>
+#### A167 创建站内通知任务
 
 `POST /api/v1/admin/notification-tasks`
 
@@ -2861,8 +2912,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `202`，`data` 为 [NotificationTask](02-data-models.md#notificationtask)。
 
-<a id="a166"></a>
-#### A166 通知投递结果
+<a id="a168"></a>
+#### A168 通知投递结果
 
 `GET /api/v1/admin/notification-tasks/{id}`
 
@@ -2874,8 +2925,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 成功：HTTP `200`，`data` 为 [NotificationTask](02-data-models.md#notificationtask)。
 
-<a id="a167"></a>
-#### A167 操作审计查询
+<a id="a169"></a>
+#### A169 操作审计查询
 
 `GET /api/v1/admin/audit-logs`
 

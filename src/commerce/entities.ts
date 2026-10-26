@@ -88,13 +88,14 @@ export class Address extends Versioned {
   @Column({ name: 'is_default', type: 'boolean', default: false }) isDefault!: boolean;
 }
 export interface ItemSnapshot {
-  id: string; resourceId: string; resourceType: 'SKU' | 'COURSE'; productId: string | null; title: string;
+  id: string; resourceId: string; resourceType: 'SKU' | 'COURSE' | 'MEMBERSHIP_PLAN'; productId: string | null; title: string;
   skuAttributes: Attribute[]; coverUrl: string | null; quantity: number; unitPriceCents: number;
   subtotalCents: number; refundedQuantity: number; refundedAmountCents: number;
+  membershipSnapshot?: { planId: string; name: string; durationDays: number; priceCents: number; benefitCodes: string[] };
 }
 @Entity('order_quotes')
 export class Quote extends RecordBase {
-  @Column({ type: 'varchar', length: 16, default: 'PRODUCT' }) type!: 'PRODUCT' | 'COURSE';
+  @Column({ type: 'varchar', length: 16, default: 'PRODUCT' }) type!: 'PRODUCT' | 'COURSE' | 'MEMBERSHIP';
   @Column({ name: 'user_id', type: 'varchar', length: 36 }) userId!: string;
   @Column({ type: 'json', nullable: true }) address!: AddressSnapshot | null;
   @Column({ type: 'json' }) items!: ItemSnapshot[];
@@ -104,7 +105,7 @@ export class Quote extends RecordBase {
 export const ORDER_STATUSES = ['PENDING_PAYMENT', 'PENDING_SHIPMENT', 'PENDING_RECEIPT', 'COMPLETED', 'CANCELLED', 'CLOSED'] as const;
 @Entity('commerce_orders')
 export class Order extends Versioned {
-  @Column({ type: 'varchar', length: 16, default: 'PRODUCT' }) type!: 'PRODUCT' | 'COURSE';
+  @Column({ type: 'varchar', length: 16, default: 'PRODUCT' }) type!: 'PRODUCT' | 'COURSE' | 'MEMBERSHIP';
   @Column({ name: 'user_id', type: 'varchar', length: 36 }) userId!: string;
   @Column({ name: 'quote_id', type: 'varchar', length: 36 }) quoteId!: string;
   @Column({ name: 'order_no', type: 'varchar', length: 40 }) orderNo!: string;
@@ -130,6 +131,8 @@ export class OrderItem extends RecordBase {
   @Column({ name: 'resource_id', type: 'varchar', length: 36, nullable: true }) resourceId!: string | null;
   @Column({ name: 'product_id', type: 'varchar', length: 36, nullable: true }) productId!: string | null;
   @Column({ name: 'course_id', type: 'varchar', length: 36, nullable: true }) courseId!: string | null;
+  @Column({ name: 'membership_plan_id', type: 'varchar', length: 36, nullable: true }) membershipPlanId!: string | null;
+  @Column({ name: 'membership_snapshot', type: 'json', nullable: true }) membershipSnapshot!: ItemSnapshot['membershipSnapshot'] | null;
   @Column({ type: 'varchar', length: 120 }) title!: string;
   @Column({ name: 'sku_attributes', type: 'json' }) skuAttributes!: Attribute[];
   @Column({ name: 'cover_url', type: 'varchar', length: 2048, nullable: true }) coverUrl!: string | null;
@@ -138,7 +141,7 @@ export class OrderItem extends RecordBase {
   @Column({ name: 'subtotal_cents', type: 'int', unsigned: true }) subtotalCents!: number;
   @Column({ name: 'refunded_quantity', type: 'int', unsigned: true, default: 0 }) refundedQuantity!: number;
   @Column({ name: 'refunded_amount_cents', type: 'int', unsigned: true, default: 0 }) refundedAmountCents!: number;
-  get resourceType(): 'SKU' | 'COURSE' { return this.courseId ? 'COURSE' : 'SKU'; }
+  get resourceType(): 'SKU' | 'COURSE' | 'MEMBERSHIP_PLAN' { return this.membershipPlanId ? 'MEMBERSHIP_PLAN' : this.courseId ? 'COURSE' : 'SKU'; }
 }
 @Entity('shipments')
 export class Shipment extends Versioned {

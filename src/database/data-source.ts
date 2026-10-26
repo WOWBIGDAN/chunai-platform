@@ -7,7 +7,8 @@ import { CreateAuth1792713600000 } from './migrations/1792713600000-CreateAuth';
 import { CreateCommerce1792800000000 } from './migrations/1792800000000-CreateCommerce';
 import { commerceEntities } from '../commerce/entities';
 import { contentEntities } from '../content/entities';
-import { UserMembership } from '../membership/entities';
+import { membershipEntities } from '../membership/entities';
+import { MembershipPurchasesUsers1793059200000 } from './migrations/1793059200000-MembershipPurchasesUsers';
 import { ExternalMediaMembership1792972800000 } from './migrations/1792972800000-ExternalMediaMembership';
 import { CreateContent1792886400000 } from './migrations/1792886400000-CreateContent';
 
@@ -24,8 +25,8 @@ export function databaseOptions(): DataSourceOptions {
     database,
     charset: 'utf8mb4_unicode_ci',
     timezone: 'Z',
-    entities: [User, AuthSession, RefreshToken, UserMembership, ...commerceEntities, ...contentEntities],
-    migrations: [CreateAuth1792713600000, CreateCommerce1792800000000, CreateContent1792886400000, ExternalMediaMembership1792972800000],
+    entities: [User, AuthSession, RefreshToken, ...membershipEntities, ...commerceEntities, ...contentEntities],
+    migrations: [CreateAuth1792713600000, CreateCommerce1792800000000, CreateContent1792886400000, ExternalMediaMembership1792972800000, MembershipPurchasesUsers1793059200000],
     migrationsTableName: 'schema_migrations',
     synchronize: false,
     migrationsRun: false,

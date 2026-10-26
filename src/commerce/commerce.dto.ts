@@ -105,10 +105,11 @@ export class PurchaseLineDto {
   @IsInt() @Min(1) @Max(999) quantity!: number;
 }
 export class QuoteDto {
-  @IsIn(['PRODUCT', 'COURSE']) type!: 'PRODUCT' | 'COURSE';
+  @IsIn(['PRODUCT', 'COURSE', 'MEMBERSHIP']) type!: 'PRODUCT' | 'COURSE' | 'MEMBERSHIP';
   @ValidateIf(o => o.type === 'PRODUCT' || o.addressId !== undefined) @IsUUID('4') addressId?: string;
   @ValidateIf(o => o.type === 'PRODUCT' || o.items !== undefined) @IsArray() @ArrayMinSize(1) @ArrayMaxSize(50) @ValidateNested({ each: true }) @Type(() => PurchaseLineDto) items?: PurchaseLineDto[];
   @ValidateIf(o => o.type === 'COURSE' || o.courseId !== undefined) @IsUUID('4') courseId?: string;
+  @ValidateIf(o => o.type === 'MEMBERSHIP' || o.planId !== undefined) @IsUUID('4') planId?: string;
 }
 export class CreateOrderDto { @IsUUID('4') quoteId!: string; }
 export class CancelOrderDto extends VersionDto { @IsString() @Length(1, 200) @Matches(/\S/) reason!: string; }
@@ -117,7 +118,7 @@ export class DateQueryDto extends PageDto {
   @Optional() @IsISO8601({ strict: true }) createdTo?: string;
 }
 export class OrderQueryDto extends DateQueryDto {
-  @Optional() @IsIn(['PRODUCT', 'COURSE']) type?: string;
+  @Optional() @IsIn(['PRODUCT', 'COURSE', 'MEMBERSHIP']) type?: string;
   @Optional() @IsIn(ORDER_STATUSES) status?: typeof ORDER_STATUSES[number];
   @Optional() @IsIn(['UNPAID', 'PAID', 'PARTIALLY_REFUNDED', 'REFUNDED']) paymentStatus?: string;
   @Optional() @IsIn(['NONE', 'PROCESSING', 'PARTIALLY_COMPLETED', 'COMPLETED']) afterSaleStatus?: string;

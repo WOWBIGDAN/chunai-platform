@@ -263,27 +263,29 @@ Content-Type: application/json
 
 ## 课程与会员购买
 
-当前实现：课程使用测试付款完成单独购买；网站会员通过管理员的 `PUT /admin/users/{id}/membership` 维护期限，撤销使用 `/revoke`。`GET /me/membership` 返回 `active`、`expiresAt`、`benefitCodes` 和 `membership` 记录，有记录时保留原到期时间，状态以 `active` 为准。当前支持 FREE／PURCHASE／MEMBER 三种独立策略，飞书仅供有效会员访问。调用示例见 [当前内容与会员说明](08-content-courses.md)。**下文会员购买、权益段、会员退款及混合访问策略为后续设计，尚未实现，不用于当前联调。**
+课程与会员均已接入测试付款流程。会员套餐维护、购买续期、退款及用户管理的完整规则见 [会员购买与用户管理](09-membership-users.md)。当前支持 FREE／PURCHASE／MEMBER 三种独立策略，飞书仅供有效网站会员访问。
 
 课程试算：
 
 ```json
-{"type":"COURSE","courseId":"course_10001"}
+{"type":"COURSE","courseId":"4f553f14-488a-4cd2-a00c-146c516ceff7"}
 ```
 
 会员试算：
 
 ```json
-{"type":"MEMBERSHIP","planId":"plan_30days"}
+{"type":"MEMBERSHIP","planId":"87159c45-1398-4150-97d7-9d66d7e61b74"}
 ```
 
-二者都复用 POST /order-quotes → POST /orders → POST /orders/{id}/payment-attempts。无需收货地址；如传入地址或产品 items 会校验失败。合法入账事务完成后，数字订单直接 COMPLETED，再由客户端重取会员／已购列表。
+二者都复用 POST /order-quotes → POST /orders → 管理员 POST /admin/orders/{id}/test-payment。无需收货地址；如传入地址或产品 items 会校验失败。付款与权益在同一事务完成，数字订单直接 COMPLETED，再由客户端重取会员／已购列表。真实 payment-attempts 渠道仍未接入。
 
-课程权益唯一关联购买来源订单，退款成功撤销该来源的购买权；若用户同时拥有会员权益且课程支持会员，仍可通过会员访问。会员到期不会撤销独立购买课程。
+课程权益唯一关联购买来源订单，退款成功撤销该来源的购买权。会员解锁 MEMBER 内容，PURCHASE 课程需独立购买；会员到期不会撤销独立购买课程。
 
-会员按购买成功顺序追加权益段：购买日 10 月 22 日 10:00 开始 30×24h，到 11 月 21 日 10:00 结束；续购从已有段的结束时间追加。每段保留方案、天数、AI 次数和权益编码快照，方案后续改价不改历史。不同方案续费仅在新段开始后切换权益，不把未来高额方案提前生效。
+会员按购买成功顺序追加权益段：购买日 10 月 22 日 10:00 开始 30×24h，到 11 月 21 日 10:00 结束；续购从未撤销手工期限及现有购买段的最晚结束时间追加。每段保留方案、价格、天数和权益编码快照，方案后续改价不改历史。当前权益仅支持 MEMBER_CONTENT，不包含 AI 次数。
 
-GET /me/membership 返回当前有效段的权益，以及未撤销已购段链的到期时间。没有当前有效段时 active=false、benefitCodes=[]、currentPlanName=null；无任何有效或未来段时 expiresAt=null。会员判断使用 start<=now<end。未来未开始会员段退款成功后撤销该段，并在同一用户权益锁下重排后续未开始段，保持剩余时长和快照不变。
+GET /me/membership 返回 active、expiresAt、benefitCodes、membership（仅手工记录）。没有当前有效期限时 active=false、benefitCodes=[]；expiresAt 为未撤销手工期限与 ACTIVE 付费段的最晚到期时间，包括已过期记录，无候选记录才为 null。会员判断要求账号 ACTIVE 且 start<=now<end。购买明细见分页 GET /me/membership/periods。
+
+仅未来未开始的完整会员段支持全额退款。受理后冻结所有未来付费段，当前段继续生效；处理期间拒绝新会员付款或手工改期。成功撤销目标段，失败恢复目标段，均在用户锁内按原顺序衔接其余段，保留完整天数和快照。
 
 同一个用户并发购买／退款会员时锁定用户权益账本，保证不重复增加或缩短别人的会员段。数字退款只有管理员受控入口，客户端不能修改期限或直接增加会员。
 

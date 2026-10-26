@@ -2,11 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { DataSource, EntityManager } from 'typeorm';
 import { ApiException } from '../common/http';
+import { PageDto } from '../auth/auth.dto';
 import { User } from '../database/entities';
-import { Actor, actorId, checkVersion, CommerceTransaction, conflict, missing, touch } from '../commerce/transaction';
-import { UserMembership } from './entities';
+import { Actor, actorId, checkVersion, CommerceTransaction, conflict, missing, page, touch } from '../commerce/transaction';
+import { MembershipEntitlement, UserMembership } from './entities';
 import { MembershipRevokeDto, MembershipSaveDto } from './membership.dto';
-import { summarizeMembership } from './membership-access';
+import { membershipSummary } from './membership-access';
+import { assertManualMembershipWritable } from './membership-purchase';
 
 @Injectable()
 export class MembershipService {
@@ -14,13 +16,32 @@ export class MembershipService {
 
   private async detail(m: EntityManager, userId: string) {
     const record = await m.findOneBy(UserMembership, { userId });
-    return { ...await summarizeMembership(m, record), membership: record ? {
+    return { ...await membershipSummary(m, userId), membership: record ? {
       id: record.id, userId: record.userId, startsAt: record.startsAt.toISOString(), expiresAt: record.expiresAt.toISOString(),
       revokedAt: record.revokedAt?.toISOString() ?? null, version: record.version,
     } : null };
   }
 
   mine(userId: string) { return this.db.transaction('REPEATABLE READ', m => this.detail(m, userId)); }
+
+  private async periodList(m: EntityManager, userId: string, query: PageDto) {
+    const [items, total] = await m.getRepository(MembershipEntitlement).createQueryBuilder('p')
+      .where('p.userId = :userId', { userId }).orderBy('p.createdAt', 'DESC').addOrderBy('p.id', 'ASC')
+      .skip((query.page - 1) * query.pageSize).take(query.pageSize).getManyAndCount();
+    return page(items, total, query);
+  }
+
+  myPeriods(userId: string, query: PageDto) {
+    return this.db.transaction('REPEATABLE READ', m => this.periodList(m, userId, query));
+  }
+
+  periods(actor: Actor, userId: string, query: PageDto) {
+    return this.tx.run(actor, async m => {
+      if (!await m.existsBy(User, { id: userId })) throw missing();
+      await this.tx.audit(m, actor, 'membership-periods.read', userId);
+      return this.periodList(m, userId, query);
+    });
+  }
 
   get(actor: Actor, userId: string) {
     return this.tx.run(actor, async m => {
@@ -42,6 +63,7 @@ export class MembershipService {
       const user = await m.findOne(User, { where: { id: userId }, lock: { mode: 'pessimistic_write' } });
       if (!user) throw missing();
       if (user.status !== 'ACTIVE') throw new ApiException(409, 'ACCOUNT_UNAVAILABLE', '账号当前不可开通会员');
+      await assertManualMembershipWritable(m, userId);
       const existing = await m.findOne(UserMembership, { where: { userId }, lock: { mode: 'pessimistic_write' } });
       if (existing) checkVersion(existing, dto.version);
       else if (dto.version !== 0) conflict('VERSION_CONFLICT', '会员记录不存在，首次开通请使用 version=0');
@@ -60,6 +82,7 @@ export class MembershipService {
     return this.tx.run(actor, async m => {
       const user = await m.findOne(User, { where: { id: userId }, lock: { mode: 'pessimistic_write' } });
       if (!user) throw missing();
+      await assertManualMembershipWritable(m, userId);
       const record = await m.findOne(UserMembership, { where: { userId }, lock: { mode: 'pessimistic_write' } });
       if (!record) throw missing();
       checkVersion(record, dto.version);

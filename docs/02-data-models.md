@@ -227,6 +227,9 @@
 - [BilibiliVideoCreate](#bilibilivideocreate)
 - [FeishuVideoCreate](#feishuvideocreate)
 - [ExternalVideoCreate](#externalvideocreate)
+- [MembershipPlanSnapshot](#membershipplansnapshot)
+- [MembershipPeriod](#membershipperiod)
+- [PageMembershipPeriod](#pagemembershipperiod)
 - [ContentCategory](#contentcategory)
 - [ProductCategory](#productcategory)
 - [CourseSummary](#coursesummary)
@@ -366,7 +369,7 @@
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
 | `active` | boolean | 是 | 当前是否为有效会员。 |  |
-| `expiresAt` | string / null | 是 | 有记录时返回存储的到期时间，包括未来、已过期或已撤销记录；无记录时为 null。有效性以 active 为准。 | 格式: `date-time` |
+| `expiresAt` | string / null | 是 | 未撤销的管理员期限和 ACTIVE 付费段的最晚到期时间，包括未来或已过期时段；无候选记录时为 null。请用 active 判断当前资格。 | 格式: `date-time` |
 | `benefitCodes` | string[] | 是 | 有效时为 [MEMBER_CONTENT]，无效时为 [] |  |
 
 示例（仅结构示意，不作为可用业务 ID）：
@@ -391,11 +394,12 @@
 |---|---|---|---|---|
 | `id` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 | `nickname` | string | 是 | 昵称。 | 最短: `1`；最长: `32` |
-| `avatarUrl` | string / null | 是 | HTTPS URL。 | 格式: `uri` |
+| `avatarUrl` | string / null | 是 | 已上传到 CONTENT_IMAGE_OSS_HOST 的永久 HTTPS 对象地址，默认 chunai-photo.oss-cn-hangzhou.aliyuncs.com；不得带签名查询、fragment、账号或端口。null 清空头像，不传则保持。 | 格式: `uri`；最短: `1`；最长: `2048` |
 | `phoneMasked` | string | 是 | 脱敏手机。 |  |
 | `status` | string | 是 | 账号状态。 | 枚举: `ACTIVE, BANNED, DEACTIVATED` |
 | `membership` | [MembershipSummary](#membershipsummary) | 是 | 见关联对象。 |  |
 | `createdAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
+| `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1`；最大: `2147483647` |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
@@ -403,7 +407,7 @@
 {
   "id": "id_10001",
   "nickname": "小雨",
-  "avatarUrl": "https://cdn.example.com/cover.jpg",
+  "avatarUrl": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/avatars/replace-with-existing-object.jpg",
   "phoneMasked": "138****0000",
   "status": "ACTIVE",
   "membership": {
@@ -413,7 +417,8 @@
       "MEMBER_CONTENT"
     ]
   },
-  "createdAt": "2026-10-22T02:00:00Z"
+  "createdAt": "2026-10-22T02:00:00Z",
+  "version": 1
 }
 ```
 
@@ -444,7 +449,7 @@
   "user": {
     "id": "id_10001",
     "nickname": "小雨",
-    "avatarUrl": "https://cdn.example.com/cover.jpg",
+    "avatarUrl": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/avatars/replace-with-existing-object.jpg",
     "phoneMasked": "138****0000",
     "status": "ACTIVE",
     "membership": {
@@ -454,7 +459,8 @@
         "MEMBER_CONTENT"
       ]
     },
-    "createdAt": "2026-10-22T02:00:00Z"
+    "createdAt": "2026-10-22T02:00:00Z",
+    "version": 1
   }
 }
 ```
@@ -616,20 +622,22 @@
 <a id="userpatch"></a>
 ## UserPatch
 
-修改本人资料。未传保持；avatarMediaId=null 清空头像。
+修改本人昵称和头像，必须提供当前 version 及至少一个修改字段；不接受手机号、状态、会员期限或权限字段。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
-| `nickname` | string | 否 | 昵称。 | 最短: `1`；最长: `32` |
-| `avatarMediaId` | string / null | 否 | 本人上传且用途为 AVATAR 的 READY 图片。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+| `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1`；最大: `2147483647` |
+| `nickname` | string | 否 | 前后空白会去除，禁止控制字符。 | 最短: `1`；最长: `32`；正则: `^[^\u0000-\u001f\u007f]+$` |
+| `avatarUrl` | string / null | 否 | 已上传到 CONTENT_IMAGE_OSS_HOST 的永久 HTTPS 对象地址，默认 chunai-photo.oss-cn-hangzhou.aliyuncs.com；不得带签名查询、fragment、账号或端口。null 清空头像，不传则保持。 | 格式: `uri`；最短: `1`；最长: `2048` |
 
-对象至少包含 1 个字段（包含 version 时，至少另传一个可修改字段）。
+对象至少包含 2 个字段（包含 version 时，至少另传一个可修改字段）。
 
 示例（仅结构示意，不作为可用业务 ID）：
 
 ```json
 {
-  "nickname": "小雨"
+  "version": 1,
+  "nickname": "cs测试昵称"
 }
 ```
 
@@ -2259,6 +2267,7 @@ SKU 的规格维度。
 | `subtotalCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `0`；最大: `9007199254740991` |
 | `refundedQuantity` | integer | 是 | 已完成退款件数。 | 最小: `0` |
 | `refundedAmountCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `0`；最大: `9007199254740991` |
+| `membershipSnapshot` | object / null | 否 | 会员订单为成交方案快照；其他类型为 null 或省略。 |  |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
@@ -2299,7 +2308,7 @@ SKU 的规格维度。
 | `shippingFeeCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `0`；最大: `9007199254740991` |
 | `payableAmountCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `0`；最大: `9007199254740991` |
 | `currency` | string | 是 | 币种。 | 枚举: `CNY` |
-| `address` | object / null | 否 | 产品地址快照；课程订单为 null。 |  |
+| `address` | object / null | 否 | 实物订单地址快照；课程和会员订单为 null。 |  |
 | `expiresAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
 
 示例（仅结构示意，不作为可用业务 ID）：
@@ -2462,7 +2471,7 @@ SKU 的规格维度。
 <a id="orderdetail"></a>
 ## OrderDetail
 
-本人订单详情；课程订单 address=null，无运费和实物履约。
+本人订单详情；COURSE 和 MEMBERSHIP 不预占库存，不进入发货、收货或实物售后，address=null，运费为 0。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
@@ -2482,7 +2491,7 @@ SKU 的规格维度。
 | `paymentDeadlineAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
 | `paidAt` | string / null | 是 | UTC 时间；未发生时为 null。 | 格式: `date-time` |
 | `createdAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
-| `address` | object / null | 否 | 产品地址快照；课程订单为 null。 |  |
+| `address` | object / null | 否 | 实物订单地址快照；课程和会员订单为 null。 |  |
 | `actions` | [OrderActions](#orderactions) | 是 | 见关联对象。 |  |
 | `cancelReason` | string / null | 是 | 文本。 | 最长: `2000` |
 | `cancelledAt` | string / null | 是 | UTC 时间；未发生时为 null。 | 格式: `date-time` |
@@ -3034,7 +3043,7 @@ SKU 的规格维度。
 <a id="digitalrefundinput"></a>
 ## DigitalRefundInput
 
-人工全额退款数字订单；不接受金额；成功后撤销对应购买权益。
+管理员发起数字订单全额退款；课程遵循原规则，会员仅允许尚未开始的完整未来权益段。请求不接受金额。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
@@ -3054,33 +3063,39 @@ SKU 的规格维度。
 <a id="membershipplan"></a>
 ## MembershipPlan
 
-会员方案快照；一期无自动续费。
+会员方案；公开接口只返回启用项。无自动续费，当前只授予 MEMBER_CONTENT。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
 | `id` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
-| `name` | string | 是 | 方案名。 | 最短: `1`；最长: `64` |
-| `priceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `1`；最大: `9007199254740991` |
-| `currency` | string | 是 | 币种。 | 枚举: `CNY` |
-| `durationDays` | integer | 是 | 有效天数；按 durationDays*24h 延长。 | 最小: `1`；最大: `3660` |
-| `aiDailyLimit` | integer | 是 | 该方案每日 AI 次数；自然日按 Asia/Shanghai。 | 最小: `0` |
-| `benefitCodes` | string[] | 是 | 权益 | 元素不重复 |
-| `description` | string | 是 | 文本。 | 最长: `2000` |
+| `name` | string | 是 | 会员方案名称；去除前后空白。 | 最短: `1`；最长: `64` |
+| `description` | string | 是 | 方案说明，允许空字符串。 | 最长: `2000` |
+| `durationDays` | integer | 是 | 每一天为固定 24 小时。 | 最小: `1`；最大: `3650` |
+| `priceCents` | integer | 是 | 人民币分；客户端不能自行决定成交金额。 | 最小: `1`；最大: `100000000` |
+| `benefitCodes` | string[] | 是 | 仅支持 MEMBER_CONTENT；AI 次数和会员组合权益尚未接入。 | 最少项: `1`；最多项: `1`；元素不重复 |
+| `sortOrder` | integer | 是 | 公开展示顺序，小值优先。 | 最小: `0`；最大: `1000000` |
+| `enabled` | boolean | 是 | 是否可购买；停用后公共接口不可见。 |  |
+| `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1`；最大: `2147483647` |
+| `createdAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
+| `updatedAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
 ```json
 {
   "id": "id_10001",
-  "name": "30 天会员",
-  "priceCents": 9900,
-  "currency": "CNY",
+  "name": "cs30天会员",
+  "description": "cs会员内容访问测试方案",
   "durationDays": 30,
-  "aiDailyLimit": 100,
+  "priceCents": 9900,
   "benefitCodes": [
-    "MEMBER_COURSES"
+    "MEMBER_CONTENT"
   ],
-  "description": "示例内容"
+  "sortOrder": 0,
+  "enabled": false,
+  "version": 1,
+  "createdAt": "2026-10-22T02:00:00Z",
+  "updatedAt": "2026-10-22T02:00:00Z"
 }
 ```
 
@@ -3088,30 +3103,25 @@ SKU 的规格维度。
 <a id="membershipplancreate"></a>
 ## MembershipPlanCreate
 
-创建会员方案，默认停用。
+新建方案默认停用；需要另外 PATCH enabled=true 才可购买，不接受 enabled、currency 或 AI 次数字段。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
-| `name` | string | 是 | 方案名。 | 最短: `1`；最长: `64` |
-| `priceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `1`；最大: `9007199254740991` |
-| `durationDays` | integer | 是 | 有效天数；按 durationDays*24h 延长。 | 最小: `1`；最大: `3660` |
-| `aiDailyLimit` | integer | 是 | 该方案每日 AI 次数；自然日按 Asia/Shanghai。 | 最小: `0` |
-| `benefitCodes` | string[] | 是 | 权益 | 元素不重复 |
-| `description` | string | 是 | 文本。 | 最长: `2000` |
-| `sortOrder` | integer | 否 | 展示顺序。 | 最小: `0` |
+| `name` | string | 是 | 会员方案名称；去除前后空白。 | 最短: `1`；最长: `64` |
+| `description` | string | 是 | 方案说明，允许空字符串。 | 最长: `2000` |
+| `durationDays` | integer | 是 | 每一天为固定 24 小时。 | 最小: `1`；最大: `3650` |
+| `priceCents` | integer | 是 | 人民币分；客户端不能自行决定成交金额。 | 最小: `1`；最大: `100000000` |
+| `benefitCodes` | string[] | 否 | 仅支持 MEMBER_CONTENT；AI 次数和会员组合权益尚未接入。 | 最少项: `1`；最多项: `1`；元素不重复 |
+| `sortOrder` | integer | 否 | 公开展示顺序，小值优先。 | 最小: `0`；最大: `1000000` |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
 ```json
 {
-  "name": "30 天会员",
-  "priceCents": 9900,
+  "name": "cs30天会员",
+  "description": "cs会员内容访问测试方案",
   "durationDays": 30,
-  "aiDailyLimit": 100,
-  "benefitCodes": [
-    "MEMBER_COURSES"
-  ],
-  "description": "示例内容"
+  "priceCents": 9900
 }
 ```
 
@@ -3119,19 +3129,18 @@ SKU 的规格维度。
 <a id="membershipplanpatch"></a>
 ## MembershipPlanPatch
 
-只影响后续购买；历史订单与权益使用成交快照。
+必须提交 version 和至少一项修改；历史订单的价格、天数、权益快照保持不变。无删除接口，使用停用。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
-| `name` | string | 否 | 方案名。 | 最短: `1`；最长: `64` |
-| `priceCents` | integer | 否 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `1`；最大: `9007199254740991` |
-| `durationDays` | integer | 否 | 有效天数；按 durationDays*24h 延长。 | 最小: `1`；最大: `3660` |
-| `aiDailyLimit` | integer | 否 | 该方案每日 AI 次数；自然日按 Asia/Shanghai。 | 最小: `0` |
-| `benefitCodes` | string[] | 否 | 权益 | 元素不重复 |
-| `description` | string | 否 | 文本。 | 最长: `2000` |
-| `sortOrder` | integer | 否 | 展示顺序。 | 最小: `0` |
-| `enabled` | boolean | 否 | 是否可购买。 |  |
-| `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1` |
+| `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1`；最大: `2147483647` |
+| `name` | string | 否 | 会员方案名称；去除前后空白。 | 最短: `1`；最长: `64` |
+| `description` | string | 否 | 方案说明，允许空字符串。 | 最长: `2000` |
+| `durationDays` | integer | 否 | 每一天为固定 24 小时。 | 最小: `1`；最大: `3650` |
+| `priceCents` | integer | 否 | 人民币分；客户端不能自行决定成交金额。 | 最小: `1`；最大: `100000000` |
+| `benefitCodes` | string[] | 否 | 仅支持 MEMBER_CONTENT；AI 次数和会员组合权益尚未接入。 | 最少项: `1`；最多项: `1`；元素不重复 |
+| `sortOrder` | integer | 否 | 公开展示顺序，小值优先。 | 最小: `0`；最大: `1000000` |
+| `enabled` | boolean | 否 | 是否允许新报价、下单及待付款订单结算。 |  |
 
 对象至少包含 2 个字段（包含 version 时，至少另传一个可修改字段）。
 
@@ -3140,7 +3149,7 @@ SKU 的规格维度。
 ```json
 {
   "version": 1,
-  "name": "30 天会员"
+  "name": "cs30天会员"
 }
 ```
 
@@ -3148,39 +3157,39 @@ SKU 的规格维度。
 <a id="adminmembershipplan"></a>
 ## AdminMembershipPlan
 
-管理端会员方案。
+管理员会员方案；包括启用与停用记录。历史订单使用成交快照，停用保留历史引用。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
 | `id` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
-| `name` | string | 是 | 方案名。 | 最短: `1`；最长: `64` |
-| `priceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `1`；最大: `9007199254740991` |
-| `currency` | string | 是 | 币种。 | 枚举: `CNY` |
-| `durationDays` | integer | 是 | 有效天数；按 durationDays*24h 延长。 | 最小: `1`；最大: `3660` |
-| `aiDailyLimit` | integer | 是 | 该方案每日 AI 次数；自然日按 Asia/Shanghai。 | 最小: `0` |
-| `benefitCodes` | string[] | 是 | 权益 | 元素不重复 |
-| `description` | string | 是 | 文本。 | 最长: `2000` |
-| `enabled` | boolean | 是 | 可购买。 |  |
-| `sortOrder` | integer | 是 | 排序。 | 最小: `0` |
-| `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1` |
+| `name` | string | 是 | 会员方案名称；去除前后空白。 | 最短: `1`；最长: `64` |
+| `description` | string | 是 | 方案说明，允许空字符串。 | 最长: `2000` |
+| `durationDays` | integer | 是 | 每一天为固定 24 小时。 | 最小: `1`；最大: `3650` |
+| `priceCents` | integer | 是 | 人民币分；客户端不能自行决定成交金额。 | 最小: `1`；最大: `100000000` |
+| `benefitCodes` | string[] | 是 | 仅支持 MEMBER_CONTENT；AI 次数和会员组合权益尚未接入。 | 最少项: `1`；最多项: `1`；元素不重复 |
+| `sortOrder` | integer | 是 | 公开展示顺序，小值优先。 | 最小: `0`；最大: `1000000` |
+| `enabled` | boolean | 是 | 是否可购买；停用后公共接口不可见。 |  |
+| `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1`；最大: `2147483647` |
+| `createdAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
+| `updatedAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
 ```json
 {
   "id": "id_10001",
-  "name": "30 天会员",
-  "priceCents": 9900,
-  "currency": "CNY",
+  "name": "cs30天会员",
+  "description": "cs会员内容访问测试方案",
   "durationDays": 30,
-  "aiDailyLimit": 100,
+  "priceCents": 9900,
   "benefitCodes": [
-    "MEMBER_COURSES"
+    "MEMBER_CONTENT"
   ],
-  "description": "示例内容",
-  "enabled": false,
   "sortOrder": 0,
-  "version": 1
+  "enabled": false,
+  "version": 1,
+  "createdAt": "2026-10-22T02:00:00Z",
+  "updatedAt": "2026-10-22T02:00:00Z"
 }
 ```
 
@@ -3188,14 +3197,14 @@ SKU 的规格维度。
 <a id="membershipdetail"></a>
 ## MembershipDetail
 
-当前网站会员状态和期限记录；会员资格每次按服务器时间、撤销状态与账号状态判断。
+服务器聚合管理员期限及购买权益段判断当前会员；会员明细分页通过 /me/membership/periods 查询。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
 | `active` | boolean | 是 | 当前是否为有效会员。 |  |
-| `expiresAt` | string / null | 是 | 有记录时返回存储的到期时间，包括未来、已过期或已撤销记录；无记录时为 null。有效性以 active 为准。 | 格式: `date-time` |
+| `expiresAt` | string / null | 是 | 未撤销的管理员期限和 ACTIVE 付费段的最晚到期时间，包括未来或已过期时段；无候选记录时为 null。请用 active 判断当前资格。 | 格式: `date-time` |
 | `benefitCodes` | string[] | 是 | 有效时为 [MEMBER_CONTENT]，无效时为 [] |  |
-| `membership` | object / null | 是 | 没有会员记录时为 null。 |  |
+| `membership` | object / null | 是 | 管理员手工维护的期限记录，独立于购买权益；没有手工记录时为 null，即使有有效购买权益也可为 null。 |  |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
@@ -3758,21 +3767,22 @@ PUT 到对象存储，不经过业务 API；必须带返回 headers。
 <a id="adminuser"></a>
 ## AdminUser
 
-管理端用户详情；默认仅脱敏手机号，无密码、refreshToken、AI 内容。
+管理端用户资料；手机号始终脱敏，不返回密码、会话令牌或问答内容。封禁时间永久保留到解封，当前不支持定时封禁。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
 | `id` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 | `nickname` | string | 是 | 昵称。 | 最短: `1`；最长: `32` |
-| `avatarUrl` | string / null | 是 | HTTPS URL。 | 格式: `uri` |
+| `avatarUrl` | string / null | 是 | 已上传到 CONTENT_IMAGE_OSS_HOST 的永久 HTTPS 对象地址，默认 chunai-photo.oss-cn-hangzhou.aliyuncs.com；不得带签名查询、fragment、账号或端口。null 清空头像，不传则保持。 | 格式: `uri`；最短: `1`；最长: `2048` |
 | `phoneMasked` | string | 是 | 脱敏手机。 |  |
 | `status` | string | 是 | 账号状态。 | 枚举: `ACTIVE, BANNED, DEACTIVATED` |
 | `membership` | [MembershipSummary](#membershipsummary) | 是 | 见关联对象。 |  |
 | `createdAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
-| `banReason` | string / null | 是 | 文本。 | 最长: `2000` |
-| `bannedUntil` | string / null | 是 | UTC 时间；未发生时为 null。 | 格式: `date-time` |
+| `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1`；最大: `2147483647` |
+| `banReason` | string / null | 是 | 当前封禁原因；未封禁时为 null。 | 最长: `500` |
+| `bannedAt` | string / null | 是 | UTC 时间；未发生时为 null。 | 格式: `date-time` |
 | `lastLoginAt` | string / null | 是 | UTC 时间；未发生时为 null。 | 格式: `date-time` |
-| `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1` |
+| `updatedAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
@@ -3780,7 +3790,7 @@ PUT 到对象存储，不经过业务 API；必须带返回 headers。
 {
   "id": "id_10001",
   "nickname": "小雨",
-  "avatarUrl": "https://cdn.example.com/cover.jpg",
+  "avatarUrl": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/avatars/replace-with-existing-object.jpg",
   "phoneMasked": "138****0000",
   "status": "ACTIVE",
   "membership": {
@@ -3791,10 +3801,11 @@ PUT 到对象存储，不经过业务 API；必须带返回 headers。
     ]
   },
   "createdAt": "2026-10-22T02:00:00Z",
+  "version": 1,
   "banReason": null,
-  "bannedUntil": null,
-  "lastLoginAt": null,
-  "version": 1
+  "bannedAt": "2026-10-22T02:00:00Z",
+  "lastLoginAt": "2026-10-22T02:00:00Z",
+  "updatedAt": "2026-10-22T02:00:00Z"
 }
 ```
 
@@ -3802,21 +3813,19 @@ PUT 到对象存储，不经过业务 API；必须带返回 headers。
 <a id="userbaninput"></a>
 ## UserBanInput
 
-封禁立即撤销会话；到期解禁仍需重新登录。禁止用封禁阻止支付补账／退款。
+封禁 ACTIVE 用户并立即撤销全部客户端会话。必须携带最新版本和幂等键。DEACTIVATED 不允许此操作。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
-| `reason` | string | 是 | 封禁原因。 | 最短: `1`；最长: `1000` |
-| `until` | string / null | 是 | 未来 UTC 时间；null 代表永久。 | 格式: `date-time` |
-| `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1` |
+| `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1`；最大: `2147483647` |
+| `reason` | string | 是 | 操作原因；去除前后空白，写入审计。 | 最短: `1`；最长: `500` |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
 ```json
 {
-  "reason": "违反平台规则",
-  "until": null,
-  "version": 1
+  "version": 1,
+  "reason": "cs权限联调"
 }
 ```
 
@@ -3824,19 +3833,19 @@ PUT 到对象存储，不经过业务 API；必须带返回 headers。
 <a id="userunbaninput"></a>
 ## UserUnbanInput
 
-解封不恢复已撤销的令牌。
+解封 BANNED 用户；旧令牌保持失效，必须重新登录。必须携带最新版本和幂等键。DEACTIVATED 不允许此操作。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
-| `reason` | string | 是 | 解封原因。 | 最短: `1`；最长: `1000` |
-| `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1` |
+| `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1`；最大: `2147483647` |
+| `reason` | string | 是 | 操作原因；去除前后空白，写入审计。 | 最短: `1`；最长: `500` |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
 ```json
 {
-  "reason": "申诉处理完成",
-  "version": 1
+  "version": 1,
+  "reason": "cs权限联调"
 }
 ```
 
@@ -3864,7 +3873,7 @@ PUT 到对象存储，不经过业务 API；必须带返回 headers。
 | `paymentDeadlineAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
 | `paidAt` | string / null | 是 | UTC 时间；未发生时为 null。 | 格式: `date-time` |
 | `createdAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
-| `address` | object / null | 否 | 产品地址快照；课程订单为 null。 |  |
+| `address` | object / null | 否 | 实物订单地址快照；课程和会员订单为 null。 |  |
 | `actions` | [OrderActions](#orderactions) | 是 | 见关联对象。 |  |
 | `cancelReason` | string / null | 是 | 文本。 | 最长: `2000` |
 | `cancelledAt` | string / null | 是 | UTC 时间；未发生时为 null。 | 格式: `date-time` |
@@ -3927,7 +3936,7 @@ PUT 到对象存储，不经过业务 API；必须带返回 headers。
   "user": {
     "id": "id_10001",
     "nickname": "小雨",
-    "avatarUrl": "https://cdn.example.com/cover.jpg",
+    "avatarUrl": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/avatars/replace-with-existing-object.jpg",
     "phoneMasked": "138****0000",
     "status": "ACTIVE",
     "membership": {
@@ -3937,7 +3946,8 @@ PUT 到对象存储，不经过业务 API；必须带返回 headers。
         "MEMBER_CONTENT"
       ]
     },
-    "createdAt": "2026-10-22T02:00:00Z"
+    "createdAt": "2026-10-22T02:00:00Z",
+    "version": 1
   },
   "address": {
     "recipient": "张女士",
@@ -4022,7 +4032,7 @@ PUT 到对象存储，不经过业务 API；必须带返回 headers。
   "user": {
     "id": "id_10001",
     "nickname": "小雨",
-    "avatarUrl": "https://cdn.example.com/cover.jpg",
+    "avatarUrl": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/avatars/replace-with-existing-object.jpg",
     "phoneMasked": "138****0000",
     "status": "ACTIVE",
     "membership": {
@@ -4032,7 +4042,8 @@ PUT 到对象存储，不经过业务 API；必须带返回 headers。
         "MEMBER_CONTENT"
       ]
     },
-    "createdAt": "2026-10-22T02:00:00Z"
+    "createdAt": "2026-10-22T02:00:00Z",
+    "version": 1
   }
 }
 ```
@@ -4599,15 +4610,18 @@ MembershipPlan 的分页结果。固定按白名单排序；同值用 id 排序�
   "items": [
     {
       "id": "id_10001",
-      "name": "30 天会员",
-      "priceCents": 9900,
-      "currency": "CNY",
+      "name": "cs30天会员",
+      "description": "cs会员内容访问测试方案",
       "durationDays": 30,
-      "aiDailyLimit": 100,
+      "priceCents": 9900,
       "benefitCodes": [
-        "MEMBER_COURSES"
+        "MEMBER_CONTENT"
       ],
-      "description": "示例内容"
+      "sortOrder": 0,
+      "enabled": false,
+      "version": 1,
+      "createdAt": "2026-10-22T02:00:00Z",
+      "updatedAt": "2026-10-22T02:00:00Z"
     }
   ],
   "total": 1,
@@ -5206,7 +5220,7 @@ AdminOrderSummary 的分页结果。固定按白名单排序；同值用 id 排�
       "user": {
         "id": "id_10001",
         "nickname": "小雨",
-        "avatarUrl": "https://cdn.example.com/cover.jpg",
+        "avatarUrl": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/avatars/replace-with-existing-object.jpg",
         "phoneMasked": "138****0000",
         "status": "ACTIVE",
         "membership": {
@@ -5216,7 +5230,8 @@ AdminOrderSummary 的分页结果。固定按白名单排序；同值用 id 排�
             "MEMBER_CONTENT"
           ]
         },
-        "createdAt": "2026-10-22T02:00:00Z"
+        "createdAt": "2026-10-22T02:00:00Z",
+        "version": 1
       }
     }
   ],
@@ -5249,7 +5264,7 @@ AdminUser 的分页结果。固定按白名单排序；同值用 id 排序。
     {
       "id": "id_10001",
       "nickname": "小雨",
-      "avatarUrl": "https://cdn.example.com/cover.jpg",
+      "avatarUrl": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/avatars/replace-with-existing-object.jpg",
       "phoneMasked": "138****0000",
       "status": "ACTIVE",
       "membership": {
@@ -5260,10 +5275,11 @@ AdminUser 的分页结果。固定按白名单排序；同值用 id 排序。
         ]
       },
       "createdAt": "2026-10-22T02:00:00Z",
+      "version": 1,
       "banReason": null,
-      "bannedUntil": null,
-      "lastLoginAt": null,
-      "version": 1
+      "bannedAt": "2026-10-22T02:00:00Z",
+      "lastLoginAt": "2026-10-22T02:00:00Z",
+      "updatedAt": "2026-10-22T02:00:00Z"
     }
   ],
   "total": 1,
@@ -5294,18 +5310,18 @@ AdminMembershipPlan 的分页结果。固定按白名单排序；同值用 id �
   "items": [
     {
       "id": "id_10001",
-      "name": "30 天会员",
-      "priceCents": 9900,
-      "currency": "CNY",
+      "name": "cs30天会员",
+      "description": "cs会员内容访问测试方案",
       "durationDays": 30,
-      "aiDailyLimit": 100,
+      "priceCents": 9900,
       "benefitCodes": [
-        "MEMBER_COURSES"
+        "MEMBER_CONTENT"
       ],
-      "description": "示例内容",
-      "enabled": false,
       "sortOrder": 0,
-      "version": 1
+      "enabled": false,
+      "version": 1,
+      "createdAt": "2026-10-22T02:00:00Z",
+      "updatedAt": "2026-10-22T02:00:00Z"
     }
   ],
   "total": 1,
@@ -5520,7 +5536,7 @@ AuditLog 的分页结果。固定按白名单排序；同值用 id 排序。
 <a id="testrefundinput"></a>
 ## TestRefundInput
 
-测试环境管理员模拟退款结果。课程退款 version 取退款流水，产品退款 version 取售后单。
+测试退款确认：COURSE 和 MEMBERSHIP 的 version 取退款流水；PRODUCT 取售后单。会员退款成功撤销目标未来段并顺延整理其余段，失败恢复。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
@@ -5648,12 +5664,13 @@ CommerceAuditLog 的分页结果。固定按白名单排序；同值用 id 排�
 <a id="implementedpurchase"></a>
 ## ImplementedPurchase
 
-当前可用的商品或课程试算，不包含会员购买。
+商品、课程、会员方案三选一；禁止混单和客户端传金额。
 
 仅允许以下一种结构：
 
 - [ProductPurchase](#productpurchase)
 - [CoursePurchase](#coursepurchase)
+- [MembershipPurchase](#membershippurchase)
 
 
 <a id="membershiprecord"></a>
@@ -5687,7 +5704,7 @@ CommerceAuditLog 的分页结果。固定按白名单排序；同值用 id 排�
 <a id="membershipwrite"></a>
 ## MembershipWrite
 
-开通、续期或重新开通会员；从 GET 读取 version，无记录用 0。expiresAt 必须晚于 startsAt 且晚于当前时间。
+开通、续期或重新开通会员；从 GET 读取 version，无记录用 0。expiresAt 必须晚于 startsAt 且晚于当前时间。 存在未到期付费段或待处理退款时返回 MEMBERSHIP_PAID_TERM_EXISTS；付费权益通过订单退款维护。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
@@ -5711,7 +5728,7 @@ CommerceAuditLog 的分页结果。固定按白名单排序；同值用 id 排�
 <a id="membershiprevoke"></a>
 ## MembershipRevoke
 
-撤销会员；立即停止签发受会员保护的访问数据。
+撤销会员；立即停止签发受会员保护的访问数据。 存在未到期付费段或待处理退款时返回 MEMBERSHIP_PAID_TERM_EXISTS；付费权益通过订单退款维护。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
@@ -5807,6 +5824,125 @@ CommerceAuditLog 的分页结果。固定按白名单排序；同值用 id 排�
 
 - [BilibiliVideoCreate](#bilibilivideocreate)
 - [FeishuVideoCreate](#feishuvideocreate)
+
+
+<a id="membershipplansnapshot"></a>
+## MembershipPlanSnapshot
+
+报价、成交订单和权益段使用的方案快照；修改方案不改写已成交条款。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `planId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+| `name` | string | 是 | 会员方案名称；去除前后空白。 | 最短: `1`；最长: `64` |
+| `durationDays` | integer | 是 | 每一天为固定 24 小时。 | 最小: `1`；最大: `3650` |
+| `priceCents` | integer | 是 | 人民币分；客户端不能自行决定成交金额。 | 最小: `1`；最大: `100000000` |
+| `benefitCodes` | string[] | 是 | 仅支持 MEMBER_CONTENT；AI 次数和会员组合权益尚未接入。 | 最少项: `1`；最多项: `1`；元素不重复 |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "planId": "id_10001",
+  "name": "cs30天会员",
+  "durationDays": 30,
+  "priceCents": 9900,
+  "benefitCodes": [
+    "MEMBER_CONTENT"
+  ]
+}
+```
+
+
+<a id="membershipperiod"></a>
+## MembershipPeriod
+
+一笔会员订单对应的完整权益段；ACTIVE 不等于当前生效，仍须判断时间和账号状态。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `id` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+| `userId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+| `planId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+| `orderId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+| `snapshot` | [MembershipPlanSnapshot](#membershipplansnapshot) | 是 | 见关联对象。 |  |
+| `startsAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
+| `expiresAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
+| `status` | string | 是 | ACTIVE 可按时间生效；REFUND_PENDING 为退款目标；SUSPENDED 为等待退款结果的其他未来段；REVOKED 已退款。 | 枚举: `ACTIVE, REFUND_PENDING, SUSPENDED, REVOKED` |
+| `revokedAt` | string / null | 是 | UTC 时间；未发生时为 null。 | 格式: `date-time` |
+| `createdAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "id": "id_10001",
+  "userId": "id_10001",
+  "planId": "id_10001",
+  "orderId": "id_10001",
+  "snapshot": {
+    "planId": "id_10001",
+    "name": "cs30天会员",
+    "durationDays": 30,
+    "priceCents": 9900,
+    "benefitCodes": [
+      "MEMBER_CONTENT"
+    ]
+  },
+  "startsAt": "2026-10-22T02:00:00Z",
+  "expiresAt": "2026-10-22T02:00:00Z",
+  "status": "ACTIVE",
+  "revokedAt": "2026-10-22T02:00:00Z",
+  "createdAt": "2026-10-22T02:00:00Z"
+}
+```
+
+
+<a id="pagemembershipperiod"></a>
+## PageMembershipPeriod
+
+MembershipPeriod 的分页结果。固定按白名单排序；同值用 id 排序。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `items` | [MembershipPeriod[]](#membershipperiod) | 是 | 当前页数据；空页为 [] |  |
+| `total` | integer | 是 | 匹配记录总数 | 最小: `0` |
+| `page` | integer | 是 | 页码，从 1 开始 | 最小: `1` |
+| `pageSize` | integer | 是 | 每页条数 | 最小: `1`；最大: `100` |
+| `hasNext` | boolean | 是 | 是否有下一页 |  |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "items": [
+    {
+      "id": "id_10001",
+      "userId": "id_10001",
+      "planId": "id_10001",
+      "orderId": "id_10001",
+      "snapshot": {
+        "planId": "id_10001",
+        "name": "cs30天会员",
+        "durationDays": 30,
+        "priceCents": 9900,
+        "benefitCodes": [
+          "MEMBER_CONTENT"
+        ]
+      },
+      "startsAt": "2026-10-22T02:00:00Z",
+      "expiresAt": "2026-10-22T02:00:00Z",
+      "status": "ACTIVE",
+      "revokedAt": "2026-10-22T02:00:00Z",
+      "createdAt": "2026-10-22T02:00:00Z"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "pageSize": 20,
+  "hasNext": false
+}
+```
 
 
 <a id="contentcategory"></a>

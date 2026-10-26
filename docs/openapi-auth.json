@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "两性健康服务平台 · 已实现认证 API",
-    "version": "1.4.0",
-    "description": "已实现认证、实物交易、科普与课程、专栏、网站有效期会员管理、OSS 封面登记与 B 站／飞书视频外链授权。x-implementation-status 表示仓库实现状态；线上可用范围以部署版本为准。短信、会员方案购买及外部支付／物流暂未接入。"
+    "version": "1.5.0",
+    "description": "已实现认证、用户资料与后台用户管理、实物交易、科普与课程、专栏、会员方案购买与期限管理、OSS 图片地址登记及 B 站／飞书视频授权。x-implementation-status 表示仓库实现状态；线上以部署版本为准。支付退款使用 TEST 模式；短信、真实支付、AI、通知和第三方物流暂未接入。"
   },
   "servers": [
     {
@@ -147,7 +147,7 @@
           },
           "expiresAt": {
             "type": "string",
-            "description": "有记录时返回存储的到期时间，包括未来、已过期或已撤销记录；无记录时为 null。有效性以 active 为准。",
+            "description": "未撤销的管理员期限和 ACTIVE 付费段的最晚到期时间，包括未来或已过期时段；无候选记录时为 null。请用 active 判断当前资格。",
             "format": "date-time",
             "example": "2026-11-21T02:00:00Z",
             "nullable": true
@@ -193,9 +193,11 @@
           },
           "avatarUrl": {
             "type": "string",
-            "description": "HTTPS URL。",
+            "description": "已上传到 CONTENT_IMAGE_OSS_HOST 的永久 HTTPS 对象地址，默认 chunai-photo.oss-cn-hangzhou.aliyuncs.com；不得带签名查询、fragment、账号或端口。null 清空头像，不传则保持。",
             "format": "uri",
-            "example": "https://cdn.example.com/cover.jpg",
+            "minLength": 1,
+            "maxLength": 2048,
+            "example": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/avatars/replace-with-existing-object.jpg",
             "nullable": true
           },
           "phoneMasked": {
@@ -221,6 +223,13 @@
             "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
             "format": "date-time",
             "example": "2026-10-22T02:00:00Z"
+          },
+          "version": {
+            "type": "integer",
+            "description": "乐观锁版本；写操作必须提交最近读取的版本。",
+            "minimum": 1,
+            "example": 1,
+            "maximum": 2147483647
           }
         },
         "required": [
@@ -230,7 +239,8 @@
           "phoneMasked",
           "status",
           "membership",
-          "createdAt"
+          "createdAt",
+          "version"
         ]
       },
       "AuthTokens": {
@@ -368,6 +378,41 @@
         "required": [
           "refreshToken"
         ]
+      },
+      "UserPatch": {
+        "type": "object",
+        "description": "修改本人昵称和头像，必须提供当前 version 及至少一个修改字段；不接受手机号、状态、会员期限或权限字段。",
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "type": "integer",
+            "description": "乐观锁版本；写操作必须提交最近读取的版本。",
+            "minimum": 1,
+            "example": 1,
+            "maximum": 2147483647
+          },
+          "nickname": {
+            "type": "string",
+            "description": "前后空白会去除，禁止控制字符。",
+            "minLength": 1,
+            "maxLength": 32,
+            "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+            "example": "cs测试昵称"
+          },
+          "avatarUrl": {
+            "type": "string",
+            "description": "已上传到 CONTENT_IMAGE_OSS_HOST 的永久 HTTPS 对象地址，默认 chunai-photo.oss-cn-hangzhou.aliyuncs.com；不得带签名查询、fragment、账号或端口。null 清空头像，不传则保持。",
+            "format": "uri",
+            "minLength": 1,
+            "maxLength": 2048,
+            "example": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/avatars/replace-with-existing-object.jpg",
+            "nullable": true
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "minProperties": 2
       },
       "PasswordChangeInput": {
         "type": "object",
@@ -1095,7 +1140,7 @@
                     "user": {
                       "id": "id_10001",
                       "nickname": "小雨",
-                      "avatarUrl": "https://cdn.example.com/cover.jpg",
+                      "avatarUrl": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/avatars/replace-with-existing-object.jpg",
                       "phoneMasked": "138****0000",
                       "status": "ACTIVE",
                       "membership": {
@@ -1105,7 +1150,8 @@
                           "MEMBER_CONTENT"
                         ]
                       },
-                      "createdAt": "2026-10-22T02:00:00Z"
+                      "createdAt": "2026-10-22T02:00:00Z",
+                      "version": 1
                     }
                   },
                   "requestId": "req_demo_001",
@@ -1336,7 +1382,7 @@
                     "user": {
                       "id": "id_10001",
                       "nickname": "小雨",
-                      "avatarUrl": "https://cdn.example.com/cover.jpg",
+                      "avatarUrl": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/avatars/replace-with-existing-object.jpg",
                       "phoneMasked": "138****0000",
                       "status": "ACTIVE",
                       "membership": {
@@ -1346,7 +1392,8 @@
                           "MEMBER_CONTENT"
                         ]
                       },
-                      "createdAt": "2026-10-22T02:00:00Z"
+                      "createdAt": "2026-10-22T02:00:00Z",
+                      "version": 1
                     }
                   },
                   "requestId": "req_demo_001",
@@ -1576,7 +1623,7 @@
                     "user": {
                       "id": "id_10001",
                       "nickname": "小雨",
-                      "avatarUrl": "https://cdn.example.com/cover.jpg",
+                      "avatarUrl": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/avatars/replace-with-existing-object.jpg",
                       "phoneMasked": "138****0000",
                       "status": "ACTIVE",
                       "membership": {
@@ -1586,7 +1633,8 @@
                           "MEMBER_CONTENT"
                         ]
                       },
-                      "createdAt": "2026-10-22T02:00:00Z"
+                      "createdAt": "2026-10-22T02:00:00Z",
+                      "version": 1
                     }
                   },
                   "requestId": "req_demo_001",
@@ -2013,7 +2061,7 @@
                   "data": {
                     "id": "id_10001",
                     "nickname": "小雨",
-                    "avatarUrl": "https://cdn.example.com/cover.jpg",
+                    "avatarUrl": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/avatars/replace-with-existing-object.jpg",
                     "phoneMasked": "138****0000",
                     "status": "ACTIVE",
                     "membership": {
@@ -2023,7 +2071,245 @@
                         "MEMBER_CONTENT"
                       ]
                     },
-                    "createdAt": "2026-10-22T02:00:00Z"
+                    "createdAt": "2026-10-22T02:00:00Z",
+                    "version": 1
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patch_me",
+        "summary": "修改本人资料",
+        "description": "先 GET /me 读取 version，再修改 nickname 或 avatarUrl；头像只登记现有 OSS HTTPS 对象地址，null 清空。至少一个修改字段；版本冲突返回 409。",
+        "tags": [
+          "02 用户与地址"
+        ],
+        "security": [
+          {
+            "ClientBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": false,
+        "x-auth-mode": "user",
+        "x-permissions": [],
+        "x-idempotency-required": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserPatch"
+              },
+              "example": {
+                "version": 1,
+                "nickname": "cs测试昵称"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/UserSummary"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "id": "id_10001",
+                    "nickname": "小雨",
+                    "avatarUrl": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/avatars/replace-with-existing-object.jpg",
+                    "phoneMasked": "138****0000",
+                    "status": "ACTIVE",
+                    "membership": {
+                      "active": true,
+                      "expiresAt": "2026-11-21T02:00:00Z",
+                      "benefitCodes": [
+                        "MEMBER_CONTENT"
+                      ]
+                    },
+                    "createdAt": "2026-10-22T02:00:00Z",
+                    "version": 1
                   },
                   "requestId": "req_demo_001",
                   "timestamp": "2026-10-22T02:00:00Z"

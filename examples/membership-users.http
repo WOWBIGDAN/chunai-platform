@@ -1,0 +1,131 @@
+@baseUrl = http://47.97.46.242/api/v1
+@adminToken = replace-with-admin-access-token
+@userToken = replace-with-user-access-token
+@userId = replace-with-user-uuid
+@planId = replace-with-plan-uuid
+@quoteId = replace-with-quote-uuid
+@orderId = replace-with-order-uuid
+@refundId = replace-with-refund-uuid
+@userVersion = 1
+@planVersion = 1
+@orderVersion = 1
+@refundVersion = 1
+
+### 创建停用方案（会员管理权限）
+POST {{baseUrl}}/admin/membership-plans
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"name":"cs30天会员","description":"cs会员购买与续期测试","durationDays":30,"priceCents":9900,"benefitCodes":["MEMBER_CONTENT"],"sortOrder":10}
+
+### 记录上一步 id 与 version 后启用
+PATCH {{baseUrl}}/admin/membership-plans/{{planId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"version":{{planVersion}},"enabled":true}
+
+### 公共可购买方案
+GET {{baseUrl}}/membership-plans?keyword=cs&page=1&pageSize=20
+
+### 管理方案（含停用）
+GET {{baseUrl}}/admin/membership-plans?keyword=cs&page=1&pageSize=20
+Authorization: Bearer {{adminToken}}
+
+### 会员试算；保存返回 quoteId
+POST {{baseUrl}}/order-quotes
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{"type":"MEMBERSHIP","planId":"{{planId}}"}
+
+### 创建订单；保存订单 id/version，每个新的购买意图使用新幂等键
+POST {{baseUrl}}/orders
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+Idempotency-Key: cs-member-order-001
+
+{"quoteId":"{{quoteId}}"}
+
+### 管理员确认测试付款；无真实资金流，transactionNo 每单不同
+POST {{baseUrl}}/admin/orders/{{orderId}}/test-payment
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+Idempotency-Key: cs-member-payment-001
+
+{"version":{{orderVersion}},"transactionNo":"cs_member_payment_001"}
+
+### 当前网站会员资格
+GET {{baseUrl}}/me/membership
+Authorization: Bearer {{userToken}}
+
+### 本人购买权益段（ACTIVE 状态仍须结合 startsAt/expiresAt 判断）
+GET {{baseUrl}}/me/membership/periods?page=1&pageSize=20
+Authorization: Bearer {{userToken}}
+
+### 续期：重复试算、下单、付款，使用新 quoteId/订单 ID/幂等键/transactionNo
+### 支付后第二段从第一段结束时间追加；不会再次从当前时间覆盖第一段
+GET {{baseUrl}}/admin/users/{{userId}}/membership/periods?page=1&pageSize=20
+Authorization: Bearer {{adminToken}}
+
+### 查询未来段对应订单，读取最新 version
+GET {{baseUrl}}/admin/orders/{{orderId}}
+Authorization: Bearer {{adminToken}}
+
+### 仅未来未开始完整会员段可退款；当前生效段预期 409
+POST {{baseUrl}}/admin/orders/{{orderId}}/digital-refund
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+Idempotency-Key: cs-member-refund-001
+
+{"orderVersion":{{orderVersion}},"reason":"cs未来续费段退款测试"}
+
+### 保存受理返回的 refund.id/version，确认成功（可改 FAILED 验证恢复）
+POST {{baseUrl}}/admin/refunds/{{refundId}}/test-result
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+Idempotency-Key: cs-member-refund-result-001
+
+{"version":{{refundVersion}},"result":"SUCCEEDED"}
+
+### 先读本人资料版本
+GET {{baseUrl}}/me
+Authorization: Bearer {{userToken}}
+
+### 更新昵称；头像可省略，地址必须指向实际存在的 OSS 对象
+PATCH {{baseUrl}}/me
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{"version":{{userVersion}},"nickname":"cs会员测试用户","avatarUrl":"https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/avatars/replace-with-existing-object.jpg"}
+
+### 清空头像；更新为上一步返回的新 version
+PATCH {{baseUrl}}/me
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{"version":{{userVersion}},"avatarUrl":null}
+
+### 管理用户搜索（users:read）
+GET {{baseUrl}}/admin/users?keyword=cs&status=ACTIVE&hasMembership=true&page=1&pageSize=20
+Authorization: Bearer {{adminToken}}
+
+### 用户详情始终返回脱敏手机；记录最新 version
+GET {{baseUrl}}/admin/users/{{userId}}
+Authorization: Bearer {{adminToken}}
+
+### 封禁会立即撤销该用户全部会话（users:ban）
+POST {{baseUrl}}/admin/users/{{userId}}/ban
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+Idempotency-Key: cs-user-ban-test-001
+
+{"version":{{userVersion}},"reason":"cs封禁权限验证"}
+
+### 用封禁响应的新 version 解封；之后用户必须重新登录
+POST {{baseUrl}}/admin/users/{{userId}}/unban
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+Idempotency-Key: cs-user-unban-test-001
+
+{"version":{{userVersion}},"reason":"cs解封验证完成"}

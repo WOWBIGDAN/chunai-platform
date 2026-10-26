@@ -8,7 +8,11 @@ export class User {
   @Column({ type: 'varchar', length: 16, unique: true }) phone!: string;
   @Column({ name: 'password_hash', type: 'varchar', length: 255, select: false }) passwordHash!: string;
   @Column({ type: 'varchar', length: 32 }) nickname!: string;
+  @Column({ name: 'avatar_url', type: 'varchar', length: 2048, nullable: true }) avatarUrl!: string | null;
+  @Column({ type: 'int', unsigned: true, default: 1 }) version!: number;
   @Column({ type: 'enum', enum: ['ACTIVE', 'BANNED', 'DEACTIVATED'], default: 'ACTIVE' }) status!: UserStatus;
+  @Column({ name: 'banned_reason', type: 'varchar', length: 500, nullable: true, select: false }) bannedReason!: string | null;
+  @Column({ name: 'banned_at', type: 'datetime', precision: 3, nullable: true, select: false }) bannedAt!: Date | null;
   @Column({ name: 'phone_verified_at', type: 'datetime', precision: 3, nullable: true }) phoneVerifiedAt!: Date | null;
   @Column({ name: 'terms_version', type: 'varchar', length: 64 }) termsVersion!: string;
   @Column({ name: 'privacy_version', type: 'varchar', length: 64 }) privacyVersion!: string;

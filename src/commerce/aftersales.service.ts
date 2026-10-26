@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { requestMembershipRefund, settleMembershipRefund } from '../membership/membership-purchase';
 import { randomUUID } from 'node:crypto';
 import { DataSource, EntityManager } from 'typeorm';
 import { ApiException } from '../common/http';
@@ -34,7 +35,7 @@ export class AfterSalesService {
       if (dto.evidenceMediaIds?.length) throw new ApiException(503, 'EVIDENCE_STORAGE_UNAVAILABLE', '私有凭证存储尚未配置，请先使用文字说明');
       if (new Set(dto.items.map(i => i.orderItemId)).size !== dto.items.length) throw new ApiException(400, 'VALIDATION_ERROR', '售后订单行不可重复');
       const o = await this.orders.lockOrder(m, dto.orderId, actorId(actor));
-      if (o.type !== 'PRODUCT') conflict('ORDER_TYPE_INVALID', '课程退款需由管理员发起数字订单退款');
+      if (o.type !== 'PRODUCT') conflict('ORDER_TYPE_INVALID', '数字订单退款需由管理员发起');
       if (!['PENDING_SHIPMENT', 'PENDING_RECEIPT', 'COMPLETED'].includes(o.status) || !['PAID', 'PARTIALLY_REFUNDED'].includes(o.paymentStatus)) conflict('AFTERSALE_NOT_ELIGIBLE', '当前订单不能申请售后');
       if (o.completedAt && Date.now() > o.completedAt.getTime() + 7 * 86400000) conflict('AFTERSALE_WINDOW_EXPIRED', '已超过确认收货后七天的申请时限');
       if ((o.status === 'PENDING_SHIPMENT' ? 'REFUND_ONLY' : 'RETURN_REFUND') !== dto.type) conflict('AFTERSALE_TYPE_INVALID', '未发货仅退款，发货后须退货退款');
@@ -154,15 +155,16 @@ export class AfterSalesService {
   digitalRefund(actor: Actor, id: string, dto: DigitalRefundDto, key?: string) {
     return this.tx.run(actor, async m => {
       const o = await this.orders.lockOrder(m, id); checkVersion(o, dto.orderVersion);
-      if (o.type !== 'COURSE' || o.status !== 'COMPLETED' || o.paymentStatus !== 'PAID' || o.refundedAmountCents !== 0) conflict('DIGITAL_REFUND_NOT_ELIGIBLE', '仅可对已付款且尚未退款的课程全额退款');
+      if (!['COURSE', 'MEMBERSHIP'].includes(o.type) || o.status !== 'COMPLETED' || o.paymentStatus !== 'PAID' || o.refundedAmountCents !== 0) conflict('DIGITAL_REFUND_NOT_ELIGIBLE', '仅可对符合条件的已付款数字订单全额退款');
       const payment = await m.findOneByOrFail(PaymentRecord, { orderId: id });
       if (payment.provider !== 'TEST') throw new ApiException(503, 'REFUND_PROVIDER_UNAVAILABLE', '真实退款渠道尚未接入');
       let r = await m.findOneBy(Refund, { orderId: id });
       if (r && r.status !== 'FAILED') conflict('REFUND_STATE_INVALID', '订单已有退款');
+      if (o.type === 'MEMBERSHIP') await requestMembershipRefund(m, o);
       if (r) { r.status = 'PROCESSING'; r.failureCode = null; r.version++; }
       else r = m.create(Refund, { id: randomUUID(), orderId: id, afterSaleId: null, paymentId: payment.id, amountCents: o.paidAmountCents, status: 'PROCESSING', failureCode: null, completedAt: null, version: 1 });
       await m.save(r); o.afterSaleStatus = 'PROCESSING'; touch(o); await m.save(o);
-      await this.tx.audit(m, actor, 'course.refund-request', id, { refundId: r.id, reason: dto.reason }); return this.refundView(r);
+      await this.tx.audit(m, actor, `${o.type === 'MEMBERSHIP' ? 'membership' : 'course'}.refund-request`, id, { refundId: r.id, reason: dto.reason }); return this.refundView(r);
     }, { key, action: `course.refund:${id}`, body: dto });
   }
   private async confirmDigitalRefund(m: EntityManager, actor: Actor, candidate: Refund, dto: TestRefundDto) {
@@ -170,17 +172,20 @@ export class AfterSalesService {
     const r = await m.findOneOrFail(Refund, { where: { id: candidate.id }, lock: { mode: 'pessimistic_write' } });
     if (r.version !== dto.version) conflict('VERSION_CONFLICT', '退款数据已更新');
     const payment = await m.findOneByOrFail(PaymentRecord, { id: r.paymentId });
-    if (o.type !== 'COURSE' || payment.provider !== 'TEST' || r.status !== 'PROCESSING' || o.paymentStatus !== 'PAID') conflict('REFUND_STATE_INVALID', '退款不在可确认状态');
+    if (!['COURSE', 'MEMBERSHIP'].includes(o.type) || payment.provider !== 'TEST' || r.status !== 'PROCESSING' || o.paymentStatus !== 'PAID') conflict('REFUND_STATE_INVALID', '退款不在可确认状态');
+    if (o.type === 'MEMBERSHIP') await settleMembershipRefund(m, o, dto.result);
     if (dto.result === 'SUCCEEDED') {
-      const entitlement = await m.findOneByOrFail(CourseEntitlement, { orderId: o.id, status: 'ACTIVE' });
-      await lockCourse(m, entitlement.courseId);
-      entitlement.status = 'REVOKED'; entitlement.revokedAt = new Date(); await m.save(entitlement);
+      if (o.type === 'COURSE') {
+        const entitlement = await m.findOneByOrFail(CourseEntitlement, { orderId: o.id, status: 'ACTIVE' });
+        await lockCourse(m, entitlement.courseId);
+        entitlement.status = 'REVOKED'; entitlement.revokedAt = new Date(); await m.save(entitlement);
+      }
       for (const item of await this.orders.items(m, o.id)) { item.refundedQuantity = item.quantity; item.refundedAmountCents = item.subtotalCents; await m.save(item); }
       o.refundedAmountCents = r.amountCents; o.paymentStatus = 'REFUNDED'; o.afterSaleStatus = 'COMPLETED'; o.status = 'CLOSED'; o.closedReason = 'FULL_REFUND';
       r.completedAt = new Date(); r.failureCode = null;
     } else { r.failureCode = 'TEST_FAILURE'; }
     r.status = dto.result; r.version++; await m.save(r); touch(o); await m.save(o);
-    await this.tx.audit(m, actor, 'course.refund-test-confirm', r.id, { result: dto.result, amountCents: r.amountCents }); return this.refundView(r);
+    await this.tx.audit(m, actor, `${o.type === 'MEMBERSHIP' ? 'membership' : 'course'}.refund-test-confirm`, r.id, { result: dto.result, amountCents: r.amountCents }); return this.refundView(r);
   }
   async refunds(q: RefundQueryDto, orderId?: string, userId?: string) {
     if (userId && (!orderId || !await this.db.getRepository(Order).existsBy({ id: orderId, userId }))) throw missing();
