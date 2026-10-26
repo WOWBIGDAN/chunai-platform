@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "两性健康服务平台 · 已实现认证 API",
-    "version": "1.5.0",
-    "description": "已实现认证、用户资料与后台用户管理、实物交易、科普与课程、专栏、会员方案购买与期限管理、OSS 图片地址登记及 B 站／飞书视频授权。x-implementation-status 表示仓库实现状态；线上以部署版本为准。支付退款使用 TEST 模式；短信、真实支付、AI、通知和第三方物流暂未接入。"
+    "version": "1.6.0",
+    "description": "已实现认证、用户资料与后台用户管理、实物交易、科普与课程、专栏、会员方案购买与期限管理、统一 OSS 上传与私有售后凭证、B 站／飞书视频授权。统一上传需要配置 OSS 凭证及公私 Bucket，配置缺失时返回 503。x-implementation-status 表示仓库实现状态；线上以部署版本为准。支付退款使用 TEST 模式；短信、真实支付、AI、通知和第三方物流暂未接入。"
   },
   "servers": [
     {
@@ -381,7 +381,7 @@
       },
       "UserPatch": {
         "type": "object",
-        "description": "修改本人昵称和头像，必须提供当前 version 及至少一个修改字段；不接受手机号、状态、会员期限或权限字段。",
+        "description": "当前 version 与至少一个修改字段：nickname、avatarMediaId 或兼容字段 avatarUrl；两种头像字段互斥，头像 ID 仅接受本人 READY AVATAR。",
         "additionalProperties": false,
         "properties": {
           "version": {
@@ -401,18 +401,31 @@
           },
           "avatarUrl": {
             "type": "string",
-            "description": "已上传到 CONTENT_IMAGE_OSS_HOST 的永久 HTTPS 对象地址，默认 chunai-photo.oss-cn-hangzhou.aliyuncs.com；不得带签名查询、fragment、账号或端口。null 清空头像，不传则保持。",
+            "description": "已上传到 CONTENT_IMAGE_OSS_HOST 的永久 HTTPS 对象地址，默认 chunai-photo.oss-cn-hangzhou.aliyuncs.com；不得带签名查询、fragment、账号或端口。null 清空头像，不传则保持。 优先使用统一上传返回的 avatarMediaId。通过 URL 引用系统管理的头像时同样校验所有者，不能绑定他人上传的文件。",
             "format": "uri",
             "minLength": 1,
             "maxLength": 2048,
             "example": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/avatars/replace-with-existing-object.jpg",
+            "nullable": true
+          },
+          "avatarMediaId": {
+            "type": "string",
+            "description": "本人上传、用途 AVATAR、状态 READY 的素材 ID；null 清空头像。与 avatarUrl 互斥。",
+            "format": "uuid",
+            "example": "e17c8ad0-8f08-4a4b-8a77-2b730ab323da",
             "nullable": true
           }
         },
         "required": [
           "version"
         ],
-        "minProperties": 2
+        "minProperties": 2,
+        "not": {
+          "required": [
+            "avatarUrl",
+            "avatarMediaId"
+          ]
+        }
       },
       "PasswordChangeInput": {
         "type": "object",
@@ -770,6 +783,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -987,6 +1010,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -1240,6 +1273,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -1473,6 +1516,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -1723,6 +1776,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -1926,6 +1989,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -2160,6 +2233,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -2195,7 +2278,7 @@
       "patch": {
         "operationId": "patch_me",
         "summary": "修改本人资料",
-        "description": "先 GET /me 读取 version，再修改 nickname 或 avatarUrl；头像只登记现有 OSS HTTPS 对象地址，null 清空。至少一个修改字段；版本冲突返回 409。",
+        "description": "先 GET /me 获取 version；修改 nickname，或传本人 READY AVATAR 素材的 avatarMediaId（null 清空）。avatarUrl 作为兼容路径保留，与 avatarMediaId 互斥；管理上传地址仍须本人所有。版本冲突返回 409。",
         "tags": [
           "02 用户与地址"
         ],
@@ -2388,6 +2471,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -2614,6 +2707,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -2874,6 +2977,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -3091,6 +3204,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {

@@ -230,6 +230,8 @@
 - [MembershipPlanSnapshot](#membershipplansnapshot)
 - [MembershipPeriod](#membershipperiod)
 - [PageMembershipPeriod](#pagemembershipperiod)
+- [UploadImageCreate](#uploadimagecreate)
+- [UploadVideoCreate](#uploadvideocreate)
 - [ContentCategory](#contentcategory)
 - [ProductCategory](#productcategory)
 - [CourseSummary](#coursesummary)
@@ -340,12 +342,12 @@
 |---|---|---|---|---|
 | `id` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 | `kind` | string | 是 | 媒体类型。 | 枚举: `IMAGE, VIDEO` |
-| `status` | string | 是 | 上传后处理完成才可引用。 | 枚举: `UPLOADING, PROCESSING, READY, FAILED` |
+| `status` | string | 是 | 统一上传状态：UPLOADING 待确认；READY 可引用；FAILED 校验失败；DELETED 已逻辑删除。旧素材接口直接返回 READY。 | 枚举: `UPLOADING, READY, FAILED, DELETED` |
 | `mimeType` | string | 是 | 实际检查后的 MIME。 |  |
 | `sizeBytes` | integer | 是 | 字节数。 | 最小: `0` |
-| `publicUrl` | string / null | 是 | 仅公开图片有 URL；私有视频或售后凭证为 null。 | 格式: `uri` |
+| `publicUrl` | string / null | 是 | 仅 READY 的公开图片返回稳定 OSS URL；待上传、失败、已删除、售后凭证及私有视频均为 null。 | 格式: `uri` |
 | `durationSeconds` | integer | 否 | 仅视频返回，处理前可不返回。 | 最小: `0` |
-| `provider` | string | 否 | 内容素材来源；产品素材可省略。不会暴露外部视频链接或密码。 | 枚举: `LOCAL, OSS, EXTERNAL_IMAGE, BILIBILI, FEISHU` |
+| `provider` | string | 否 | 统一上传为 OSS；保留旧素材来源；不包含存储凭证、内部对象路径或受保护视频链接。 | 枚举: `LOCAL, OSS, EXTERNAL_IMAGE, BILIBILI, FEISHU` |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
@@ -622,13 +624,14 @@
 <a id="userpatch"></a>
 ## UserPatch
 
-修改本人昵称和头像，必须提供当前 version 及至少一个修改字段；不接受手机号、状态、会员期限或权限字段。
+当前 version 与至少一个修改字段：nickname、avatarMediaId 或兼容字段 avatarUrl；两种头像字段互斥，头像 ID 仅接受本人 READY AVATAR。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
 | `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1`；最大: `2147483647` |
 | `nickname` | string | 否 | 前后空白会去除，禁止控制字符。 | 最短: `1`；最长: `32`；正则: `^[^\u0000-\u001f\u007f]+$` |
-| `avatarUrl` | string / null | 否 | 已上传到 CONTENT_IMAGE_OSS_HOST 的永久 HTTPS 对象地址，默认 chunai-photo.oss-cn-hangzhou.aliyuncs.com；不得带签名查询、fragment、账号或端口。null 清空头像，不传则保持。 | 格式: `uri`；最短: `1`；最长: `2048` |
+| `avatarUrl` | string / null | 否 | 已上传到 CONTENT_IMAGE_OSS_HOST 的永久 HTTPS 对象地址，默认 chunai-photo.oss-cn-hangzhou.aliyuncs.com；不得带签名查询、fragment、账号或端口。null 清空头像，不传则保持。 优先使用统一上传返回的 avatarMediaId。通过 URL 引用系统管理的头像时同样校验所有者，不能绑定他人上传的文件。 | 格式: `uri`；最短: `1`；最长: `2048` |
+| `avatarMediaId` | string / null | 否 | 本人上传、用途 AVATAR、状态 READY 的素材 ID；null 清空头像。与 avatarUrl 互斥。 | 格式: `uuid` |
 
 对象至少包含 2 个字段（包含 version 时，至少另传一个可修改字段）。
 
@@ -1027,11 +1030,11 @@ scope 不可修改；有子分类或引用时不可删除。
 |---|---|---|---|---|
 | `contentId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 | `chapterId` | string / null | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
-| `playbackUrl` | string / null | 是 | 仅 LOCAL/STREAM 有值；外部模式为 null。 | 格式: `uri` |
-| `expiresAt` | string / null | 是 | 本地播放授权到期时间；外链为 null，不表示第三方分享永久有效。 | 格式: `date-time` |
+| `playbackUrl` | string / null | 是 | LOCAL 或 OSS 的 STREAM 返回短时应用代理地址；外链模式为 null。 | 格式: `uri` |
+| `expiresAt` | string / null | 是 | STREAM 播放授权到期时间；外链模式为 null。 | 格式: `date-time` |
 | `durationSeconds` | integer | 是 | 可播放时长。 | 最小: `0` |
 | `preview` | boolean | 是 | 整章免费预览；不是在完整付费视频上做客户端限时。 |  |
-| `provider` | string | 是 | 视频提供方。 | 枚举: `LOCAL, BILIBILI, FEISHU` |
+| `provider` | string | 是 | 视频提供方。 | 枚举: `LOCAL, OSS, BILIBILI, FEISHU` |
 | `mode` | string | 是 | 前端按此字段选择播放器或外部页面跳转。 | 枚举: `STREAM, EXTERNAL_LINK` |
 | `externalUrl` | string / null | 是 | 外部跳转地址；STREAM 为 null。FEISHU 视为敏感数据。 | 格式: `uri` |
 | `accessPassword` | string / null | 是 | 仅授权 FEISHU 返回网盘访问密码；其他模式为 null。 | 最短: `1`；最长: `128` |
@@ -2806,7 +2809,7 @@ SKU 的规格维度。
 | `items` | [AfterSaleLineInput[]](#aftersalelineinput) | 是 | 行 ID 不重复；数量不超过剩余可售后量 | 最少项: `1`；最多项: `50` |
 | `reasonCode` | string | 是 | 申请原因。 | 枚举: `NOT_NEEDED, QUALITY_ISSUE, WRONG_ITEM, OTHER` |
 | `description` | string | 是 | 申请说明。 | 最短: `1`；最长: `2000` |
-| `evidenceMediaIds` | string[] | 否 | 当前私有存储未配置，仅允许省略或空数组；非空返回 503 EVIDENCE_STORAGE_UNAVAILABLE。 | 最多项: `9`；元素不重复 |
+| `evidenceMediaIds` | string[] | 否 | 最多 9 个不重复的本人 READY AFTERSALE_EVIDENCE 图片 ID；与售后创建在同一事务内校验并绑定。可省略或传 [] 提交纯文字说明。 | 最多项: `9`；元素不重复 |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
@@ -3691,51 +3694,42 @@ event: error；流已打开，不能改成 HTTP JSON 错误。
 <a id="uploadcreate"></a>
 ## UploadCreate
 
-预签名直传；服务端按用途限制媒体类型与权限。
+图片或私有 MP4 二选一；图片不能携带 durationSeconds。
 
-| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
-|---|---|---|---|---|
-| `purpose` | string | 是 | 普通用户仅 AVATAR/AFTERSALE_EVIDENCE；管理员可上传内容及产品素材。 | 枚举: `AVATAR, AFTERSALE_EVIDENCE, CONTENT_COVER, CONTENT_BODY_IMAGE, CONTENT_VIDEO, PRODUCT_IMAGE, COLUMN_COVER` |
-| `fileName` | string | 是 | 显示名，不作为存储路径。 | 最短: `1`；最长: `200` |
-| `mimeType` | string | 是 | 一期允许类型。 | 枚举: `image/jpeg, image/png, image/webp, video/mp4` |
-| `sizeBytes` | integer | 是 | 预期大小；服务端检查真实大小。图片<=10MiB，视频<=1GiB。 | 最小: `1`；最大: `1073741824` |
+仅允许以下一种结构：
 
-示例（仅结构示意，不作为可用业务 ID）：
-
-```json
-{
-  "purpose": "AVATAR",
-  "fileName": "cover.jpg",
-  "mimeType": "image/jpeg",
-  "sizeBytes": 102400
-}
-```
+- [UploadImageCreate](#uploadimagecreate)
+- [UploadVideoCreate](#uploadvideocreate)
 
 
 <a id="uploadticket"></a>
 ## UploadTicket
 
-PUT 到对象存储，不经过业务 API；必须带返回 headers。
+十分钟有效的 OSS POST 表单授权；返回字段原样作为 multipart/form-data 的文本字段，最后追加 file。文件不经业务 API 上传。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
-| `uploadId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
-| `mediaId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
-| `method` | string | 是 | 上传方法。 | 枚举: `PUT` |
-| `uploadUrl` | string | 是 | HTTPS URL。 | 格式: `uri` |
-| `headers` | object | 是 | 上传时原样携带的请求头。 |  |
+| `uploadId` | string | 是 | 服务端生成的 UUID；uploadId 与 mediaId 相同。 | 格式: `uuid` |
+| `mediaId` | string | 是 | 服务端生成的 UUID；uploadId 与 mediaId 相同。 | 格式: `uuid` |
+| `method` | string | 是 | 固定为表单 POST，不能按 PUT 上传。 | 枚举: `POST` |
+| `uploadUrl` | string | 是 | 私有 Bucket 的 HTTPS OSS 地址。 | 格式: `uri` |
+| `fields` | object | 是 | 服务端签发的表单字段；不可改写 key、policy、Content-Type、签名或临时令牌。签名只允许上传本次指定对象。 |  |
 | `expiresAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
 ```json
 {
-  "uploadId": "id_10001",
-  "mediaId": "id_10001",
-  "method": "PUT",
-  "uploadUrl": "https://storage.example.com/upload?signature=demo",
-  "headers": {
-    "Content-Type": "image/jpeg"
+  "uploadId": "e17c8ad0-8f08-4a4b-8a77-2b730ab323da",
+  "mediaId": "e17c8ad0-8f08-4a4b-8a77-2b730ab323da",
+  "method": "POST",
+  "uploadUrl": "https://your-private-bucket.oss-cn-hangzhou.aliyuncs.com",
+  "fields": {
+    "key": "uploads/staging/e17c8ad0-8f08-4a4b-8a77-2b730ab323da.png",
+    "Content-Type": "image/png",
+    "success_action_status": "201",
+    "policy": "replace-with-server-policy",
+    "x-oss-signature": "replace-with-server-signature"
   },
   "expiresAt": "2026-10-22T02:10:00Z"
 }
@@ -3745,12 +3739,12 @@ PUT 到对象存储，不经过业务 API；必须带返回 headers。
 <a id="mediareadgrant"></a>
 ## MediaReadGrant
 
-证据图片短时读取授权，仅本人及售后管理员。
+私有售后凭证读取授权，有效 60 秒，绑定当前账户、会话及素材；每次读取重查权限、封禁和售后关联。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
 | `mediaId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
-| `url` | string | 是 | HTTPS URL。 | 格式: `uri` |
+| `url` | string | 是 | 应用代理 URL；不是 OSS 永久地址或可脱离平台权限使用的存储签名。不要记录到日志或公共缓存。 | 格式: `uri` |
 | `expiresAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
 
 示例（仅结构示意，不作为可用业务 ID）：
@@ -3758,8 +3752,8 @@ PUT 到对象存储，不经过业务 API；必须带返回 headers。
 ```json
 {
   "mediaId": "id_10001",
-  "url": "https://cdn.example.com/cover.jpg",
-  "expiresAt": "2026-10-22T02:05:00Z"
+  "url": "http://localhost:3000/api/v1/media/e17c8ad0-8f08-4a4b-8a77-2b730ab323da/file?token=replace-with-read-grant",
+  "expiresAt": "2026-10-22T02:01:00Z"
 }
 ```
 
@@ -4123,7 +4117,7 @@ PUT 到对象存储，不经过业务 API；必须带返回 headers。
 <a id="videobodywrite"></a>
 ## VideoBodyWrite
 
-引用 CONTENT_VIDEO 素材。LOCAL 为已上传 MP4；BILIBILI 仅科普；FEISHU 仅 MEMBER 视频课程非预览章。服务端不抓取远程视频、不转码。
+引用 READY CONTENT_VIDEO 素材。LOCAL／OSS 为私有 MP4；BILIBILI 仅科普；FEISHU 仅 MEMBER 视频课程非预览章。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
@@ -5407,17 +5401,18 @@ AuditLog 的分页结果。固定按白名单排序；同值用 id 排序。
 <a id="privateevidencemedia"></a>
 ## PrivateEvidenceMedia
 
-售后私有图片元数据；publicUrl 固定 null，须申请 read-grant。
+本人提交的私有售后图片摘要；publicUrl 永远为 null。经 read-grant 获取短时应用代理地址。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
 | `id` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 | `kind` | string | 是 | 媒体类型。 | 枚举: `IMAGE, VIDEO` |
-| `status` | string | 是 | 上传后处理完成才可引用。 | 枚举: `UPLOADING, PROCESSING, READY, FAILED` |
+| `status` | string | 是 | 统一上传状态：UPLOADING 待确认；READY 可引用；FAILED 校验失败；DELETED 已逻辑删除。旧素材接口直接返回 READY。 | 枚举: `UPLOADING, READY, FAILED, DELETED` |
 | `mimeType` | string | 是 | 实际检查后的 MIME。 |  |
 | `sizeBytes` | integer | 是 | 字节数。 | 最小: `0` |
-| `publicUrl` | string / null | 是 | 固定 null。 | 枚举: `None` |
+| `publicUrl` | string / null | 是 | 固定 null，不暴露 OSS 私有地址。 | 枚举: `None` |
 | `durationSeconds` | integer | 否 | 仅视频返回，处理前可不返回。 | 最小: `0` |
+| `provider` | string | 否 | 统一上传为 OSS；保留旧素材来源；不包含存储凭证、内部对象路径或受保护视频链接。 | 枚举: `LOCAL, OSS, EXTERNAL_IMAGE, BILIBILI, FEISHU` |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
@@ -5494,7 +5489,7 @@ AuditLog 的分页结果。固定按白名单排序；同值用 id 排序。
 <a id="productimagecreate"></a>
 ## ProductImageCreate
 
-登记管理员已托管的公开 HTTPS 产品图片；不抓取远程文件、不提供文件上传或私有凭证存储。
+兼容登记已经托管的公开 HTTPS 产品图片；该接口不检查远程字节。新文件可通过统一上传完成校验后直接取得相同用途的素材 ID。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
@@ -5748,7 +5743,7 @@ CommerceAuditLog 的分页结果。固定按白名单排序；同值用 id 排�
 <a id="contentimagecreate"></a>
 ## ContentImageCreate
 
-登记已托管公开 HTTPS 图片元数据。CONTENT_COVER/COLUMN_COVER 仅允许 CONTENT_IMAGE_OSS_HOST（默认 chunai-photo.oss-cn-hangzhou.aliyuncs.com），正文图片仍允许已有 HTTPS 地址。不会上传或下载文件。
+登记已托管公开 HTTPS 图片元数据。CONTENT_COVER/COLUMN_COVER 仅允许 CONTENT_IMAGE_OSS_HOST（默认 chunai-photo.oss-cn-hangzhou.aliyuncs.com），正文图片仍允许已有 HTTPS 地址。不会上传或下载文件。 新文件可改走统一上传；完成后直接使用返回素材 ID，无须重复登记。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
@@ -5941,6 +5936,55 @@ MembershipPeriod 的分页结果。固定按白名单排序；同值用 id 排�
   "page": 1,
   "pageSize": 20,
   "hasNext": false
+}
+```
+
+
+<a id="uploadimagecreate"></a>
+## UploadImageCreate
+
+图片直传申请；JPEG、PNG、WebP，最大 10 MiB；所有文件先上传到私有临时区域。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `purpose` | string | 是 | 用户仅 AVATAR／AFTERSALE_EVIDENCE；管理员内容用途需要 media:write + content:write，产品图片需要 media:write + products:write。 | 枚举: `AVATAR, AFTERSALE_EVIDENCE, CONTENT_COVER, CONTENT_BODY_IMAGE, PRODUCT_IMAGE, COLUMN_COVER` |
+| `fileName` | string | 是 | 原始显示名称，不作为对象路径；拒绝路径分隔符与控制字符。 | 最短: `1`；最长: `200` |
+| `mimeType` | string | 是 | 申请 MIME，完成后检查真实对象头与文件特征。 | 枚举: `image/jpeg, image/png, image/webp` |
+| `sizeBytes` | integer | 是 | 精确文件大小；OSS POST 策略及完成确认都会校验。 | 最小: `1`；最大: `10485760` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "purpose": "AVATAR",
+  "fileName": "cs-avatar.png",
+  "mimeType": "image/png",
+  "sizeBytes": 1024
+}
+```
+
+
+<a id="uploadvideocreate"></a>
+## UploadVideoCreate
+
+仅管理员，需 media:write + content:write；MP4 最大 100 MiB，私有存储，不转码。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `purpose` | string | 是 | 视频固定用途。 | 枚举: `CONTENT_VIDEO` |
+| `fileName` | string | 是 | 原始显示名称，不作为对象路径；拒绝路径分隔符与控制字符。 | 最短: `1`；最长: `200` |
+| `mimeType` | string | 是 | 仅 MP4。 | 枚举: `video/mp4` |
+| `sizeBytes` | integer | 是 | 精确文件大小。 | 最小: `1`；最大: `104857600` |
+| `durationSeconds` | integer | 否 | 可省略，默认 0 表示未知；管理员提供时长，不提供自动探测或转码。 | 最小: `0`；最大: `86400` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "purpose": "CONTENT_VIDEO",
+  "fileName": "cs-video.mp4",
+  "mimeType": "video/mp4",
+  "sizeBytes": 102400
 }
 ```
 

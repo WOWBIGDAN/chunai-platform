@@ -9,6 +9,7 @@ export class User {
   @Column({ name: 'password_hash', type: 'varchar', length: 255, select: false }) passwordHash!: string;
   @Column({ type: 'varchar', length: 32 }) nickname!: string;
   @Column({ name: 'avatar_url', type: 'varchar', length: 2048, nullable: true }) avatarUrl!: string | null;
+  @Column({ name: 'avatar_media_id', type: 'varchar', length: 36, nullable: true }) avatarMediaId!: string | null;
   @Column({ type: 'int', unsigned: true, default: 1 }) version!: number;
   @Column({ type: 'enum', enum: ['ACTIVE', 'BANNED', 'DEACTIVATED'], default: 'ACTIVE' }) status!: UserStatus;
   @Column({ name: 'banned_reason', type: 'varchar', length: 500, nullable: true, select: false }) bannedReason!: string | null;

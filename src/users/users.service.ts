@@ -3,6 +3,7 @@ import { EntityManager, IsNull } from 'typeorm';
 import { AuthService } from '../auth/auth.service';
 import { ApiException } from '../common/http';
 import { Actor, actorId, checkVersion, CommerceTransaction, conflict, missing, page, touch } from '../commerce/transaction';
+import { resolveAvatar } from '../uploads/references';
 import { validateContentImageUrl } from '../content/media-source';
 import { AuthSession, User } from '../database/entities';
 import { activeMembershipSql } from '../membership/membership-access';
@@ -13,15 +14,17 @@ export class UsersService {
   constructor(private readonly tx: CommerceTransaction, private readonly auth: AuthService) {}
 
   patch(actor: Actor, dto: UserPatchDto) {
-    if (dto.nickname === undefined && dto.avatarUrl === undefined) throw new ApiException(400, 'VALIDATION_ERROR', '请至少提供一个资料字段');
+    if (dto.nickname === undefined && dto.avatarUrl === undefined && dto.avatarMediaId === undefined) throw new ApiException(400, 'VALIDATION_ERROR', '请至少提供一个资料字段');
+    if (dto.avatarUrl !== undefined && dto.avatarMediaId !== undefined) throw new ApiException(400, 'VALIDATION_ERROR', 'avatarUrl 和 avatarMediaId 不能同时提交');
     const avatarUrl = dto.avatarUrl ? validateContentImageUrl(dto.avatarUrl, true).publicUrl : dto.avatarUrl;
     if (avatarUrl && avatarUrl.length > 2048) throw new ApiException(400, 'VALIDATION_ERROR', '头像地址编码后不能超过 2048 个字符');
     return this.tx.run(actor, async m => {
       const user = await m.findOne(User, { where: { id: actorId(actor) }, lock: { mode: 'pessimistic_write' } });
       if (!user) throw missing();
       checkVersion(user, dto.version);
+      const avatar = await resolveAvatar(m, actor, { avatarMediaId: dto.avatarMediaId, avatarUrl });
       if (dto.nickname !== undefined) user.nickname = dto.nickname;
-      if (avatarUrl !== undefined) user.avatarUrl = avatarUrl;
+      if (avatar) Object.assign(user, avatar);
       touch(user); await m.save(user);
       return this.auth.userSummary(user, m);
     });

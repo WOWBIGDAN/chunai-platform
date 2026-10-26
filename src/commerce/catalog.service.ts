@@ -9,6 +9,7 @@ import { CategoryCreateDto, CategoryPatchDto, CategoryQueryDto, ImageCreateDto, 
 import { Category, Product, ProductImage, Sku, StockMovement, OrderItem, Quote } from './entities';
 import { Actor, actorId, CommerceTransaction, canonical, checkVersion, conflict, defined, hash, missing, page, touch } from './transaction';
 import { Content } from '../content/entities';
+import { lockManagedReference } from '../uploads/references';
 
 @Injectable()
 export class CatalogService {
@@ -66,6 +67,7 @@ export class CatalogService {
       const url = new URL(dto.publicUrl);
       if (url.username || url.password) throw new ApiException(400, 'VALIDATION_ERROR', '图片地址不能包含登录凭据');
       const i = m.create(ProductImage, { id: randomUUID(), ...dto, operatorId: actorId(actor) });
+      await lockManagedReference(m, i.id, 'PRODUCT_IMAGE', i.publicUrl);
       await m.save(i); await this.tx.audit(m, actor, 'product-image.create', i.id);
       return this.imageView(i);
     });
@@ -75,6 +77,9 @@ export class CatalogService {
     if (!c) conflict('CATEGORY_UNAVAILABLE', '请选择启用的产品分类');
     const ids = [...new Set([p.coverMediaId, ...p.galleryMediaIds])];
     if (await m.countBy(ProductImage, { id: In(ids) }) !== ids.length) conflict('MEDIA_UNAVAILABLE', '产品图片不存在');
+    for (const image of await m.find(ProductImage, { where: { id: In(ids) }, order: { id: 'ASC' } })) {
+      await lockManagedReference(m, image.id, 'PRODUCT_IMAGE', image.publicUrl);
+    }
   }
   clean(html: string) {
     return sanitizeHtml(html, { allowedTags: ['p', 'br', 'strong', 'em', 'ul', 'ol', 'li', 'h2', 'h3', 'blockquote'], allowedAttributes: {} });

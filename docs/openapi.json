@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "两性健康服务平台 API",
-    "version": "1.5.0",
-    "description": "已实现认证、用户资料与后台用户管理、实物交易、科普与课程、专栏、会员方案购买与期限管理、OSS 图片地址登记及 B 站／飞书视频授权。x-implementation-status 表示仓库实现状态；线上以部署版本为准。支付退款使用 TEST 模式；短信、真实支付、AI、通知和第三方物流暂未接入。"
+    "version": "1.6.0",
+    "description": "已实现认证、用户资料与后台用户管理、实物交易、科普与课程、专栏、会员方案购买与期限管理、统一 OSS 上传与私有售后凭证、B 站／飞书视频授权。统一上传需要配置 OSS 凭证及公私 Bucket，配置缺失时返回 503。x-implementation-status 表示仓库实现状态；线上以部署版本为准。支付退款使用 TEST 模式；短信、真实支付、AI、通知和第三方物流暂未接入。"
   },
   "servers": [
     {
@@ -207,12 +207,12 @@
           },
           "status": {
             "type": "string",
-            "description": "上传后处理完成才可引用。",
+            "description": "统一上传状态：UPLOADING 待确认；READY 可引用；FAILED 校验失败；DELETED 已逻辑删除。旧素材接口直接返回 READY。",
             "enum": [
               "UPLOADING",
-              "PROCESSING",
               "READY",
-              "FAILED"
+              "FAILED",
+              "DELETED"
             ],
             "example": "READY"
           },
@@ -229,7 +229,7 @@
           },
           "publicUrl": {
             "type": "string",
-            "description": "仅公开图片有 URL；私有视频或售后凭证为 null。",
+            "description": "仅 READY 的公开图片返回稳定 OSS URL；待上传、失败、已删除、售后凭证及私有视频均为 null。",
             "format": "uri",
             "example": "https://cdn.example.com/cover.jpg",
             "nullable": true
@@ -242,7 +242,7 @@
           },
           "provider": {
             "type": "string",
-            "description": "内容素材来源；产品素材可省略。不会暴露外部视频链接或密码。",
+            "description": "统一上传为 OSS；保留旧素材来源；不包含存储凭证、内部对象路径或受保护视频链接。",
             "enum": [
               "LOCAL",
               "OSS",
@@ -647,7 +647,7 @@
       },
       "UserPatch": {
         "type": "object",
-        "description": "修改本人昵称和头像，必须提供当前 version 及至少一个修改字段；不接受手机号、状态、会员期限或权限字段。",
+        "description": "当前 version 与至少一个修改字段：nickname、avatarMediaId 或兼容字段 avatarUrl；两种头像字段互斥，头像 ID 仅接受本人 READY AVATAR。",
         "additionalProperties": false,
         "properties": {
           "version": {
@@ -667,18 +667,31 @@
           },
           "avatarUrl": {
             "type": "string",
-            "description": "已上传到 CONTENT_IMAGE_OSS_HOST 的永久 HTTPS 对象地址，默认 chunai-photo.oss-cn-hangzhou.aliyuncs.com；不得带签名查询、fragment、账号或端口。null 清空头像，不传则保持。",
+            "description": "已上传到 CONTENT_IMAGE_OSS_HOST 的永久 HTTPS 对象地址，默认 chunai-photo.oss-cn-hangzhou.aliyuncs.com；不得带签名查询、fragment、账号或端口。null 清空头像，不传则保持。 优先使用统一上传返回的 avatarMediaId。通过 URL 引用系统管理的头像时同样校验所有者，不能绑定他人上传的文件。",
             "format": "uri",
             "minLength": 1,
             "maxLength": 2048,
             "example": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/avatars/replace-with-existing-object.jpg",
+            "nullable": true
+          },
+          "avatarMediaId": {
+            "type": "string",
+            "description": "本人上传、用途 AVATAR、状态 READY 的素材 ID；null 清空头像。与 avatarUrl 互斥。",
+            "format": "uuid",
+            "example": "e17c8ad0-8f08-4a4b-8a77-2b730ab323da",
             "nullable": true
           }
         },
         "required": [
           "version"
         ],
-        "minProperties": 2
+        "minProperties": 2,
+        "not": {
+          "required": [
+            "avatarUrl",
+            "avatarMediaId"
+          ]
+        }
       },
       "PasswordChangeInput": {
         "type": "object",
@@ -1356,14 +1369,14 @@
           },
           "playbackUrl": {
             "type": "string",
-            "description": "仅 LOCAL/STREAM 有值；外部模式为 null。",
+            "description": "LOCAL 或 OSS 的 STREAM 返回短时应用代理地址；外链模式为 null。",
             "format": "uri",
             "example": "http://localhost:3000/api/v1/content-playback/media-id?token=example",
             "nullable": true
           },
           "expiresAt": {
             "type": "string",
-            "description": "本地播放授权到期时间；外链为 null，不表示第三方分享永久有效。",
+            "description": "STREAM 播放授权到期时间；外链模式为 null。",
             "format": "date-time",
             "example": "2026-10-22T02:05:00Z",
             "nullable": true
@@ -1384,6 +1397,7 @@
             "description": "视频提供方。",
             "enum": [
               "LOCAL",
+              "OSS",
               "BILIBILI",
               "FEISHU"
             ],
@@ -5107,7 +5121,7 @@
               "pattern": "^[A-Za-z0-9_-]{1,64}$",
               "example": "id_10001"
             },
-            "description": "当前私有存储未配置，仅允许省略或空数组；非空返回 503 EVIDENCE_STORAGE_UNAVAILABLE。",
+            "description": "最多 9 个不重复的本人 READY AFTERSALE_EVIDENCE 图片 ID；与售后创建在同一事务内校验并绑定。可省略或传 [] 提交纯文字说明。",
             "maxItems": 9,
             "uniqueItems": true
           }
@@ -6698,100 +6712,59 @@
         ]
       },
       "UploadCreate": {
-        "type": "object",
-        "description": "预签名直传；服务端按用途限制媒体类型与权限。",
-        "additionalProperties": false,
-        "properties": {
-          "purpose": {
-            "type": "string",
-            "description": "普通用户仅 AVATAR/AFTERSALE_EVIDENCE；管理员可上传内容及产品素材。",
-            "enum": [
-              "AVATAR",
-              "AFTERSALE_EVIDENCE",
-              "CONTENT_COVER",
-              "CONTENT_BODY_IMAGE",
-              "CONTENT_VIDEO",
-              "PRODUCT_IMAGE",
-              "COLUMN_COVER"
-            ],
-            "example": "AVATAR"
+        "description": "图片或私有 MP4 二选一；图片不能携带 durationSeconds。",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/UploadImageCreate"
           },
-          "fileName": {
-            "type": "string",
-            "description": "显示名，不作为存储路径。",
-            "minLength": 1,
-            "maxLength": 200,
-            "example": "cover.jpg"
-          },
-          "mimeType": {
-            "type": "string",
-            "description": "一期允许类型。",
-            "enum": [
-              "image/jpeg",
-              "image/png",
-              "image/webp",
-              "video/mp4"
-            ],
-            "example": "image/jpeg"
-          },
-          "sizeBytes": {
-            "type": "integer",
-            "description": "预期大小；服务端检查真实大小。图片<=10MiB，视频<=1GiB。",
-            "minimum": 1,
-            "example": 102400,
-            "maximum": 1073741824
+          {
+            "$ref": "#/components/schemas/UploadVideoCreate"
           }
-        },
-        "required": [
-          "purpose",
-          "fileName",
-          "mimeType",
-          "sizeBytes"
         ]
       },
       "UploadTicket": {
         "type": "object",
-        "description": "PUT 到对象存储，不经过业务 API；必须带返回 headers。",
+        "description": "十分钟有效的 OSS POST 表单授权；返回字段原样作为 multipart/form-data 的文本字段，最后追加 file。文件不经业务 API 上传。",
         "additionalProperties": false,
         "properties": {
           "uploadId": {
             "type": "string",
-            "description": "不透明业务 ID；前端必须按字符串保存。",
-            "minLength": 1,
-            "maxLength": 64,
-            "pattern": "^[A-Za-z0-9_-]{1,64}$",
-            "example": "id_10001"
+            "description": "服务端生成的 UUID；uploadId 与 mediaId 相同。",
+            "format": "uuid",
+            "example": "e17c8ad0-8f08-4a4b-8a77-2b730ab323da"
           },
           "mediaId": {
             "type": "string",
-            "description": "不透明业务 ID；前端必须按字符串保存。",
-            "minLength": 1,
-            "maxLength": 64,
-            "pattern": "^[A-Za-z0-9_-]{1,64}$",
-            "example": "id_10001"
+            "description": "服务端生成的 UUID；uploadId 与 mediaId 相同。",
+            "format": "uuid",
+            "example": "e17c8ad0-8f08-4a4b-8a77-2b730ab323da"
           },
           "method": {
             "type": "string",
-            "description": "上传方法。",
+            "description": "固定为表单 POST，不能按 PUT 上传。",
             "enum": [
-              "PUT"
+              "POST"
             ],
-            "example": "PUT"
+            "example": "POST"
           },
           "uploadUrl": {
             "type": "string",
-            "description": "HTTPS URL。",
+            "description": "私有 Bucket 的 HTTPS OSS 地址。",
             "format": "uri",
-            "example": "https://storage.example.com/upload?signature=demo"
+            "example": "https://your-private-bucket.oss-cn-hangzhou.aliyuncs.com"
           },
-          "headers": {
+          "fields": {
             "type": "object",
-            "description": "上传时原样携带的请求头。",
+            "description": "服务端签发的表单字段；不可改写 key、policy、Content-Type、签名或临时令牌。签名只允许上传本次指定对象。",
             "additionalProperties": {
               "type": "string"
             },
             "example": {
-              "Content-Type": "image/jpeg"
+              "key": "uploads/staging/e17c8ad0-8f08-4a4b-8a77-2b730ab323da.png",
+              "Content-Type": "image/png",
+              "success_action_status": "201",
+              "policy": "replace-with-server-policy",
+              "x-oss-signature": "replace-with-server-signature"
             }
           },
           "expiresAt": {
@@ -6806,13 +6779,13 @@
           "mediaId",
           "method",
           "uploadUrl",
-          "headers",
+          "fields",
           "expiresAt"
         ]
       },
       "MediaReadGrant": {
         "type": "object",
-        "description": "证据图片短时读取授权，仅本人及售后管理员。",
+        "description": "私有售后凭证读取授权，有效 60 秒，绑定当前账户、会话及素材；每次读取重查权限、封禁和售后关联。",
         "additionalProperties": false,
         "properties": {
           "mediaId": {
@@ -6825,15 +6798,15 @@
           },
           "url": {
             "type": "string",
-            "description": "HTTPS URL。",
+            "description": "应用代理 URL；不是 OSS 永久地址或可脱离平台权限使用的存储签名。不要记录到日志或公共缓存。",
             "format": "uri",
-            "example": "https://cdn.example.com/cover.jpg"
+            "example": "http://localhost:3000/api/v1/media/e17c8ad0-8f08-4a4b-8a77-2b730ab323da/file?token=replace-with-read-grant"
           },
           "expiresAt": {
             "type": "string",
             "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
             "format": "date-time",
-            "example": "2026-10-22T02:05:00Z"
+            "example": "2026-10-22T02:01:00Z"
           }
         },
         "required": [
@@ -7611,7 +7584,7 @@
       },
       "VideoBodyWrite": {
         "type": "object",
-        "description": "引用 CONTENT_VIDEO 素材。LOCAL 为已上传 MP4；BILIBILI 仅科普；FEISHU 仅 MEMBER 视频课程非预览章。服务端不抓取远程视频、不转码。",
+        "description": "引用 READY CONTENT_VIDEO 素材。LOCAL／OSS 为私有 MP4；BILIBILI 仅科普；FEISHU 仅 MEMBER 视频课程非预览章。",
         "additionalProperties": false,
         "properties": {
           "version": {
@@ -8817,7 +8790,7 @@
       },
       "PrivateEvidenceMedia": {
         "type": "object",
-        "description": "售后私有图片元数据；publicUrl 固定 null，须申请 read-grant。",
+        "description": "本人提交的私有售后图片摘要；publicUrl 永远为 null。经 read-grant 获取短时应用代理地址。",
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -8839,12 +8812,12 @@
           },
           "status": {
             "type": "string",
-            "description": "上传后处理完成才可引用。",
+            "description": "统一上传状态：UPLOADING 待确认；READY 可引用；FAILED 校验失败；DELETED 已逻辑删除。旧素材接口直接返回 READY。",
             "enum": [
               "UPLOADING",
-              "PROCESSING",
               "READY",
-              "FAILED"
+              "FAILED",
+              "DELETED"
             ],
             "example": "READY"
           },
@@ -8865,7 +8838,7 @@
             "enum": [
               null
             ],
-            "description": "固定 null。",
+            "description": "固定 null，不暴露 OSS 私有地址。",
             "example": null
           },
           "durationSeconds": {
@@ -8873,6 +8846,18 @@
             "description": "仅视频返回，处理前可不返回。",
             "minimum": 0,
             "example": 180
+          },
+          "provider": {
+            "type": "string",
+            "description": "统一上传为 OSS；保留旧素材来源；不包含存储凭证、内部对象路径或受保护视频链接。",
+            "enum": [
+              "LOCAL",
+              "OSS",
+              "EXTERNAL_IMAGE",
+              "BILIBILI",
+              "FEISHU"
+            ],
+            "example": "OSS"
           }
         },
         "required": [
@@ -8978,7 +8963,7 @@
       },
       "ProductImageCreate": {
         "type": "object",
-        "description": "登记管理员已托管的公开 HTTPS 产品图片；不抓取远程文件、不提供文件上传或私有凭证存储。",
+        "description": "兼容登记已经托管的公开 HTTPS 产品图片；该接口不检查远程字节。新文件可通过统一上传完成校验后直接取得相同用途的素材 ID。",
         "additionalProperties": false,
         "properties": {
           "publicUrl": {
@@ -9379,7 +9364,7 @@
       },
       "ContentImageCreate": {
         "type": "object",
-        "description": "登记已托管公开 HTTPS 图片元数据。CONTENT_COVER/COLUMN_COVER 仅允许 CONTENT_IMAGE_OSS_HOST（默认 chunai-photo.oss-cn-hangzhou.aliyuncs.com），正文图片仍允许已有 HTTPS 地址。不会上传或下载文件。",
+        "description": "登记已托管公开 HTTPS 图片元数据。CONTENT_COVER/COLUMN_COVER 仅允许 CONTENT_IMAGE_OSS_HOST（默认 chunai-photo.oss-cn-hangzhou.aliyuncs.com），正文图片仍允许已有 HTTPS 地址。不会上传或下载文件。 新文件可改走统一上传；完成后直接使用返回素材 ID，无须重复登记。",
         "additionalProperties": false,
         "properties": {
           "publicUrl": {
@@ -9711,6 +9696,106 @@
           "page",
           "pageSize",
           "hasNext"
+        ]
+      },
+      "UploadImageCreate": {
+        "type": "object",
+        "description": "图片直传申请；JPEG、PNG、WebP，最大 10 MiB；所有文件先上传到私有临时区域。",
+        "additionalProperties": false,
+        "properties": {
+          "purpose": {
+            "type": "string",
+            "description": "用户仅 AVATAR／AFTERSALE_EVIDENCE；管理员内容用途需要 media:write + content:write，产品图片需要 media:write + products:write。",
+            "enum": [
+              "AVATAR",
+              "AFTERSALE_EVIDENCE",
+              "CONTENT_COVER",
+              "CONTENT_BODY_IMAGE",
+              "PRODUCT_IMAGE",
+              "COLUMN_COVER"
+            ],
+            "example": "AVATAR"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "原始显示名称，不作为对象路径；拒绝路径分隔符与控制字符。",
+            "minLength": 1,
+            "maxLength": 200,
+            "example": "cs-avatar.png"
+          },
+          "mimeType": {
+            "type": "string",
+            "description": "申请 MIME，完成后检查真实对象头与文件特征。",
+            "enum": [
+              "image/jpeg",
+              "image/png",
+              "image/webp"
+            ],
+            "example": "image/png"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "description": "精确文件大小；OSS POST 策略及完成确认都会校验。",
+            "minimum": 1,
+            "example": 1024,
+            "maximum": 10485760
+          }
+        },
+        "required": [
+          "purpose",
+          "fileName",
+          "mimeType",
+          "sizeBytes"
+        ]
+      },
+      "UploadVideoCreate": {
+        "type": "object",
+        "description": "仅管理员，需 media:write + content:write；MP4 最大 100 MiB，私有存储，不转码。",
+        "additionalProperties": false,
+        "properties": {
+          "purpose": {
+            "type": "string",
+            "description": "视频固定用途。",
+            "enum": [
+              "CONTENT_VIDEO"
+            ],
+            "example": "CONTENT_VIDEO"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "原始显示名称，不作为对象路径；拒绝路径分隔符与控制字符。",
+            "minLength": 1,
+            "maxLength": 200,
+            "example": "cs-video.mp4"
+          },
+          "mimeType": {
+            "type": "string",
+            "description": "仅 MP4。",
+            "enum": [
+              "video/mp4"
+            ],
+            "example": "video/mp4"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "description": "精确文件大小。",
+            "minimum": 1,
+            "example": 102400,
+            "maximum": 104857600
+          },
+          "durationSeconds": {
+            "type": "integer",
+            "description": "可省略，默认 0 表示未知；管理员提供时长，不提供自动探测或转码。",
+            "minimum": 0,
+            "example": 3,
+            "maximum": 86400
+          }
+        },
+        "required": [
+          "purpose",
+          "fileName",
+          "mimeType",
+          "sizeBytes"
         ]
       },
       "ContentCategory": {
@@ -10140,6 +10225,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -10366,6 +10461,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -10582,6 +10687,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -10835,6 +10950,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -11068,6 +11193,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -11320,6 +11455,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -11561,6 +11706,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -11764,6 +11919,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -11988,6 +12153,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -12222,6 +12397,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -12257,7 +12442,7 @@
       "patch": {
         "operationId": "patch_me",
         "summary": "修改本人资料",
-        "description": "先 GET /me 读取 version，再修改 nickname 或 avatarUrl；头像只登记现有 OSS HTTPS 对象地址，null 清空。至少一个修改字段；版本冲突返回 409。",
+        "description": "先 GET /me 获取 version；修改 nickname，或传本人 READY AVATAR 素材的 avatarMediaId（null 清空）。avatarUrl 作为兼容路径保留，与 avatarMediaId 互斥；管理上传地址仍须本人所有。版本冲突返回 409。",
         "tags": [
           "02 用户与地址"
         ],
@@ -12450,6 +12635,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -12676,6 +12871,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -12936,6 +13141,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -13153,6 +13368,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -13420,6 +13645,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -13662,6 +13897,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -13890,6 +14135,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -14157,6 +14412,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -14384,6 +14649,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -14662,6 +14937,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -15043,6 +15328,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -15298,6 +15593,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -15679,6 +15984,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -15943,6 +16258,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -15980,7 +16305,7 @@
       "get": {
         "operationId": "get_videos_id_playback",
         "summary": "获取科普视频播放授权",
-        "description": "仅 SCIENCE_VIDEO。按 mode 分支：STREAM 返回本地短时 playbackUrl；EXTERNAL_LINK 返回 BILIBILI externalUrl，不能当作视频文件 URL 播放。响应禁止缓存。",
+        "description": "仅 SCIENCE_VIDEO。按 mode 分支：STREAM 返回本地短时 playbackUrl；EXTERNAL_LINK 返回 BILIBILI externalUrl，不能当作视频文件 URL 播放。响应禁止缓存。 OSS 私有 MP4 与 LOCAL 共用 STREAM 授权及应用代理流，每次 Range 请求重查权益。",
         "tags": [
           "03 视频、图文与专栏"
         ],
@@ -16177,6 +16502,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -16408,6 +16743,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -16689,6 +17034,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -16920,6 +17275,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -16957,7 +17322,7 @@
       "get": {
         "operationId": "get_chapters_id_playback",
         "summary": "获取课程视频播放授权",
-        "description": "仅 VIDEO 章节。LOCAL 保留短时流播放；FEISHU 仅用于 MEMBER 视频课程非预览章节，重新校验有效网站会员后返回链接和密码。无会员返回 403，不泄漏外链。管理员使用专属预览接口。响应禁止缓存。",
+        "description": "仅 VIDEO 章节。LOCAL 保留短时流播放；FEISHU 仅用于 MEMBER 视频课程非预览章节，重新校验有效网站会员后返回链接和密码。无会员返回 403，不泄漏外链。管理员使用专属预览接口。响应禁止缓存。 OSS 私有 MP4 与 LOCAL 共用 STREAM 授权及应用代理流，每次 Range 请求重查权益。",
         "tags": [
           "03 视频、图文与专栏"
         ],
@@ -17154,6 +17519,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -17430,6 +17805,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -17655,6 +18040,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -17966,6 +18361,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -18165,6 +18570,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -18550,6 +18965,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -18823,6 +19248,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -19084,6 +19519,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -19379,6 +19824,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -19776,6 +20231,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -20050,6 +20515,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -20369,6 +20844,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -20630,6 +21115,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -20856,6 +21351,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -21100,6 +21605,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -21319,6 +21834,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -21637,6 +22162,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -21898,6 +22433,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -22329,6 +22874,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -22563,6 +23118,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -22771,6 +23336,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -23076,6 +23651,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -23331,6 +23916,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -23610,6 +24205,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -23932,6 +24537,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -24181,6 +24796,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -24465,6 +25090,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -24760,6 +25395,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -24968,6 +25613,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -25242,6 +25897,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -25457,6 +26122,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -25686,6 +26361,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -25935,6 +26620,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -26150,6 +26845,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -26423,6 +27128,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -26681,6 +27396,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -26914,6 +27639,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -27097,6 +27832,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -27343,6 +28088,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -27637,6 +28392,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -27840,6 +28605,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -28084,6 +28859,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -28299,6 +29084,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -28543,6 +29338,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -28768,6 +29573,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -28805,7 +29620,7 @@
       "post": {
         "operationId": "post_uploads",
         "summary": "申请直传地址",
-        "description": "支持 client 或 admin 令牌；按 aud 和用途校验。普通用户禁止上传视频；管理员需 media:write。AVATAR／AFTERSALE_EVIDENCE 仅允许图片。",
+        "description": "普通用户可上传本人头像和售后凭证。管理员内容素材须 media:write + content:write，产品图片须 media:write + products:write。全部文件先上传到私有临时区域；缺少 OSS 凭证或任一 Bucket 配置时返回 503，不签发假上传地址。无需幂等键，每次创建新票据；每个账户最多 20 个有效待完成申请，滚动 24 小时用户限 100 个、管理员限 500 个。",
         "tags": [
           "11 文件与媒体"
         ],
@@ -28832,17 +29647,30 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "authenticated",
         "x-permissions": [],
         "x-idempotency-required": false,
         "x-conditional-permissions": {
-          "client": [],
-          "admin": [
-            "media:write"
-          ]
+          "client": {
+            "purposes": [
+              "AVATAR",
+              "AFTERSALE_EVIDENCE"
+            ],
+            "ownerOnly": true
+          },
+          "admin": {
+            "PRODUCT_IMAGE": [
+              "media:write",
+              "products:write"
+            ],
+            "CONTENT_COVER|COLUMN_COVER|CONTENT_BODY_IMAGE|CONTENT_VIDEO": [
+              "media:write",
+              "content:write"
+            ]
+          }
         },
         "requestBody": {
           "required": true,
@@ -28853,9 +29681,9 @@
               },
               "example": {
                 "purpose": "AVATAR",
-                "fileName": "cover.jpg",
-                "mimeType": "image/jpeg",
-                "sizeBytes": 102400
+                "fileName": "cs-avatar.png",
+                "mimeType": "image/png",
+                "sizeBytes": 1024
               }
             }
           }
@@ -28917,12 +29745,16 @@
                   "code": "OK",
                   "message": "success",
                   "data": {
-                    "uploadId": "id_10001",
-                    "mediaId": "id_10001",
-                    "method": "PUT",
-                    "uploadUrl": "https://storage.example.com/upload?signature=demo",
-                    "headers": {
-                      "Content-Type": "image/jpeg"
+                    "uploadId": "e17c8ad0-8f08-4a4b-8a77-2b730ab323da",
+                    "mediaId": "e17c8ad0-8f08-4a4b-8a77-2b730ab323da",
+                    "method": "POST",
+                    "uploadUrl": "https://your-private-bucket.oss-cn-hangzhou.aliyuncs.com",
+                    "fields": {
+                      "key": "uploads/staging/e17c8ad0-8f08-4a4b-8a77-2b730ab323da.png",
+                      "Content-Type": "image/png",
+                      "success_action_status": "201",
+                      "policy": "replace-with-server-policy",
+                      "x-oss-signature": "replace-with-server-signature"
                     },
                     "expiresAt": "2026-10-22T02:10:00Z"
                   },
@@ -29012,6 +29844,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -29049,7 +29891,7 @@
       "post": {
         "operationId": "post_uploads_id_complete",
         "summary": "通知上传完成",
-        "description": "校验文件实际大小、MIME、校验和及安全处理后变 READY；视频异步转码，处理中返回 PROCESSING。重复调用不重复转码。",
+        "description": "上传到 OSS 成功后调用，无请求体。服务端校验实际大小、MIME 与文件特征，复制到新的最终对象后才变为 READY；公开图片发布到公开 Bucket，证据和 MP4 保持私有。重复成功确认返回原素材；不转码。",
         "tags": [
           "11 文件与媒体"
         ],
@@ -29090,17 +29932,30 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "authenticated",
         "x-permissions": [],
         "x-idempotency-required": false,
         "x-conditional-permissions": {
-          "client": [],
-          "admin": [
-            "media:write"
-          ]
+          "client": {
+            "purposes": [
+              "AVATAR",
+              "AFTERSALE_EVIDENCE"
+            ],
+            "ownerOnly": true
+          },
+          "admin": {
+            "PRODUCT_IMAGE": [
+              "media:write",
+              "products:write"
+            ],
+            "CONTENT_COVER|COLUMN_COVER|CONTENT_BODY_IMAGE|CONTENT_VIDEO": [
+              "media:write",
+              "content:write"
+            ]
+          }
         },
         "responses": {
           "200": {
@@ -29243,6 +30098,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -29289,7 +30154,7 @@
       "get": {
         "operationId": "get_media_id",
         "summary": "读取可管理媒体处理状态",
-        "description": "客户仅本人素材；管理员需 media:write 且只管理后台用途素材，不借此读取客户私有证据。",
+        "description": "普通用户仅查询本人上传；管理员查询后台用途素材需 media:write 和对应内容／产品权限，读取已绑定售后的 READY 凭证需 aftersales:review。不返回临时 key、私有源地址或凭证。",
         "tags": [
           "11 文件与媒体"
         ],
@@ -29330,17 +30195,36 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "authenticated",
         "x-permissions": [],
         "x-idempotency-required": false,
         "x-conditional-permissions": {
-          "client": [],
-          "admin": [
-            "media:write"
-          ]
+          "client": {
+            "purposes": [
+              "AVATAR",
+              "AFTERSALE_EVIDENCE"
+            ],
+            "ownerOnly": true
+          },
+          "admin": {
+            "PRODUCT_IMAGE": [
+              "media:write",
+              "products:write"
+            ],
+            "CONTENT_COVER|COLUMN_COVER|CONTENT_BODY_IMAGE|CONTENT_VIDEO": [
+              "media:write",
+              "content:write"
+            ],
+            "AFTERSALE_EVIDENCE": {
+              "permissions": [
+                "aftersales:review"
+              ],
+              "requiresLinkedAfterSale": true
+            }
+          }
         },
         "responses": {
           "200": {
@@ -29492,6 +30376,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -29527,7 +30421,7 @@
       "delete": {
         "operationId": "delete_media_id",
         "summary": "删除未引用的本人素材",
-        "description": "已被内容、订单或售后引用时拒绝；管理员素材需 media:write。",
+        "description": "仅本人未引用素材；管理员仍需对应用途权限。头像、商品、正文、内容封面、专栏、有效报价／历史订单或售后凭证仍引用时返回 MEDIA_IN_USE。先逻辑删除，票据过期 60 秒后后台清理对象并重试失败清理。重复删除成功，无需幂等键。",
         "tags": [
           "11 文件与媒体"
         ],
@@ -29568,17 +30462,30 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "authenticated",
         "x-permissions": [],
         "x-idempotency-required": false,
         "x-conditional-permissions": {
-          "client": [],
-          "admin": [
-            "media:write"
-          ]
+          "client": {
+            "purposes": [
+              "AVATAR",
+              "AFTERSALE_EVIDENCE"
+            ],
+            "ownerOnly": true
+          },
+          "admin": {
+            "PRODUCT_IMAGE": [
+              "media:write",
+              "products:write"
+            ],
+            "CONTENT_COVER|COLUMN_COVER|CONTENT_BODY_IMAGE|CONTENT_VIDEO": [
+              "media:write",
+              "content:write"
+            ]
+          }
         },
         "responses": {
           "200": {
@@ -29725,6 +30632,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -29762,7 +30679,7 @@
       "post": {
         "operationId": "post_media_id_read_grant",
         "summary": "申请私有凭证图片读取授权",
-        "description": "仅证据所有者及有关联售后且有 aftersales:review 的管理员；有效 5 分钟。内容视频必须走专用播放授权，不能由此获取。",
+        "description": "仅 READY AFTERSALE_EVIDENCE 图片。本人可预览；管理员须 aftersales:review，且素材已绑定售后。返回 60 秒应用代理地址；每次读取重查当前会话、账号及关联。内容视频使用现有播放授权接口。",
         "tags": [
           "11 文件与媒体"
         ],
@@ -29803,17 +30720,23 @@
             }
           }
         ],
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "x-login-required": true,
         "x-admin-required": false,
         "x-auth-mode": "authenticated",
         "x-permissions": [],
         "x-idempotency-required": false,
         "x-conditional-permissions": {
-          "client": [],
-          "admin": [
-            "aftersales:review"
-          ]
+          "client": {
+            "ownerOnly": true,
+            "purpose": "AFTERSALE_EVIDENCE"
+          },
+          "admin": {
+            "permissions": [
+              "aftersales:review"
+            ],
+            "requiresLinkedAfterSale": true
+          }
         },
         "responses": {
           "200": {
@@ -29873,8 +30796,8 @@
                   "message": "success",
                   "data": {
                     "mediaId": "id_10001",
-                    "url": "https://cdn.example.com/cover.jpg",
-                    "expiresAt": "2026-10-22T02:05:00Z"
+                    "url": "http://localhost:3000/api/v1/media/e17c8ad0-8f08-4a4b-8a77-2b730ab323da/file?token=replace-with-read-grant",
+                    "expiresAt": "2026-10-22T02:01:00Z"
                   },
                   "requestId": "req_demo_001",
                   "timestamp": "2026-10-22T02:00:00Z"
@@ -29953,6 +30876,238 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/media/{id}/file": {
+      "get": {
+        "operationId": "get_media_id_file",
+        "summary": "读取授权私有售后凭证",
+        "description": "返回原始图片字节，不套 JSON 成功外壳；每次读取重查素材状态、账户与会话。管理员还需当前 aftersales:review 权限及售后关联。不能用普通登录 JWT 代替授权令牌。",
+        "tags": [
+          "11 文件与媒体"
+        ],
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "schema": {
+              "type": "string",
+              "description": "不透明业务 ID；前端必须按字符串保存。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "id_10001"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "read-grant 签发的 60 秒短时令牌。",
+              "maxLength": 4096,
+              "example": "replace-with-read-grant"
+            },
+            "description": "read-grant 签发的 60 秒短时令牌。"
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": false,
+        "x-admin-required": false,
+        "x-auth-mode": "public",
+        "x-permissions": [],
+        "x-idempotency-required": false,
+        "responses": {
+          "200": {
+            "description": "授权私有售后凭证图片。",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "private, no-store"
+                }
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string",
+                  "example": "nosniff"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -30196,6 +31351,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -30429,6 +31594,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -30632,6 +31807,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -30849,6 +32034,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -31140,6 +32335,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -31363,6 +32568,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -31597,6 +32812,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -31852,6 +33077,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -32081,6 +33316,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -32454,6 +33699,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -32726,6 +33981,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -32986,6 +34251,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -33276,6 +34551,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -33505,6 +34790,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -33796,6 +35091,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -34078,6 +35383,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -34302,6 +35617,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -34550,6 +35875,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -34852,6 +36187,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -35106,6 +36451,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -35339,6 +36694,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -35602,6 +36967,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -35840,6 +37215,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -36064,6 +37449,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -36312,6 +37707,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -36576,6 +37981,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -36831,6 +38246,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -37066,6 +38491,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -37319,6 +38754,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -37545,6 +38990,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -37788,6 +39243,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -38011,6 +39476,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -38324,6 +39799,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -38557,6 +40042,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -38801,6 +40296,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -39066,6 +40571,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -39295,6 +40810,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -39561,6 +41086,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -39809,6 +41344,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -40155,6 +41700,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -40410,6 +41965,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -40641,6 +42206,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -40999,6 +42574,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -41287,6 +42872,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -41564,6 +43159,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -41871,6 +43476,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -42100,6 +43715,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -42408,6 +44033,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -42707,6 +44342,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -42984,6 +44629,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -43244,6 +44899,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -43477,6 +45142,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -43740,6 +45415,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -43969,6 +45654,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -44234,6 +45929,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -44537,6 +46242,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -44762,6 +46477,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -45204,6 +46929,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -45505,6 +47240,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -45726,6 +47471,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -46006,6 +47761,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -46256,6 +48021,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -46620,6 +48395,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -46871,6 +48656,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -47168,6 +48963,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -47455,6 +49260,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -47732,6 +49547,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -48054,6 +49879,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -48309,6 +50144,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -48646,6 +50491,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -48901,6 +50756,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -49182,6 +51047,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -49427,6 +51302,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -49778,6 +51663,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -50023,6 +51918,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -50247,6 +52152,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -50494,6 +52409,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -50775,6 +52700,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -51038,6 +52973,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -51332,6 +53277,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -51572,6 +53527,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -51803,6 +53768,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -52064,6 +54039,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -52302,6 +54287,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -52591,6 +54586,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -52837,6 +54842,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -53099,6 +55114,16 @@
               }
             }
           },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "参见业务错误码表。",
             "content": {
@@ -53324,6 +55349,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {
@@ -53643,6 +55678,16 @@
             }
           },
           "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "参见业务错误码表。",
             "content": {
               "application/json": {

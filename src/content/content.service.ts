@@ -11,6 +11,7 @@ import { BodyRecord, Chapter, ColumnContent, Content, ContentColumn, ContentKind
 import * as D from './content.dto';
 import { activeMembership } from '../membership/membership-access';
 import { validateContentImageUrl } from './media-source';
+import { lockManagedReference } from '../uploads/references';
 
 export type Access = { canAccess: boolean; reason: 'FREE' | 'PURCHASED' | 'MEMBER' | 'PREVIEW' | 'ADMIN' | 'LOGIN_REQUIRED' | 'PURCHASE_REQUIRED' | 'MEMBERSHIP_REQUIRED' | 'CONTENT_UNAVAILABLE' };
 const emptyBody = { bodyHtml: null, imageMediaIds: [] as string[], videoMediaId: null, publishedAt: null };
@@ -25,8 +26,14 @@ export class ContentService {
     return v!;
   }
   mediaView(v: ContentMedia) { return { id: v.id, kind: v.kind, provider: v.provider, status: 'READY', mimeType: v.mimeType, sizeBytes: v.sizeBytes, publicUrl: v.publicUrl }; }
+  // Only mutations take the upload row lock: it serializes attaching a file with deletion.
+  private async boundMedia(m: EntityManager, id: string, purpose: ContentMedia['purpose']) {
+    const media = await this.media(m, id, purpose);
+    await lockManagedReference(m, id, purpose, media.publicUrl ?? undefined);
+    return media;
+  }
   private async newCover(m: EntityManager, id: string, purpose: 'CONTENT_COVER' | 'COLUMN_COVER') {
-    const cover = await this.media(m, id, purpose);
+    const cover = await this.boundMedia(m, id, purpose);
     validateContentImageUrl(cover.publicUrl ?? '', true);
   }
   async lockContent(m: EntityManager, id: string) {
@@ -35,7 +42,7 @@ export class ContentService {
   }
   private async references(m: EntityManager, c: Content) {
     if (!await m.existsBy(Category, { id: c.categoryId, scope: 'CONTENT', enabled: true })) conflict('CATEGORY_UNAVAILABLE', '请选择启用的内容分类');
-    await this.media(m, c.coverMediaId, 'CONTENT_COVER');
+    await this.boundMedia(m, c.coverMediaId, 'CONTENT_COVER');
     if ((!isCourse(c.kind) && c.accessPolicy !== 'FREE') || (c.accessPolicy === 'PURCHASE' ? c.priceCents <= 0 : c.priceCents !== 0)) invalid('科普必须免费；免费或会员课程价格为 0，购买课程价格须大于 0');
     if (c.accessPolicy === 'MEMBER' && await m.existsBy(OrderItem, { courseId: c.id })) conflict('RESOURCE_IN_USE', '已有购买订单的课程不能改为会员专享，请另建会员课程');
     if (c.videoMediaId) await this.validateVideoSource(m, c, null, c.videoMediaId);
@@ -63,7 +70,7 @@ export class ContentService {
       a.reason === 'LOGIN_REQUIRED' ? 'AUTH_REQUIRED' : 'CONTENT_ACCESS_DENIED', '请登录并取得对应课程或会员访问资格');
   }
   private async validateVideoSource(m: EntityManager, c: Content, ch: Chapter | null, mediaId: string) {
-    const media = await this.media(m, mediaId, 'CONTENT_VIDEO');
+    const media = await this.boundMedia(m, mediaId, 'CONTENT_VIDEO');
     this.validateProvider(c, ch, media.provider);
     return media;
   }
@@ -142,10 +149,10 @@ export class ContentService {
     });
   }
   private async bodyReady(m: EntityManager, record: BodyRecord, video: boolean) {
-    if (video) { if (!record.videoMediaId) conflict('CONTENT_NOT_READY', '请先配置视频'); await this.media(m, record.videoMediaId!, 'CONTENT_VIDEO'); }
+    if (video) { if (!record.videoMediaId) conflict('CONTENT_NOT_READY', '请先配置视频'); await this.boundMedia(m, record.videoMediaId!, 'CONTENT_VIDEO'); }
     else {
       if (!record.bodyHtml?.trim()) conflict('CONTENT_NOT_READY', '请先填写正文');
-      for (const id of record.imageMediaIds) await this.media(m, id, 'CONTENT_BODY_IMAGE');
+      for (const id of [...record.imageMediaIds].sort()) await this.boundMedia(m, id, 'CONTENT_BODY_IMAGE');
     }
   }
   publish(actor: Actor, id: string, version: number, status: 'PUBLISHED' | 'OFFLINE') {
@@ -194,7 +201,7 @@ export class ContentService {
       } else {
         if (dto.bodyHtml === undefined || dto.imageMediaIds === undefined || dto.videoMediaId !== undefined) invalid('图文须提交 bodyHtml 和 imageMediaIds');
         const urls = new Set<string>();
-        for (const mediaId of dto.imageMediaIds!) urls.add((await this.media(m, mediaId, 'CONTENT_BODY_IMAGE')).publicUrl!);
+        for (const mediaId of [...dto.imageMediaIds!].sort()) urls.add((await this.boundMedia(m, mediaId, 'CONTENT_BODY_IMAGE')).publicUrl!);
         r.bodyHtml = sanitizeHtml(dto.bodyHtml!, { allowedTags: ['p', 'br', 'strong', 'em', 'ul', 'ol', 'li', 'h2', 'h3', 'blockquote', 'img'],
           allowedAttributes: { img: ['src', 'alt'] }, allowedSchemes: ['https'],
           transformTags: { img: (_tag, attrs) => { if (!urls.has(attrs.src)) invalid('正文图片必须引用登记的 imageMediaIds'); return { tagName: 'img', attribs: { src: attrs.src, alt: attrs.alt ?? '' } }; } } });
@@ -311,7 +318,7 @@ export class ContentService {
       const col = id ? await this.getColumn(m, id, true, true) : m.create(ContentColumn, { id: randomUUID(), description: '', sortOrder: 0, status: 'DRAFT', version: 1 });
       if (id) { checkVersion(col, (dto as D.ColumnPatchDto).version); if (Object.keys(defined(dto)).length < 2) invalid('请提供修改字段'); }
       if (!id || (dto.coverMediaId !== undefined && dto.coverMediaId !== col.coverMediaId)) await this.newCover(m, dto.coverMediaId!, 'COLUMN_COVER');
-      Object.assign(col, defined(dto)); await this.media(m, col.coverMediaId, 'COLUMN_COVER'); if (id) touch(col);
+      Object.assign(col, defined(dto)); await this.boundMedia(m, col.coverMediaId, 'COLUMN_COVER'); if (id) touch(col);
       await m.save(col); await this.tx.audit(m, actor, id ? 'column.update' : 'column.create', col.id); return this.columnView(m, col, true);
     });
   }
@@ -319,7 +326,7 @@ export class ContentService {
     return this.tx.run(actor, async m => {
       const col = await this.getColumn(m, id, true, true); checkVersion(col, version);
       if (status === 'OFFLINE' && col.status !== 'PUBLISHED') conflict('CONTENT_STATE_INVALID', '只能下架已发布专栏');
-      await this.media(m, col.coverMediaId, 'COLUMN_COVER'); col.status = status; touch(col); await m.save(col);
+      await this.boundMedia(m, col.coverMediaId, 'COLUMN_COVER'); col.status = status; touch(col); await m.save(col);
       await this.tx.audit(m, actor, `column.${status.toLowerCase()}`, id); return this.columnView(m, col, true);
     });
   }

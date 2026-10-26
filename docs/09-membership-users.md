@@ -71,9 +71,9 @@
 
 ## 用户资料与头像
 
-先 `GET /me` 读取 `version`，再 `PATCH /me` 提交版本及 `nickname`、`avatarUrl` 中至少一个字段。昵称去除首尾空白后 1–32 字符，禁止控制字符；`avatarUrl=null` 清空头像，省略保持不变。响应返回最新 `UserSummary`，注册／登录／刷新返回的用户摘要也含 `version`。
+先 `GET /me` 读取 `version`，再 `PATCH /me` 提交版本及 `nickname`、`avatarMediaId` 或兼容字段 `avatarUrl` 中至少一个字段。昵称去除首尾空白后 1–32 字符，禁止控制字符；两种头像字段互斥，传 null 清空、省略保持不变。响应返回最新 `UserSummary`，注册／登录／刷新返回的用户摘要也含 `version`。
 
-头像必须是已存在的 `https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/<对象路径>`，允许通过 `CONTENT_IMAGE_OSS_HOST` 调整主机。拒绝临时签名地址、非 HTTPS、其他域名、账号密码、显式端口和 fragment。后端只登记 URL，不代上传、下载或校验远端对象是否存在。
+新头像推荐先通过 [统一上传](10-unified-uploads.md) 的 `AVATAR` 用途完成上传，再传本人 READY 图片的 `avatarMediaId`。兼容 `avatarUrl` 必须是已存在的 `https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/<对象路径>`，允许通过 `CONTENT_IMAGE_OSS_HOST` 调整主机；拒绝临时签名地址、非 HTTPS、其他域名、账号密码、显式端口和 fragment。兼容登记不下载或检查远端对象，通过 URL 引用系统管理的头像仍校验本人归属。
 
 资料接口不接收手机号、账号状态、权限或会员期限。版本冲突返回 `409 VERSION_CONFLICT`，前端重读资料后提交；修改资料不撤销会话，封禁／改密等安全操作仍按原规则撤销会话。
 

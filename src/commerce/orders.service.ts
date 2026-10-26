@@ -14,6 +14,7 @@ import { testPaymentsEnabled } from './permissions';
 import { courseQuote, grantCourse, validateCourseOrder } from '../content/course-purchase';
 import { membershipSummary } from '../membership/membership-access';
 import { membershipQuote, grantMembership, validateMembershipOrder } from '../membership/membership-purchase';
+import { lockManagedReference } from '../uploads/references';
 
 export const CARRIERS: Record<string, string> = { SF: '顺丰速运', YTO: '圆通速递', ZTO: '中通快递', STO: '申通快递', YUNDA: '韵达快递', EMS: '中国邮政', JD: '京东物流' };
 export function carrierName(code: string) { if (!CARRIERS[code]) throw new ApiException(400, 'CARRIER_UNSUPPORTED', '不支持的快递代码'); return CARRIERS[code]; }
@@ -121,6 +122,13 @@ export class OrdersService {
         const s = skus.get(i.resourceId)!; await this.sellable(m, products.get(s.productId)!, s, i.quantity);
         if (s.priceCents !== i.unitPriceCents || canonical(s.attributes) !== canonical(i.skuAttributes)) conflict('QUOTE_CHANGED', '价格或规格已变更，请重新试算');
       }
+      // A quote can expire while waiting for product/course locks. Hold every managed cover until
+      // its immutable order snapshot is committed, so media deletion cannot race this transition.
+      if (q.type !== 'MEMBERSHIP') {
+        const covers = [...new Set(q.items.map(item => item.coverUrl).filter((url): url is string => !!url))].sort();
+        for (const url of covers) await lockManagedReference(m, '', q.type === 'PRODUCT' ? 'PRODUCT_IMAGE' : 'CONTENT_COVER', url);
+      }
+      if (q.expiresAt.getTime() <= Date.now()) conflict('QUOTE_EXPIRED', '报价已过期，请重新试算');
       const id = randomUUID(); const amount = q.items.reduce((n,i) => n + i.subtotalCents, 0);
       const order = m.create(Order, { id, type: q.type, userId: actorId(actor), quoteId: q.id, orderNo: `O${id.replace(/-/g, '')}`,
         status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID', afterSaleStatus: 'NONE', address: q.address,

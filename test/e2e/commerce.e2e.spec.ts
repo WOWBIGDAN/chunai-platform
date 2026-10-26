@@ -337,13 +337,13 @@ describe('commerce permissions and real MySQL business transactions', () => {
     await call('delete', `/me/addresses/${a.id}?version=${changed.version}`, customer).expect(200);
     const o = data(await post('/orders', customer, { quoteId: q.quoteId }).expect(201)); expect(o.address).toEqual(snapshot);
   });
-  it('rejects foreign order lines, over-refunds and private evidence until storage is configured', async () => {
+  it('rejects foreign order lines, over-refunds and nonexistent private evidence', async () => {
     const f = await fixture(); const o = await paidOrder(f.sku);
     const body = { orderId: o.id, type: 'REFUND_ONLY', items: [{ orderItemId: o.items[0].id, quantity: 2 }], reasonCode: 'OTHER', description: '边界测试' };
     await post('/aftersales', customer, body).expect(409);
     await post('/aftersales', customer, { ...body, items: [{ orderItemId: randomUUID(), quantity: 1 }] }).expect(404);
     await post('/aftersales', customer, { ...body, refundAmountCents: 1 }).expect(400);
-    await post('/aftersales', customer, { ...body, evidenceMediaIds: [randomUUID()] }).expect(503);
+    await post('/aftersales', customer, { ...body, items: [{ orderItemId: o.items[0].id, quantity: 1 }], evidenceMediaIds: [randomUUID()] }).expect(404);
     const a = await approve(await sale(o));
     await post(`/admin/refunds/${a.refundId}/test-result`, reader, { version: a.version, result: 'SUCCEEDED' }).expect(403);
     await post(`/admin/refunds/${a.refundId}/test-result`, full, { version: a.version, result: 'SUCCEEDED' }).expect(200);

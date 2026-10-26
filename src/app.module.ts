@@ -9,6 +9,7 @@ import { CommerceModule } from './commerce/commerce.module';
 import { ContentModule } from './content/content.module';
 import { MembershipModule } from './membership/membership.module';
 import { UsersModule } from './users/users.module';
+import { UploadsModule } from './uploads/uploads.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { UsersModule } from './users/users.module';
     ContentModule,
     MembershipModule,
     UsersModule,
+    UploadsModule,
   ],
   controllers: [HealthController],
   providers: [ThrottlerGuard, { provide: APP_GUARD, useExisting: ThrottlerGuard }],

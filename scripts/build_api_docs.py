@@ -920,6 +920,8 @@ from content_contract import apply_content_contract, finalize_content_spec
 apply_content_contract(globals())
 from membership_users_contract import apply_membership_users_contract
 apply_membership_users_contract(globals())
+from uploads_contract import apply_uploads_contract, finalize_uploads_spec
+apply_uploads_contract(globals())
 
 AUTH_LABELS = {
     "public": ("否", "否"), "optional": ("可选", "否"), "user": ("是", "否"),
@@ -936,6 +938,7 @@ ERRORS = [
     (401, "AUTH_INVALID_CREDENTIALS", "账号或密码错误", "统一提示，避免账号枚举"),
     (401, "TOKEN_EXPIRED", "访问令牌过期", "单飞刷新后最多重放一次"),
     (401, "TOKEN_INVALID", "令牌错误、会话撤销或 audience 不符", "清理对应端会话"),
+    (401, "MEDIA_GRANT_INVALID", "私有凭证授权过期、会话已撤销或管理员权限不足", "重新登录并申请读取授权"),
     (401, "REFRESH_TOKEN_INVALID", "刷新令牌无效或过期", "重新登录"),
     (401, "REFRESH_TOKEN_REUSED", "已轮换刷新令牌被重放", "撤销该会话链并重新登录"),
     (403, "ACCOUNT_BANNED", "账号封禁中", "显示封禁提示，停止刷新"),
@@ -960,15 +963,24 @@ ERRORS = [
     (409, "AFTERSALE_STATE_INVALID", "售后状态不允许该操作", "重取售后"),
     (409, "DIGITAL_REFUND_NOT_ELIGIBLE", "不是可退款的数字订单或会员权益段已开始", "转人工核对业务政策"),
     (409, "RESOURCE_IN_USE", "素材、分类或其他对象仍被引用", "先处理引用／下架"),
+    (409, "MEDIA_IN_USE", "上传素材被当前业务或历史记录引用，或凭证已关联售后", "保留历史引用；为新售后重新上传"),
+    (409, "MEDIA_UNAVAILABLE", "媒体尚未 READY、已删除或用途不匹配", "选择本人正确用途且已完成的媒体"),
+    (409, "UPLOAD_NOT_RECEIVED", "OSS 尚无该次上传对象", "先完成 OSS 表单上传再确认"),
+    (409, "UPLOAD_EXPIRED", "上传票据已过期", "重新申请上传"),
+    (409, "UPLOAD_STATE_INVALID", "已失败或已删除的上传不能完成确认", "重新申请上传"),
+    (409, "UPLOAD_OBJECT_CHANGED", "校验和复制期间对象变化或目标冲突", "重新申请上传"),
     (409, "STOCK_CONFLICT", "库存调整会使实物库存低于预占", "重取库存与版本"),
     (409, "AI_GENERATION_IN_PROGRESS", "会话存在活跃生成任务", "等待完成或取消"),
     (410, "STREAM_CURSOR_EXPIRED", "SSE 重放窗口已过期", "读取任务和历史消息恢复"),
     (413, "PAYLOAD_TOO_LARGE", "请求体或文件超过限制", "减小正文或文件"),
     (415, "UNSUPPORTED_MEDIA_TYPE", "文件实际类型不受支持", "更换允许的格式"),
+    (422, "UPLOAD_OBJECT_INVALID", "实际大小、MIME 或文件特征不符合申请", "该上传标记失败；检查文件后重新申请"),
     (429, "RATE_LIMITED", "短信、登录、支付补查等请求过频", "遵循 Retry-After"),
+    (429, "UPLOAD_LIMIT_EXCEEDED", "有效待完成票据或滚动 24 小时上传次数达到上限", "完成已有上传或等待额度恢复"),
     (429, "AI_QUOTA_EXCEEDED", "今日问答次数不足", "展示额度与恢复时间"),
     (500, "INTERNAL_ERROR", "服务端未预期错误", "携带 requestId 联系支持"),
     (503, "DEPENDENCY_UNAVAILABLE", "短信、存储、支付等依赖暂不可用", "幂等写入使用同键重试"),
+    (503, "STORAGE_UNAVAILABLE", "OSS 未配置、Bucket 安全检查失败或存储暂不可用", "配置凭证与公私 Bucket，核对权限或稍后重试"),
     (503, "AI_PROVIDER_UNAVAILABLE", "模型供应商暂不可用", "提示稍后再试；检查额度归还"),
 ]
 
@@ -1035,8 +1047,8 @@ def operation_id(operation):
 def make_spec():
     spec = {
         "openapi": "3.0.3",
-        "info": {"title": "两性健康服务平台 API", "version": "1.5.0",
-                 "description": "已实现认证、用户资料与后台用户管理、实物交易、科普与课程、专栏、会员方案购买与期限管理、OSS 图片地址登记及 B 站／飞书视频授权。x-implementation-status 表示仓库实现状态；线上以部署版本为准。支付退款使用 TEST 模式；短信、真实支付、AI、通知和第三方物流暂未接入。"},
+        "info": {"title": "两性健康服务平台 API", "version": "1.6.0",
+                 "description": "已实现认证、用户资料与后台用户管理、实物交易、科普与课程、专栏、会员方案购买与期限管理、统一 OSS 上传与私有售后凭证、B 站／飞书视频授权。统一上传需要配置 OSS 凭证及公私 Bucket，配置缺失时返回 503。x-implementation-status 表示仓库实现状态；线上以部署版本为准。支付退款使用 TEST 模式；短信、真实支付、AI、通知和第三方物流暂未接入。"},
         "servers": [{"url": "http://localhost:3000/api/v1", "description": "本地开发（示例）"},
                     {"url": "http://47.97.46.242/api/v1", "description": "staging 测试服务；可用接口以部署版本为准，协议版本以接口返回值为准"},
                     {"url": "https://api.example.com/api/v1", "description": "生产域名占位，必须替换"}],
@@ -1110,6 +1122,7 @@ def make_spec():
                     "content": {"application/json": {"schema": ref("ErrorResponse")}}}
         spec["paths"].setdefault(operation["path"], {})[operation["method"]] = record
     finalize_content_spec(spec)
+    finalize_uploads_spec(spec)
     return spec
 
 
@@ -1145,9 +1158,9 @@ def schema_link(name):
 
 
 def build_api_markdown():
-    lines = ["# 接口文档", "", "> 更新：2026-10-26。已实现认证、用户资料与后台用户管理、实物交易、科普／课程／专栏、会员方案购买及 OSS／B 站／飞书访问；线上以部署版本为准。支付退款使用测试模式，短信及第三方收付款暂缓。",
+    lines = ["# 接口文档", "", "> 更新：2026-10-26。已实现认证、用户资料与后台用户管理、实物交易、科普／课程／专栏、会员方案购买、统一 OSS 上传与私有凭证及 B 站／飞书访问；线上以部署版本为准。统一上传在 OSS 凭证及公私 Bucket 配置齐全后启用。支付退款使用测试模式，短信及第三方收付款暂缓。",
              "", "已实现接口的运行方法见 [后端启动与数据库](04-backend-auth.md)。",
-             "", "测试 API：`http://47.97.46.242/api/v1`。详见 [交易模块](06-commerce.md)、[科普与课程](08-content-courses.md)、[会员购买与用户管理](09-membership-users.md) 及 [部署说明](05-deployment.md)。",
+             "", "测试 API：`http://47.97.46.242/api/v1`。详见 [交易模块](06-commerce.md)、[科普与课程](08-content-courses.md)、[会员购买与用户管理](09-membership-users.md)、[统一上传](10-unified-uploads.md) 及 [部署说明](05-deployment.md)。",
              "注册示例采用本地默认协议版本 `2026-10-01`；公网测试环境当前为 `2026-10-23-test`，提交前须读取当前环境的协议接口。",
              "", "所有下列 URL 统一加前缀 `/api/v1`。请求默认 `application/json`；返回默认使用统一响应结构，表中的响应类型指 `data`。",
              "请求及响应对象的全部字段见 [数据格式文档](02-data-models.md)，状态与联调步骤见 [业务流程文档](03-business-flows.md)。",
@@ -1165,10 +1178,11 @@ def build_api_markdown():
         for o in group:
             no = OPERATIONS.index(o) + 1
             login, admin = AUTH_LABELS[o["auth"]]
-            response = schema_link(o["data"]) if o["response_kind"] == "json" else ("SSE 事件" if o["response_kind"] == "sse" else "渠道协议 ACK")
+            response = schema_link(o["data"]) if o["response_kind"] == "json" else {
+                "sse": "SSE 事件", "binary": "原始文件字节", "provider": "渠道协议 ACK"}[o["response_kind"]]
             permission = o["permission"] or "—"
             if o["auth"] == "authenticated":
-                permission = "管理员: " + ("aftersales:review" if o["path"].endswith("/read-grant") else "media:write")
+                permission = "管理员: " + ("aftersales:review" if o["path"].endswith("/read-grant") else "按用途校验，见下文")
             lines.append(f"| [A{no:03}](#a{no:03}) | {o['title']} | `{o['method'].upper()}` | `{o['path']}` | {login} | {admin} | `{permission}` | {schema_link(o['body'])} | {response} | {o['status']} |")
         lines += ["", "### 参数与业务约束", ""]
         for o in group:
@@ -1179,7 +1193,7 @@ def build_api_markdown():
             if o["note"]:
                 lines += [o["note"], ""]
             if o["idem"]:
-                lines += ["**必填请求头：** `Idempotency-Key`，16–128 位字母、数字、下划线或连字符；相同业务意图重试复用。", ""]
+                lines += ["**必填请求头：** `Idempotency-Key`，16–64 位字母、数字、下划线或连字符；相同业务意图重试复用。", ""]
             params = [*path_parameters(o), *o["params"]]
             if o["response_kind"] == "sse":
                 params.append({"in": "header", "name": "Last-Event-ID", "required": False,
@@ -1275,7 +1289,7 @@ def finish_examples():
         ("AuthTokens", "refreshExpiresAt", "2026-11-21T02:00:00Z"),
         ("AdminAuthTokens", "refreshExpiresAt", "2026-10-29T02:00:00Z"),
         ("PlaybackGrant", "expiresAt", "2026-10-22T02:05:00Z"),
-        ("MediaReadGrant", "expiresAt", "2026-10-22T02:05:00Z"),
+        ("MediaReadGrant", "expiresAt", "2026-10-22T02:01:00Z"),
         ("UploadTicket", "expiresAt", "2026-10-22T02:10:00Z"),
         ("OrderQuote", "expiresAt", "2026-10-22T02:10:00Z"),
         ("PaymentAttempt", "expiresAt", "2026-10-22T02:30:00Z"),

@@ -10,6 +10,7 @@ import { ACTIVE_AFTERSALES, AfterSale, AfterSaleItem, Order, OrderItem, PaymentR
 import { Actor, actorId, CommerceTransaction, checkVersion, conflict, missing, page, touch } from './transaction';
 import { OrdersService, addressSnapshot, carrierName, testMode } from './orders.service';
 import { CatalogService } from './catalog.service';
+import { afterSaleEvidence, bindAfterSaleEvidence } from '../uploads/references';
 
 @Injectable()
 export class AfterSalesService {
@@ -20,7 +21,7 @@ export class AfterSalesService {
     return { id: a.id, afterSaleNo: a.afterSaleNo, orderId: a.orderId, type: a.type, status: a.status,
       items: items.map(i => ({ orderItemId: i.orderItemId, quantity: i.quantity, refundAmountCents: i.refundAmountCents })),
       itemsRefundAmountCents: a.itemsRefundAmountCents, shippingRefundAmountCents: a.shippingRefundAmountCents, refundAmountCents: a.refundAmountCents,
-      reasonCode: a.reasonCode, description: a.description, evidence: [], reviewNote: a.reviewNote, returnDeadlineAt: a.returnDeadlineAt,
+      reasonCode: a.reasonCode, description: a.description, evidence: await afterSaleEvidence(m, a.id), reviewNote: a.reviewNote, returnDeadlineAt: a.returnDeadlineAt,
       ...(a.returnAddress ? { returnAddress: a.returnAddress } : {}), ...(a.returnShipment ? { returnShipment: a.returnShipment } : {}),
       refundId: a.refundId, createdAt: a.createdAt, updatedAt: a.updatedAt, version: a.version };
   }
@@ -32,7 +33,6 @@ export class AfterSalesService {
   }
   async create(actor: Actor, dto: AfterSaleCreateDto, key?: string) {
     return this.tx.run(actor, async m => {
-      if (dto.evidenceMediaIds?.length) throw new ApiException(503, 'EVIDENCE_STORAGE_UNAVAILABLE', '私有凭证存储尚未配置，请先使用文字说明');
       if (new Set(dto.items.map(i => i.orderItemId)).size !== dto.items.length) throw new ApiException(400, 'VALIDATION_ERROR', '售后订单行不可重复');
       const o = await this.orders.lockOrder(m, dto.orderId, actorId(actor));
       if (o.type !== 'PRODUCT') conflict('ORDER_TYPE_INVALID', '数字订单退款需由管理员发起');
@@ -57,7 +57,9 @@ export class AfterSalesService {
         type: dto.type, status: 'PENDING_REVIEW', itemsRefundAmountCents: itemsAmount, shippingRefundAmountCents: shippingAmount,
         refundAmountCents: itemsAmount + shippingAmount, reasonCode: dto.reasonCode, description: dto.description,
         reviewNote: null, returnDeadlineAt: null, returnAddress: null, returnShipment: null, refundId: null, version: 1 });
-      await m.save(a); await m.save(lines); await this.summary(m, o); await this.tx.audit(m, actor, 'aftersale.create', id);
+      await m.save(a); await m.save(lines);
+      await bindAfterSaleEvidence(m, actor, a.id, a.userId, dto.evidenceMediaIds ?? []);
+      await this.summary(m, o); await this.tx.audit(m, actor, 'aftersale.create', id);
       return this.view(m, a);
     }, { key, action: 'aftersale.create', body: dto });
   }

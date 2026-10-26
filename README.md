@@ -1,6 +1,6 @@
 # 两性健康服务平台 · NestJS 后端
 
-已实现 **NestJS + TypeORM + MySQL** 用户认证、独立管理员认证、产品与 SKU、库存、实物订单、人工物流、售后退款、图文／视频科普、付费课程访问、专栏、会员购买续期、用户资料与后台用户管理。封面支持登记阿里云 OSS 地址，科普视频可跳转 B 站，会员视频经资格校验后返回飞书网盘链接与密码，原有本地视频播放保留。注册登录不需要手机验证码。支付、退款按测试模式完成流程。
+已实现 **NestJS + TypeORM + MySQL** 用户认证、独立管理员认证、产品与 SKU、库存、实物订单、人工物流、售后退款、图文／视频科普、付费课程访问、专栏、会员购买续期、用户资料与后台用户管理，以及统一 OSS 文件上传和私有售后凭证。科普视频可跳转 B 站，会员视频经资格校验后返回飞书网盘链接与密码，本地／OSS 私有 MP4 共用播放鉴权。注册登录不需要手机验证码。支付、退款按测试模式完成流程。
 
 使用方法、管理员权限和业务约束见 [交易后端说明](docs/06-commerce.md) 与 [科普／课程后端说明](docs/08-content-courses.md)。内容模块附 50 条以 `cs` 开头的样本、40 个章节和 4 个专栏，支持手动重复导入。
 
@@ -41,9 +41,11 @@ npm.cmd run migration:run
 npm.cmd run start:dev
 ```
 
-默认地址：`http://localhost:3000/api/v1`。迁移创建 3 张认证表、20 张管理员与交易表、6 张内容与购买权益表、3 张会员期限／套餐／购买权益表，以及迁移记录表；已有库只执行新增迁移，不清除业务数据。
+默认地址：`http://localhost:3000/api/v1`。迁移创建 3 张认证表、20 张管理员与交易表、6 张内容与购买权益表、3 张会员期限／套餐／购买权益表、2 张上传与售后凭证表，以及迁移记录表；已有库只执行新增迁移，不清除业务数据。
 
-新封面须先上传到 `chunai-photo.oss-cn-hangzhou.aliyuncs.com`，再通过素材接口登记公开 HTTPS 地址。使用 B 站／飞书外链前，按 `.env.example` 生成并设置独立的 `CONTENT_MEDIA_ENCRYPTION_KEY`，妥善备份该密钥；链接与密码在数据库加密保存。管理员开通／续期／撤销会员需要 `membership:write`，内容预览仍需要 `content:write`。具体调用顺序见 [内容与会员说明](docs/08-content-courses.md)。
+头像、内容封面、正文图片、产品图片与私有 MP4 可通过「申请 OSS 表单 → 直传 → 完成校验」生成素材 ID。**当前测试服务器尚无 OSS 凭证、ECS RAM 角色和私有 Bucket 配置，上传申请会返回 503；配置齐全后启用。** 配置与权限见 [统一上传说明](docs/10-unified-uploads.md)。已有公开 OSS 图片仍可用原登记接口；公开图片主机为 `chunai-photo.oss-cn-hangzhou.aliyuncs.com`。
+
+使用 B 站／飞书外链前，按 `.env.example` 生成并设置独立的 `CONTENT_MEDIA_ENCRYPTION_KEY`，妥善备份该密钥；链接与密码在数据库加密保存。管理员开通／续期／撤销会员需要 `membership:write`，内容预览仍需要 `content:write`。具体调用顺序见 [内容与会员说明](docs/08-content-courses.md)。
 
 本地测试交易时显式配置 `COMMERCE_TEST_PAYMENTS=true`，并按 [管理员初始化](docs/06-commerce.md#管理员初始化与权限) 创建管理员；生产环境始终禁用测试结算。
 
@@ -58,6 +60,7 @@ npm.cmd run start:dev
 | [cs 产品测试样本](docs/07-product-samples.md) | 已写入服务器的测试商品、重复导入命令、产品 CRUD 请求示例 |
 | [科普／课程与专栏](docs/08-content-courses.md) | 内容 CRUD、OSS 封面、B 站／飞书视频、会员管理、付费访问和 50 条 cs 样本 |
 | [会员购买与用户管理](docs/09-membership-users.md) | 会员套餐、购买续期与退款、昵称头像、用户查询和封禁；[HTTP 示例](examples/membership-users.http) |
+| [统一文件上传](docs/10-unified-uploads.md) | OSS 表单直传、素材归属和清理、私有售后凭证、配置要求；[HTTP 示例](examples/uploads.http) |
 | [CI/CD 与服务器部署](docs/05-deployment.md) | GitHub Actions、服务器布局、更新、回滚与运维 |
 | [HTTP 请求示例](examples/auth.http) | 注册、登录、刷新、资料、改密、退出 |
 | [建表 SQL](database/schema.sql) | MySQL 字段、索引和外键 |

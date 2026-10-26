@@ -149,7 +149,7 @@ mysqldump --protocol=socket -uroot --single-transaction --no-tablespaces \
 gzip --test "$backup_file"
 ```
 
-将验证通过的备份复制到服务器外部；仓库当前没有配置定时备份任务。恢复备份前，应核对目标库和备份时间，并先备份当前数据，因为 SQL 导入可能替换同名表。当前数据库有 32 张业务表（认证、交易、内容及会员）和 schema_migrations。另行备份 `/var/lib/chunai/content-media` 与受保护的 `/etc/chunai/api.env`；丢失媒体加密密钥将无法解密数据库中的外链和密码。密钥备份按秘密保管，不能提交 Git。
+将验证通过的备份复制到服务器外部；仓库当前没有配置定时备份任务。恢复备份前，应核对目标库和备份时间，并先备份当前数据，因为 SQL 导入可能替换同名表。全部迁移执行后数据库有 34 张业务表（认证、交易、内容、会员及统一上传）和 schema_migrations。另行备份 `/var/lib/chunai/content-media` 与受保护的 `/etc/chunai/api.env`；丢失媒体加密密钥将无法解密数据库中的外链和密码。密钥备份按秘密保管，不能提交 Git。统一上传启用后还需备份 OSS 正式对象，不能仅备份数据库；配置要求见 [统一上传](10-unified-uploads.md)。
 
 ## 常见联调与部署问题
 
@@ -163,6 +163,7 @@ gzip --test "$backup_file"
 | 健康接口返回 500 | 检查 MySQL 服务、应用数据库连接和迁移日志 |
 | 旧令牌返回 401 | 退出、改密或刷新令牌重放后重新登录；刷新请求须单飞并保存新令牌 |
 | Actions 上传或登录失败 | 检查部署账号的 authorized_keys、SSH 22 端口、四项 Secrets 和服务器主机公钥是否匹配 |
+| 统一上传返回 503 STORAGE_UNAVAILABLE | 检查 OSS 凭证／ECS RAM 角色、独立私有 Bucket、区域、Bucket ACL／Policy／版本控制及 RAM 授权；当前服务器尚待配置，变量模板见 `.env.example`，完整步骤见 [统一上传配置](10-unified-uploads.md#oss-配置与启用) |
 
 部署私钥轮换时，更新 `chunai-deploy` 的 authorized_keys 和 GitHub 的 DEPLOY_SSH_KEY；服务器主机密钥变化时，核实新指纹后更新 DEPLOY_KNOWN_HOSTS。
 

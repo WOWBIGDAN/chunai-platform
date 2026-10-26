@@ -1,6 +1,6 @@
 # 科普、课程访问与专栏后端
 
-本模块与现有 NestJS / MySQL、管理员权限、订单和测试退款共用一套后端。支持图文科普、视频科普、图文课程、视频课程，以及 `FREE`、`PURCHASE`、`MEMBER` 三种访问策略。封面登记阿里云 OSS 地址；科普视频可跳转 B 站，会员视频可在校验有效期后返回飞书链接与密码；原有本地私有 MP4 保留。会员支持管理员开通及套餐购买，详细规则见 [会员购买与用户管理](09-membership-users.md)。真实收付款和视频转码暂未接入。
+本模块与现有 NestJS / MySQL、管理员权限、订单和测试退款共用一套后端。支持图文科普、视频科普、图文课程、视频课程，以及 `FREE`、`PURCHASE`、`MEMBER` 三种访问策略。封面可通过统一 OSS 上传或登记已有地址；科普视频可跳转 B 站，会员视频可在校验有效期后返回飞书链接与密码；本地与 OSS 私有 MP4 共用访问鉴权。会员支持管理员开通及套餐购买，详细规则见 [会员购买与用户管理](09-membership-users.md)。真实收付款和视频转码暂未接入。
 
 ## 权限与业务关系
 
@@ -84,7 +84,9 @@
 
 图文 HTML 保存在 MySQL 的 `contents.body_html` 或 `course_chapters.body_html`，图片文件由 OSS 或既有外部图片服务提供，正文中只保存经过清洗的图片引用。
 
-图片登记接口接受 HTTPS 公开地址、MIME、大小和 `purpose`。内容封面用 `CONTENT_COVER`，专栏封面用 `COLUMN_COVER`，正文图片用 `CONTENT_BODY_IMAGE`，不能跨用途引用。新封面登记仅接受 `https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/<对象路径>`；主机由 `CONTENT_IMAGE_OSS_HOST` 配置，拒绝其他域名。先在 OSS 上传实际文件，再登记该公开地址，使用返回的素材 `id` 设置 `coverMediaId`。本后端不代传、下载或校验远程对象是否存在，不需要 OSS AccessKey。正文图片继续兼容已托管的 HTTPS 地址。
+内容封面用 `CONTENT_COVER`，专栏封面用 `COLUMN_COVER`，正文图片用 `CONTENT_BODY_IMAGE`，不能跨用途引用。新文件可通过 [统一上传](10-unified-uploads.md) 申请 OSS 表单并完成服务端校验，直接使用返回的素材 `id`，需要 `media:write` + `content:write`。统一上传需要服务器 OSS 凭证与独立私有 Bucket，当前测试服务器尚待配置。
+
+兼容图片登记接口接受已存在的 HTTPS 公开地址、MIME、大小和 `purpose`；新封面登记仅接受 `https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/<对象路径>`，主机由 `CONTENT_IMAGE_OSS_HOST` 配置。此登记路径不代传、下载或校验远程对象，不需要 OSS AccessKey；正文图片继续兼容已托管的 HTTPS 地址。
 
 存量测试封面地址保留，不会替换成不存在的 OSS 对象。新建内容、专栏或更换封面时，同样校验 OSS 域名，不能借用旧的外部封面素材绕过限制；仅修改原内容的标题等资料不要求立即更换旧封面。公开封面可直接访问，业务接口不为封面签发会员授权。
 
@@ -113,7 +115,7 @@
 
 所有播放授权响应使用 `Cache-Control: private, no-store`。不要将飞书响应存入公共缓存、日志或埋点。后端提供授权后的 `externalUrl` 与 `accessPassword`；普通网页受浏览器跨域规则限制，不能直接操作飞书网页的密码框，自动输入需要前端另行使用具备相应能力的扩展或受支持集成，本接口不保证普通页面跳转后自动填入。
 
-## 保留本地私有 MP4 与后续扩展
+## 本地与 OSS 私有 MP4
 
 视频直接上传 MP4 原始字节：
 
@@ -125,7 +127,7 @@ curl -X POST "$BASE/admin/content-media/videos?durationSeconds=3" \
 
 上限 100 MiB；目前校验 MP4 容器头，时长由管理员填写，不转码。上传前应准备浏览器兼容 MP4（如 H.264/AAC）。视频 `publicUrl=null`，私有文件不在公开静态目录内。
 
-本地播放 URL 有效 5 分钟，`GET /content-playback/{mediaId}?token=...` 支持 HTTP Range（200／206／416），每次请求重新核验内容状态、预览设置、购买／会员权益、账号与会话。退款成功、会员到期或撤销、会话撤销、管理员权限收回后，旧链接在下一次请求时失效。已经下载的字节无法追回，当前不提供 DRM。Nginx 对播放接口关闭访问日志，避免记录短时令牌。
+也可通过统一上传的 `CONTENT_VIDEO` 将 MP4 存储到 OSS 私有 Bucket，完成后用相同 `videoMediaId` 绑定接口。两种来源的播放 URL 均有效 5 分钟，`GET /content-playback/{mediaId}?token=...` 支持 HTTP Range（200／206／416），每次请求重新核验内容状态、预览设置、购买／会员权益、账号与会话。退款成功、会员到期或撤销、会话撤销、管理员权限收回后，旧链接在下一次请求时失效。已经下载的字节无法追回，当前不提供 DRM。Nginx 对播放接口关闭访问日志，避免记录短时令牌。
 
 部署配置：
 
@@ -141,7 +143,7 @@ COMMERCE_TEST_PAYMENTS=true
 
 目录归应用用户 `chunai`，systemd 使用持久化 `/var/lib/chunai` 可写目录；发布新版本不会丢失视频。更新 [systemd 模板](../deploy/chunai-api.service) 和 [Nginx 模板](../deploy/nginx.conf)，以支持正文大小、视频上传和受保护视频流。备份 MySQL、私有视频目录及加密密钥；OSS 对象另行在阿里云侧维护备份与可见性。
 
-来源采用独立 `provider` 字段与统一播放授权响应，正文继续引用素材 ID，购买和会员授权不依赖特定网盘。未来替换成 OSS 私有视频、CDN 或点播服务时，可新增来源适配及签名逻辑，保留课程、章节和会员关系；前端以 `mode` 分支处理。
+来源采用独立 `provider` 字段与统一播放授权响应，正文继续引用素材 ID，购买和会员授权不依赖特定网盘。OSS 私有视频已纳入 STREAM 分支；未来接入 CDN 或点播服务时，可新增来源适配及签名逻辑，保留课程、章节和会员关系；前端以 `mode` 分支处理。
 
 ## 数据库与 50 条 cs 样本
 

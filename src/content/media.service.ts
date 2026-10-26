@@ -17,6 +17,9 @@ import { ContentMedia } from './entities';
 import { ContentService } from './content.service';
 import { ContentImageDto, ExternalVideoDto } from './content.dto';
 import { decryptMediaSecret, encryptMediaSecret, validateContentImageUrl, validateExternalVideoUrl } from './media-source';
+import { UploadMedia } from '../uploads/entities';
+import { lockManagedReference } from '../uploads/references';
+import { OssStorage } from '../uploads/oss-storage';
 
 interface GrantClaims { sub: string; chapter: boolean; mediaId: string; audienceKind: 'guest' | 'user' | 'admin'; actorId?: string; sid?: string }
 export const contentMediaDirectory = () => resolve(process.env.CONTENT_MEDIA_DIR ?? '.data/content-media');
@@ -25,12 +28,14 @@ const invalidGrant = () => new ApiException(401, 'PLAYBACK_GRANT_INVALID', '播�
 
 @Injectable()
 export class ContentMediaService {
-  constructor(private readonly db: DataSource, private readonly tx: CommerceTransaction, private readonly content: ContentService, private readonly jwt: JwtService) {}
+  constructor(private readonly db: DataSource, private readonly tx: CommerceTransaction, private readonly content: ContentService,
+    private readonly jwt: JwtService, private readonly storage: OssStorage) {}
   image(actor: Actor, dto: ContentImageDto) {
     return this.tx.run(actor, async m => {
       const source = validateContentImageUrl(dto.publicUrl, dto.purpose !== 'CONTENT_BODY_IMAGE');
       const v = m.create(ContentMedia, { id: randomUUID(), ...dto, ...source, kind: 'IMAGE', storageKey: null,
         externalUrlEncrypted: null, accessPasswordEncrypted: null, durationSeconds: 0, operatorId: actorId(actor) });
+      await lockManagedReference(m, v.id, v.purpose, v.publicUrl ?? undefined);
       await m.save(v); await this.tx.audit(m, actor, 'content-media.image', v.id); return this.content.mediaView(v);
     });
   }
@@ -94,7 +99,8 @@ export class ContentMediaService {
           playbackUrl: null, externalUrl, accessPassword, expiresAt: null, durationSeconds: media.durationSeconds,
           preview: access.reason === 'PREVIEW' };
       }
-      if (media.provider !== 'LOCAL') throw missing();
+      if (!['LOCAL', 'OSS'].includes(media.provider)) throw missing();
+      if (media.provider === 'OSS') await this.uploadedVideo(m, media.id);
       const claims: GrantClaims = { sub: id, chapter, mediaId: media.id, audienceKind: admin ? 'admin' : principal ? 'user' : 'guest',
         ...(admin ? { actorId: actorId(admin), sid: admin.principal.sessionId } : principal ? { actorId: principal.user.id, sid: principal.sessionId } : {}) };
       const config = authConfig();
@@ -102,11 +108,21 @@ export class ContentMediaService {
       const base = (process.env.PUBLIC_API_URL ?? 'http://localhost:3000/api/v1').replace(/\/$/, '');
       if (!/^https?:\/\//.test(base)) throw new Error('PUBLIC_API_URL must be an absolute API URL');
       if (admin) await this.tx.audit(m, admin, 'content.admin-playback', id);
-      return { provider: 'LOCAL' as const, mode: 'STREAM' as const, contentId: c.id, chapterId: ch?.id ?? null,
+      return { provider: media.provider as 'LOCAL' | 'OSS', mode: 'STREAM' as const, contentId: c.id, chapterId: ch?.id ?? null,
         playbackUrl: `${base}/content-playback/${media.id}?token=${encodeURIComponent(token)}`, externalUrl: null, accessPassword: null,
         expiresAt: new Date(Date.now() + 300000), durationSeconds: media.durationSeconds, preview: access.reason === 'PREVIEW' };
     };
     return admin ? this.tx.run(admin, work) : this.db.transaction('REPEATABLE READ', work);
+  }
+  private async uploadedVideo(m: EntityManager, id: string) {
+    const media = await m.getRepository(UploadMedia).createQueryBuilder('v').addSelect('v.storageKey')
+      .where('v.id = :id AND v.kind = :kind AND v.purpose = :purpose AND v.status = :status AND v.visibility = :visibility',
+        { id, kind: 'VIDEO', purpose: 'CONTENT_VIDEO', status: 'READY', visibility: 'PRIVATE' }).getOne();
+    if (!media?.storageKey || media.mimeType !== 'video/mp4' || !Number.isSafeInteger(media.sizeBytes) || media.sizeBytes < 1) throw missing();
+    const config = this.storage.config();
+    if (media.region !== config.region || media.stagingBucket !== config.privateBucket || media.finalBucket !== config.privateBucket)
+      throw new ApiException(503, 'MEDIA_STORAGE_UNAVAILABLE', '视频文件存储配置已变更');
+    return media;
   }
   async stream(mediaId: string, token: string, req: ApiRequest, res: Response) {
     let claims: GrantClaims;
@@ -130,24 +146,29 @@ export class ContentMediaService {
       const { record } = await this.content.readable(m, claims.sub, claims.chapter, true, principal, claims.audienceKind === 'admin');
       if (record.videoMediaId !== mediaId) throw invalidGrant();
       const v = await m.getRepository(ContentMedia).createQueryBuilder('v').addSelect('v.storageKey').where('v.id = :mediaId', { mediaId }).getOne();
-      if (v?.provider !== 'LOCAL' || !v.storageKey || !/^[a-f0-9-]{36}\.mp4$/.test(v.storageKey)) throw missing(); return v;
+      if (v?.provider === 'OSS') return { media: v, upload: await this.uploadedVideo(m, v.id) };
+      if (v?.provider !== 'LOCAL' || !v.storageKey || !/^[a-f0-9-]{36}\.mp4$/.test(v.storageKey)) throw missing();
+      return { media: v, upload: null };
     });
-    const path = resolve(contentMediaDirectory(), media.storageKey!);
-    const info = await stat(path).catch(() => null);
-    if (!info?.isFile()) throw new ApiException(503, 'MEDIA_STORAGE_UNAVAILABLE', '视频文件暂不可用');
-    let start = 0, end = info.size - 1;
+    const path = media.upload ? null : resolve(contentMediaDirectory(), media.media.storageKey!);
+    const info = path ? await stat(path).catch(() => null) : null;
+    if (!media.upload && !info?.isFile()) throw new ApiException(503, 'MEDIA_STORAGE_UNAVAILABLE', '视频文件暂不可用');
+    const size = media.upload?.sizeBytes ?? info!.size;
+    let start = 0, end = size - 1;
     if (req.headers.range) {
       const match = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range);
-      if (!match || (!match[1] && !match[2])) { res.setHeader('Content-Range', `bytes */${info.size}`); throw new ApiException(416, 'RANGE_INVALID', '不支持的分段范围'); }
-      if (!match[1]) { start = Math.max(0, info.size - Number(match[2])); }
+      if (!match || (!match[1] && !match[2])) { res.setHeader('Content-Range', `bytes */${size}`); throw new ApiException(416, 'RANGE_INVALID', '不支持的分段范围'); }
+      if (!match[1]) { start = Math.max(0, size - Number(match[2])); }
       else { start = Number(match[1]); if (match[2]) end = Math.min(end, Number(match[2])); }
-      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || start >= info.size) {
-        res.setHeader('Content-Range', `bytes */${info.size}`); throw new ApiException(416, 'RANGE_INVALID', '分段超出文件范围');
+      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || start >= size) {
+        res.setHeader('Content-Range', `bytes */${size}`); throw new ApiException(416, 'RANGE_INVALID', '分段超出文件范围');
       }
-      res.status(206).setHeader('Content-Range', `bytes ${start}-${end}/${info.size}`);
+      res.status(206).setHeader('Content-Range', `bytes ${start}-${end}/${size}`);
     }
+    // Resolve the upstream stream before writing response headers so storage errors keep the API envelope.
+    const source = media.upload ? await this.storage.stream(media.upload.storageKey, 'PRIVATE', { start, end }) : createReadStream(path!, { start, end });
     res.setHeader('Content-Type', 'video/mp4'); res.setHeader('Accept-Ranges', 'bytes');
     res.setHeader('Content-Length', end - start + 1); res.setHeader('Cache-Control', 'private, no-store');
-    await pipeline(createReadStream(path, { start, end }), res).catch(() => { res.destroy(); });
+    await pipeline(source, res).catch(() => { res.destroy(); });
   }
 }

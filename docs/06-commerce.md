@@ -85,7 +85,7 @@ sudo systemd-run --quiet --wait --pty --collect \
 
 流程：创建分类 → 登记公开产品图片 → 创建产品草稿 → 创建 SKU → 库存入库 → 发布产品。
 
-产品图片通过 `POST /admin/product-images` 登记已有 HTTPS 图片地址，返回的 `id` 用作 `coverMediaId` 或 `galleryMediaIds`。当前由管理员提供 URL、MIME 和大小，服务端不抓取 URL、不校验远端图片字节，也不提供对象存储上传。商品详情 HTML 只保留基础段落、列表、强调和标题标签，移除脚本、事件属性和链接。
+产品图片可通过 [统一上传](10-unified-uploads.md) 的 `PRODUCT_IMAGE` 用途申请 OSS 表单，完成校验后将返回的 `id` 用作 `coverMediaId` 或 `galleryMediaIds`，需要 `media:write` + `products:write`。`POST /admin/product-images` 继续兼容登记已有 HTTPS 图片地址；该兼容接口不抓取 URL 或校验远端字节。商品详情 HTML 只保留基础段落、列表、强调和标题标签，移除脚本、事件属性和链接。
 
 SKU 初始库存为 0；实物库存只能通过库存调整接口和发货事务改变。单价采用人民币整数分，范围 1–100,000,000；单笔订单最高 100,000,000 分，单行数量 1–999，最多 50 行。SKU 编号全局唯一，同产品规格组合唯一，规格维度名不得重复。
 
@@ -175,7 +175,7 @@ Content-Type: application/json
 - 已发货退款不自动增加可售库存。退件质检后由库存权限管理员显式入库，并注明关联售后号。
 - 运费字段和最后一批剩余商品退运费的规则已保留；当前报价运费为 0，不额外补贴退货运费。
 
-当前售后支持文字说明，`evidenceMediaIds` 仅可省略或传 `[]`；非空明确返回 `503 EVIDENCE_STORAGE_UNAVAILABLE`。私有凭证上传与授权阅读需在对象存储接入时实现。当前不产生站内通知，因为通知模块尚未实现。
+售后支持文字说明与私有图片凭证。先按 [统一上传说明](10-unified-uploads.md) 上传并完成 `AFTERSALE_EVIDENCE` 图片，再在 `evidenceMediaIds` 提交最多 9 个本人 READY 素材。凭证与售后在同一事务绑定，不得跨用户或跨售后复用；详情只返回私有元数据，图片通过 60 秒 `read-grant` 查看。当前服务器 OSS 配置尚未齐全，仍可省略或传 `[]` 提交文字售后。当前不产生站内通知，因为通知模块尚未实现。
 
 ## 联调与发布
 

@@ -1,0 +1,85 @@
+@baseUrl = http://47.97.46.242/api/v1
+@clientToken = replace-with-client-access-token
+@adminToken = replace-with-admin-access-token
+@uploadId = replace-with-upload-id
+@mediaId = replace-with-media-id
+@userVersion = 1
+@orderItemId = replace-with-order-item-id
+
+### 1. 用户申请头像直传；sizeBytes 必须替换为实际文件大小。
+# 服务器需先配置 OSS 凭证、公有和私有 Bucket，否则返回 503 STORAGE_UNAVAILABLE。
+POST {{baseUrl}}/uploads
+Authorization: Bearer {{clientToken}}
+Content-Type: application/json
+
+{"purpose":"AVATAR","fileName":"cs-avatar.png","mimeType":"image/png","sizeBytes":1024}
+
+### 2. 将上一个响应中的全部 fields 原样加入 FormData，最后追加 file，POST 到 uploadUrl。
+# 上传对象不是通过 API 发送，不能用 PUT；示例代码见 docs/10-unified-uploads.md。
+# OSS 上传成功后，把响应的 uploadId/mediaId 填入顶部变量，再调用确认。
+POST {{baseUrl}}/uploads/{{uploadId}}/complete
+Authorization: Bearer {{clientToken}}
+
+### 3. 查询本人上传记录。
+GET {{baseUrl}}/media/{{mediaId}}
+Authorization: Bearer {{clientToken}}
+
+### 4. 获取当前资料 version。
+GET {{baseUrl}}/me
+Authorization: Bearer {{clientToken}}
+
+### 5. 绑定 READY 头像；替换 userVersion。不同时传 avatarUrl。
+PATCH {{baseUrl}}/me
+Authorization: Bearer {{clientToken}}
+Content-Type: application/json
+
+{"version":{{userVersion}},"avatarMediaId":"{{mediaId}}"}
+
+### 6. 售后凭证上传申请；重复步骤 2，凭证始终私有。
+POST {{baseUrl}}/uploads
+Authorization: Bearer {{clientToken}}
+Content-Type: application/json
+
+{"purpose":"AFTERSALE_EVIDENCE","fileName":"cs-evidence.jpg","mimeType":"image/jpeg","sizeBytes":2048}
+
+### 7. 本人预览私有凭证；mediaId 改为已完成的凭证 ID。
+POST {{baseUrl}}/media/{{mediaId}}/read-grant
+Authorization: Bearer {{clientToken}}
+
+### 8. 在售后创建的 evidenceMediaIds 中提交 READY 凭证 ID。
+# 完整售后请求示例见 commerce.http；同一媒体只能关联一份售后。
+# 上一步返回 url 有效 60 秒，GET 该应用代理地址即可显示图片。
+# 不要改为直接拼接 OSS 私有 Bucket 地址。
+
+### 9. 售后管理员读取已经关联售后的凭证，需要 aftersales:review。
+POST {{baseUrl}}/media/{{mediaId}}/read-grant
+Authorization: Bearer {{adminToken}}
+
+### 10. 管理员上传内容封面，需要 media:write + content:write。
+POST {{baseUrl}}/uploads
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"purpose":"CONTENT_COVER","fileName":"cs-cover.webp","mimeType":"image/webp","sizeBytes":4096}
+
+### 11. 管理员上传产品图片，需要 media:write + products:write。
+POST {{baseUrl}}/uploads
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"purpose":"PRODUCT_IMAGE","fileName":"cs-product.png","mimeType":"image/png","sizeBytes":4096}
+
+### 12. 管理员上传私有 MP4；完成后作为 videoMediaId 绑定内容/章节。
+POST {{baseUrl}}/uploads
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"purpose":"CONTENT_VIDEO","fileName":"cs-video.mp4","mimeType":"video/mp4","sizeBytes":102400,"durationSeconds":3}
+
+### 13. 管理员完成自己的后台用途上传。
+POST {{baseUrl}}/uploads/{{uploadId}}/complete
+Authorization: Bearer {{adminToken}}
+
+### 14. 删除本人未引用的媒体；已绑定头像、业务内容或售后的媒体将返回 409。
+DELETE {{baseUrl}}/media/{{mediaId}}
+Authorization: Bearer {{clientToken}}
