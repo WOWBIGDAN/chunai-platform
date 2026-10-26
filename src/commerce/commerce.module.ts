@@ -7,9 +7,11 @@ import { OrdersService } from './orders.service';
 import { AfterSalesService } from './aftersales.service';
 import { CommerceTransaction } from './transaction';
 import { CommerceMaintenance } from './maintenance.service';
+import { CartController } from './cart.controller';
+import { CartService } from './cart.service';
 
 @Module({ imports: [AuthModule, AdminAuthModule],
-  controllers: [CatalogController, CustomerCommerceController, AdminCatalogController, AdminFulfilmentController],
-  providers: [CommerceTransaction, CatalogService, OrdersService, AfterSalesService, CommerceMaintenance],
+  controllers: [CatalogController, CustomerCommerceController, AdminCatalogController, AdminFulfilmentController, CartController],
+  providers: [CommerceTransaction, CatalogService, OrdersService, AfterSalesService, CommerceMaintenance, CartService],
   exports: [CommerceTransaction, CatalogService] })
 export class CommerceModule {}

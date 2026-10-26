@@ -7,7 +7,9 @@ import { PageDto } from '../auth/auth.dto';
 import { AddressCreateDto, AddressReplaceDto, AdminOrderQueryDto, CancelOrderDto, CreateOrderDto,
   LogisticsEventDto, QuoteDto, ShipmentDto, ShipmentPatchDto, TestPaymentDto, VersionDto } from './commerce.dto';
 import { Address, AddressSnapshot, AfterSale, ACTIVE_AFTERSALES, Category, ItemSnapshot, LogisticsEvent,
-  Order, OrderItem, PaymentRecord, Product, ProductImage, Quote, Shipment, Sku } from './entities';
+  Order, OrderItem, PaymentRecord, Product, ProductImage, Quote, Shipment, Sku, CartItem, CartSnapshot } from './entities';
+import { CartQuoteDto } from './cart.dto';
+import { productAvailability } from './product-availability';
 import { Actor, actorId, CommerceTransaction, canonical, checkVersion, conflict, missing, page, touch } from './transaction';
 import { CatalogService } from './catalog.service';
 import { testPaymentsEnabled } from './permissions';
@@ -72,8 +74,24 @@ export class OrdersService {
     return { products, skus };
   }
   private async sellable(m: EntityManager, p: Product, s: Sku, quantity: number) {
-    if (p.status !== 'PUBLISHED' || !s.enabled || !await m.existsBy(Category, { id: p.categoryId, enabled: true })) conflict('PRODUCT_UNAVAILABLE', '产品或 SKU 当前不可购买');
-    if (s.onHandStock - s.reservedStock < quantity) conflict('STOCK_INSUFFICIENT', '库存不足');
+    const category = await m.findOne(Category, { where: { id: p.categoryId }, lock: { mode: 'pessimistic_read' } });
+    const state = productAvailability(p, s, category, quantity);
+    if (state === 'OUT_OF_STOCK' || state === 'STOCK_INSUFFICIENT') conflict('STOCK_INSUFFICIENT', '库存不足');
+    if (state !== 'AVAILABLE') conflict('PRODUCT_UNAVAILABLE', '产品或 SKU 当前不可购买');
+  }
+  createCartQuote(actor: Actor, dto: CartQuoteDto) {
+    return this.tx.run(actor, async m => {
+      const items: CartItem[] = [];
+      for (const input of dto.items) {
+        const item = await m.findOneBy(CartItem, { userId: actorId(actor), skuId: input.skuId });
+        if (!item) throw missing();
+        checkVersion(item, input.version);
+        if (!item.selected) conflict('CART_ITEM_NOT_SELECTED', '请先勾选结算商品');
+        items.push(item);
+      }
+      return this.productQuote(m, actorId(actor), dto.addressId, items.map(i => ({ skuId: i.skuId, quantity: i.quantity })),
+        items.map(i => ({ id: i.id, skuId: i.skuId, quantity: i.quantity, version: i.version })));
+    });
   }
   createQuote(actor: Actor, dto: QuoteDto) {
     return this.tx.run(actor, async m => {
@@ -87,26 +105,28 @@ export class OrdersService {
         return courseQuote(m, actorId(actor), dto.courseId!);
       }
       if (dto.courseId !== undefined) throw new ApiException(400, 'VALIDATION_ERROR', '产品订单不能包含课程');
-      const lines = dto.items!;
-      if (new Set(lines.map(i => i.skuId)).size !== lines.length) throw new ApiException(400, 'VALIDATION_ERROR', 'SKU 不可重复');
-      const a = await m.findOneBy(Address, { id: dto.addressId, userId: actorId(actor) }); if (!a) throw missing();
-      const { products, skus } = await this.lockSkus(m, lines.map(i => i.skuId));
-      const items: ItemSnapshot[] = [];
-      for (const line of lines) {
-        const s = skus.get(line.skuId)!; const p = products.get(s.productId)!;
-        await this.sellable(m, p, s, line.quantity);
-        const image = await m.findOneByOrFail(ProductImage, { id: p.coverMediaId });
-        items.push({ id: randomUUID(), resourceId: s.id, resourceType: 'SKU', productId: p.id, title: p.name,
-          skuAttributes: s.attributes, coverUrl: image.publicUrl, quantity: line.quantity, unitPriceCents: s.priceCents,
-          subtotalCents: s.priceCents * line.quantity, refundedQuantity: 0, refundedAmountCents: 0 });
-      }
-      if (items.reduce((n,i) => n + i.subtotalCents, 0) > 100000000) conflict('ORDER_AMOUNT_LIMIT', '单笔订单金额超过上限');
-      const q = m.create(Quote, { id: randomUUID(), type: 'PRODUCT', userId: actorId(actor), address: a.snapshot, items, shippingFeeCents: 0, expiresAt: new Date(Date.now() + 600000) });
-      await m.save(q);
-      const itemsAmountCents = items.reduce((n,i) => n + i.subtotalCents, 0);
-      return { quoteId: q.id, type: 'PRODUCT', items, itemsAmountCents, shippingFeeCents: q.shippingFeeCents,
-        payableAmountCents: itemsAmountCents + q.shippingFeeCents, currency: 'CNY', address: q.address, expiresAt: q.expiresAt };
+      return this.productQuote(m, actorId(actor), dto.addressId!, dto.items!);
     });
+  }
+  private async productQuote(m: EntityManager, userId: string, addressId: string, lines: { skuId: string; quantity: number }[], cartItems: CartSnapshot[] | null = null) {
+    if (new Set(lines.map(i => i.skuId)).size !== lines.length) throw new ApiException(400, 'VALIDATION_ERROR', 'SKU 不可重复');
+    const a = await m.findOneBy(Address, { id: addressId, userId }); if (!a) throw missing();
+    const { products, skus } = await this.lockSkus(m, lines.map(i => i.skuId));
+    const items: ItemSnapshot[] = [];
+    for (const line of lines) {
+      const s = skus.get(line.skuId)!; const p = products.get(s.productId)!;
+      await this.sellable(m, p, s, line.quantity);
+      const image = await m.findOneByOrFail(ProductImage, { id: p.coverMediaId });
+      items.push({ id: randomUUID(), resourceId: s.id, resourceType: 'SKU', productId: p.id, title: p.name,
+        skuAttributes: s.attributes, coverUrl: image.publicUrl, quantity: line.quantity, unitPriceCents: s.priceCents,
+        subtotalCents: s.priceCents * line.quantity, refundedQuantity: 0, refundedAmountCents: 0 });
+    }
+    if (items.reduce((n,i) => n + i.subtotalCents, 0) > 100000000) conflict('ORDER_AMOUNT_LIMIT', '单笔订单金额超过上限');
+    const q = m.create(Quote, { id: randomUUID(), type: 'PRODUCT', userId, address: a.snapshot, items, cartItems, shippingFeeCents: 0, expiresAt: new Date(Date.now() + 600000) });
+    await m.save(q);
+    const itemsAmountCents = items.reduce((n,i) => n + i.subtotalCents, 0);
+    return { quoteId: q.id, type: 'PRODUCT', items, itemsAmountCents, shippingFeeCents: q.shippingFeeCents,
+      payableAmountCents: itemsAmountCents + q.shippingFeeCents, currency: 'CNY', address: q.address, expiresAt: q.expiresAt };
   }
   createOrder(actor: Actor, dto: CreateOrderDto, key?: string) {
     return this.tx.run(actor, async m => {
@@ -143,6 +163,11 @@ export class OrdersService {
           membershipSnapshot: q.type === 'MEMBERSHIP' ? i.membershipSnapshot : null, id: randomUUID(), orderId: id }));
         if (q.type === 'PRODUCT') await this.catalog.moveStock(m, skus.get(i.resourceId)!, 0, i.quantity, 'ORDER_RESERVED', actorId(actor), id);
       }
+      // The user row lock serializes cart edits with checkout. Never clear lines edited
+      // after quoting, newly re-added lines, or unrelated/unselected SKUs.
+      for (const item of q.cartItems ?? []) await m.delete(CartItem, {
+        id: item.id, userId: actorId(actor), skuId: item.skuId, quantity: item.quantity, version: item.version,
+      });
       await this.tx.audit(m, actor, 'order.create', id); return this.view(m, order);
     }, { key, action: 'order.create', body: dto });
   }

@@ -41,13 +41,15 @@ npm.cmd run migration:run
 npm.cmd run start:dev
 ```
 
-默认地址：`http://localhost:3000/api/v1`。迁移创建 3 张认证表、20 张管理员与交易表、6 张内容与购买权益表、3 张会员期限／套餐／购买权益表、2 张上传与售后凭证表，以及迁移记录表；已有库只执行新增迁移，不清除业务数据。
+默认地址：`http://localhost:3000/api/v1`。迁移创建 3 张认证表、20 张管理员与交易表、6 张内容与购买权益表、3 张会员期限／套餐／购买权益表、2 张上传与售后凭证表、2 张购物车与收藏表，以及迁移记录表；已有库只执行新增迁移，不清除业务数据。
 
 头像、内容封面、正文图片、产品图片与私有 MP4 可通过「申请 OSS 表单 → 直传 → 完成校验」生成素材 ID。当前测试服务器已配置杭州区域的公开图片 Bucket `chunai-photo`、私有 Bucket `chunai-private` 和 ECS RAM 角色 `chunai-oss`，已通过真实 OSS 上传及权限联调。OSS 全局与公开图片桶已关闭“阻止公共访问”，私有桶保持开启。配置、权限与 38 项联调检查记录见 [统一上传说明](docs/10-unified-uploads.md)。已有公开 OSS 图片仍可用原登记接口；公开图片主机为 `chunai-photo.oss-cn-hangzhou.aliyuncs.com`。
 
 使用 B 站／飞书外链前，按 `.env.example` 生成并设置独立的 `CONTENT_MEDIA_ENCRYPTION_KEY`，妥善备份该密钥；链接与密码在数据库加密保存。管理员开通／续期／撤销会员需要 `membership:write`，内容预览仍需要 `content:write`。具体调用顺序见 [内容与会员说明](docs/08-content-courses.md)。
 
 本地测试交易时显式配置 `COMMERCE_TEST_PAYMENTS=true`，并按 [管理员初始化](docs/06-commerce.md#管理员初始化与权限) 创建管理员；生产环境始终禁用测试结算。
+
+购物车支持 SKU 数量与勾选、实时可购买状态及事务结算清理；图文／视频收藏支持下架失效和会员／购买权限判定。详见 [购物车与收藏](docs/11-cart-favorites.md)。
 
 ## 文档
 

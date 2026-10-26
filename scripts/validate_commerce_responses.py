@@ -10,7 +10,7 @@ samples = json.loads((Path(__file__).resolve().parents[1] / '.tmp/commerce-contr
 content_samples = Path(__file__).resolve().parents[1] / '.tmp/content-contract-responses.json'
 assert content_samples.exists(), 'Run content E2E tests before validating response contracts'
 samples += json.loads(content_samples.read_text(encoding='utf-8'))
-for suite in ('users', 'membership', 'uploads', 'uploads-business'):
+for suite in ('users', 'membership', 'uploads', 'uploads-business', 'cart-favorites'):
     source = Path(__file__).resolve().parents[1] / f'.tmp/{suite}-contract-responses.json'
     assert source.exists(), f'Run {suite} E2E tests before validating response contracts'
     samples += json.loads(source.read_text(encoding='utf-8'))

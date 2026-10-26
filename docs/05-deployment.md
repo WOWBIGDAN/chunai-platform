@@ -2,7 +2,9 @@
 
 目标仓库：`WOWBIGDAN/chunai-platform`，分支 `main`。服务器 `47.97.46.242`，Ubuntu 24.04，Node.js 22、MySQL 8.0、Nginx、systemd。此次按测试服务部署，使用公网 IP 访问。
 
-更新时间：2026-10-26。
+更新时间：2026-10-27。
+
+购物车与收藏的增量迁移为 `CartFavorites1793232000000`，新增 `cart_items`、`content_favorites` 和可空 `order_quotes.cart_items`。不需要新增环境变量或第三方凭证；发布时先备份数据库，再由现有迁移步骤升级，详见 [购物车与收藏](11-cart-favorites.md)。
 
 实物交易、科普、课程购买访问与专栏使用同一 CI/CD。外链视频和有效期会员的配置、调用说明见 [内容模块](08-content-courses.md)。部署使用增量迁移，保留已有用户、产品与订单。视频目录使用 `/var/lib/chunai/content-media`，需安装当前 Nginx、systemd 模板并配置 `PUBLIC_API_URL`。新外链视频需要独立的 `CONTENT_MEDIA_ENCRYPTION_KEY`，必须先在服务器配置后再发布；数据库、私有视频及密钥须一起备份。以下首次部署记录保留为历史事实。
 

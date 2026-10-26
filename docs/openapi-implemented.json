@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "两性健康服务平台 · 已实现认证、交易与内容 API",
-    "version": "1.6.0",
-    "description": "已实现认证、用户资料与后台用户管理、实物交易、科普与课程、专栏、会员方案购买与期限管理、统一 OSS 上传与私有售后凭证、B 站／飞书视频授权。当前测试服务器已配置杭州区域的 chunai-photo、chunai-private 与 ECS RAM 角色 chunai-oss；公开图片桶已允许对象公开访问，私有桶仍阻止公共访问。配置缺失或存储不可用时返回 503。x-implementation-status 表示仓库实现状态；线上以部署版本为准。支付退款使用 TEST 模式；短信、真实支付、AI、通知和第三方物流暂未接入。"
+    "version": "1.7.0",
+    "description": "已实现认证、用户资料与后台用户管理、实物交易、购物车与内容收藏、科普与课程、专栏、会员方案购买与期限管理、统一 OSS 上传与私有售后凭证、B 站／飞书视频授权。当前测试服务器已配置杭州区域的 chunai-photo、chunai-private 与 ECS RAM 角色 chunai-oss；公开图片桶已允许对象公开访问，私有桶仍阻止公共访问。配置缺失或存储不可用时返回 503。x-implementation-status 表示仓库实现状态；线上以部署版本为准。支付退款使用 TEST 模式；短信、真实支付、AI、通知和第三方物流暂未接入。"
   },
   "servers": [
     {
@@ -61,6 +61,9 @@
     },
     {
       "name": "17 用户与会员管理"
+    },
+    {
+      "name": "18 购物车与内容收藏"
     }
   ],
   "components": {
@@ -8464,6 +8467,608 @@
           "fileName",
           "mimeType",
           "sizeBytes"
+        ]
+      },
+      "CartProduct": {
+        "type": "object",
+        "description": "当前公开商品信息；下架或分类停用后为 null。不保存旧价格快照。",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "商品名称。",
+            "example": "cs商品"
+          },
+          "coverUrl": {
+            "type": "string",
+            "description": "HTTPS URL。",
+            "format": "uri",
+            "example": "https://cdn.example.com/cover.jpg",
+            "nullable": true
+          },
+          "skuAttributes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SkuAttribute"
+            },
+            "description": "当前规格。"
+          },
+          "unitPriceCents": {
+            "type": "integer",
+            "description": "金额，单位为人民币分；由服务端计算，禁止浮点。",
+            "minimum": 0,
+            "example": 9900,
+            "maximum": 9007199254740991
+          },
+          "subtotalCents": {
+            "type": "integer",
+            "description": "当前单价 × 保存数量，仅供展示，不是订单报价。",
+            "minimum": 0,
+            "example": 2400
+          },
+          "currency": {
+            "type": "string",
+            "description": "币种。",
+            "enum": [
+              "CNY"
+            ],
+            "example": "CNY"
+          }
+        },
+        "required": [
+          "name",
+          "coverUrl",
+          "skuAttributes",
+          "unitPriceCents",
+          "subtotalCents",
+          "currency"
+        ],
+        "nullable": true,
+        "example": {
+          "name": "cs商品",
+          "coverUrl": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/cs.png",
+          "skuAttributes": [
+            {
+              "name": "规格",
+              "value": "标准"
+            }
+          ],
+          "unitPriceCents": 1200,
+          "subtotalCents": 2400,
+          "currency": "CNY"
+        }
+      },
+      "CartItem": {
+        "type": "object",
+        "description": "本人购物车的一种 SKU；数量不占库存；可购买状态在每次读取时重新计算。",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "UUID v4。",
+            "format": "uuid",
+            "example": "fedb46b4-eae6-44a8-8abd-1739bb089611"
+          },
+          "skuId": {
+            "type": "string",
+            "description": "UUID v4。",
+            "format": "uuid",
+            "example": "fedb46b4-eae6-44a8-8abd-1739bb089611"
+          },
+          "productId": {
+            "type": "string",
+            "description": "UUID v4。",
+            "format": "uuid",
+            "example": "fedb46b4-eae6-44a8-8abd-1739bb089611"
+          },
+          "quantity": {
+            "type": "integer",
+            "description": "保存的期望数量，库存减少时不自动改写。",
+            "minimum": 1,
+            "example": 2,
+            "maximum": 999
+          },
+          "selected": {
+            "type": "boolean",
+            "description": "是否勾选；失效后保留选择意图，仍不可结算。",
+            "example": true
+          },
+          "version": {
+            "type": "integer",
+            "description": "乐观锁版本；写操作必须提交最近读取的版本。",
+            "minimum": 1,
+            "example": 1
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+            "format": "date-time",
+            "example": "2026-10-22T02:00:00Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+            "format": "date-time",
+            "example": "2026-10-22T02:00:00Z"
+          },
+          "availability": {
+            "type": "string",
+            "description": "按商品、分类、SKU、可售库存、保存数量依次判定。",
+            "enum": [
+              "AVAILABLE",
+              "PRODUCT_UNAVAILABLE",
+              "CATEGORY_UNAVAILABLE",
+              "SKU_DISABLED",
+              "OUT_OF_STOCK",
+              "STOCK_INSUFFICIENT"
+            ],
+            "example": "AVAILABLE"
+          },
+          "canPurchase": {
+            "type": "boolean",
+            "description": "仅 availability=AVAILABLE 为 true；不取决于 selected。",
+            "example": true
+          },
+          "availableStock": {
+            "type": "integer",
+            "description": "实物库存减去订单预占；购物车本身不预占。",
+            "minimum": 0,
+            "example": 5
+          },
+          "maxQuantity": {
+            "type": "integer",
+            "description": "min(999, availableStock)；仍需同时判断 canPurchase／availability。",
+            "minimum": 0,
+            "example": 5,
+            "maximum": 999
+          },
+          "product": {
+            "$ref": "#/components/schemas/CartProduct"
+          }
+        },
+        "required": [
+          "id",
+          "skuId",
+          "productId",
+          "quantity",
+          "selected",
+          "version",
+          "createdAt",
+          "updatedAt",
+          "availability",
+          "canPurchase",
+          "availableStock",
+          "maxQuantity",
+          "product"
+        ]
+      },
+      "CartItemPut": {
+        "type": "object",
+        "description": "按 SKU 设置绝对数量，不累加。首次 version=0；已有条目使用最新 version。",
+        "additionalProperties": false,
+        "properties": {
+          "quantity": {
+            "type": "integer",
+            "description": "整数 1–999；不能用 0 删除。",
+            "minimum": 1,
+            "example": 2,
+            "maximum": 999
+          },
+          "version": {
+            "type": "integer",
+            "description": "首次为 0；旧版本返回 VERSION_CONFLICT。",
+            "minimum": 0,
+            "example": 0,
+            "maximum": 2147483647
+          },
+          "selected": {
+            "type": "boolean",
+            "description": "可省略：新建默认 true；更新保留原值。",
+            "example": true
+          }
+        },
+        "required": [
+          "quantity",
+          "version"
+        ]
+      },
+      "CartQuoteLine": {
+        "type": "object",
+        "description": "本次明确选择的购物车 SKU 与当前购物车条目版本。数量从数据库取。",
+        "additionalProperties": false,
+        "properties": {
+          "skuId": {
+            "type": "string",
+            "description": "UUID v4。",
+            "format": "uuid",
+            "example": "fedb46b4-eae6-44a8-8abd-1739bb089611"
+          },
+          "version": {
+            "type": "integer",
+            "description": "乐观锁版本；写操作必须提交最近读取的版本。",
+            "minimum": 1,
+            "example": 1
+          }
+        },
+        "required": [
+          "skuId",
+          "version"
+        ]
+      },
+      "CartQuoteCreate": {
+        "type": "object",
+        "description": "购物车结算试算；不接受客户端金额、数量或用户 ID。",
+        "additionalProperties": false,
+        "properties": {
+          "addressId": {
+            "type": "string",
+            "description": "UUID v4。",
+            "format": "uuid",
+            "example": "fedb46b4-eae6-44a8-8abd-1739bb089611"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CartQuoteLine"
+            },
+            "description": "1–50 个不重复的本人已勾选 SKU；任一不可购买则整个试算失败。",
+            "minItems": 1,
+            "maxItems": 50,
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "addressId",
+          "items"
+        ]
+      },
+      "FavoriteContent": {
+        "type": "object",
+        "description": "有效收藏返回当前公开摘要；下架或分类停用为 null，不返回旧标题、封面、正文或视频链接。",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "example": "id_10001"
+          },
+          "kind": {
+            "type": "string",
+            "description": "内容类型；课程由章节组成。",
+            "enum": [
+              "SCIENCE_VIDEO",
+              "SCIENCE_ARTICLE",
+              "VIDEO_COURSE",
+              "ARTICLE_COURSE"
+            ],
+            "example": "SCIENCE_VIDEO"
+          },
+          "title": {
+            "type": "string",
+            "description": "标题。",
+            "minLength": 1,
+            "maxLength": 120,
+            "example": "认识身体与健康"
+          },
+          "summary": {
+            "type": "string",
+            "description": "简介。",
+            "maxLength": 2000,
+            "example": "以科学知识解答常见问题。"
+          },
+          "cover": {
+            "$ref": "#/components/schemas/MediaSummary"
+          },
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "标签。",
+              "maxLength": 20,
+              "example": "基础知识"
+            },
+            "description": "标签",
+            "maxItems": 10
+          },
+          "accessPolicy": {
+            "type": "string",
+            "description": "FREE 免费、PURCHASE 独立购买、MEMBER 按网站会员有效期；MEMBER 仅课程且 priceCents=0。",
+            "enum": [
+              "FREE",
+              "PURCHASE",
+              "MEMBER"
+            ],
+            "example": "FREE"
+          },
+          "priceCents": {
+            "type": "integer",
+            "description": "金额，单位为人民币分；由服务端计算，禁止浮点。",
+            "minimum": 0,
+            "example": 0,
+            "maximum": 9007199254740991
+          },
+          "currency": {
+            "type": "string",
+            "description": "币种。",
+            "enum": [
+              "CNY"
+            ],
+            "example": "CNY"
+          },
+          "chapterCount": {
+            "type": "integer",
+            "description": "科普为 0；课程为已发布章节数。",
+            "minimum": 0,
+            "example": 0
+          },
+          "publishedAt": {
+            "type": "string",
+            "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+            "format": "date-time",
+            "example": "2026-10-22T02:00:00Z"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "summary",
+          "cover",
+          "category",
+          "tags",
+          "accessPolicy",
+          "priceCents",
+          "currency",
+          "chapterCount",
+          "publishedAt"
+        ],
+        "nullable": true
+      },
+      "ContentFavorite": {
+        "type": "object",
+        "description": "收藏关系不等于访问权益。失效项保留供取消或重新上架后恢复。",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "UUID v4。",
+            "format": "uuid",
+            "example": "fedb46b4-eae6-44a8-8abd-1739bb089611"
+          },
+          "contentId": {
+            "type": "string",
+            "description": "UUID v4。",
+            "format": "uuid",
+            "example": "fedb46b4-eae6-44a8-8abd-1739bb089611"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+            "format": "date-time",
+            "example": "2026-10-22T02:00:00Z"
+          },
+          "valid": {
+            "type": "boolean",
+            "description": "当前内容是否上架且所属分类启用。",
+            "example": false
+          },
+          "invalidReason": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              null,
+              "CONTENT_UNAVAILABLE",
+              "CATEGORY_UNAVAILABLE"
+            ],
+            "description": "有效时 null；下架优先于分类停用。",
+            "example": "CONTENT_UNAVAILABLE"
+          },
+          "content": {
+            "$ref": "#/components/schemas/FavoriteContent"
+          },
+          "access": {
+            "$ref": "#/components/schemas/AccessDecision"
+          }
+        },
+        "required": [
+          "id",
+          "contentId",
+          "createdAt",
+          "valid",
+          "invalidReason",
+          "content",
+          "access"
+        ],
+        "example": {
+          "id": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+          "contentId": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+          "createdAt": "2026-10-27T00:00:00Z",
+          "valid": false,
+          "invalidReason": "CONTENT_UNAVAILABLE",
+          "content": null,
+          "access": {
+            "canAccess": false,
+            "reason": "CONTENT_UNAVAILABLE"
+          }
+        }
+      },
+      "NullableContentFavorite": {
+        "type": "object",
+        "description": "未收藏时为 null；收藏后包含当前有效性与访问判定。",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "UUID v4。",
+            "format": "uuid",
+            "example": "fedb46b4-eae6-44a8-8abd-1739bb089611"
+          },
+          "contentId": {
+            "type": "string",
+            "description": "UUID v4。",
+            "format": "uuid",
+            "example": "fedb46b4-eae6-44a8-8abd-1739bb089611"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+            "format": "date-time",
+            "example": "2026-10-22T02:00:00Z"
+          },
+          "valid": {
+            "type": "boolean",
+            "description": "当前内容是否上架且所属分类启用。",
+            "example": false
+          },
+          "invalidReason": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              null,
+              "CONTENT_UNAVAILABLE",
+              "CATEGORY_UNAVAILABLE"
+            ],
+            "description": "有效时 null；下架优先于分类停用。",
+            "example": "CONTENT_UNAVAILABLE"
+          },
+          "content": {
+            "$ref": "#/components/schemas/FavoriteContent"
+          },
+          "access": {
+            "$ref": "#/components/schemas/AccessDecision"
+          }
+        },
+        "required": [
+          "id",
+          "contentId",
+          "createdAt",
+          "valid",
+          "invalidReason",
+          "content",
+          "access"
+        ],
+        "nullable": true
+      },
+      "FavoriteState": {
+        "type": "object",
+        "description": "查询本人是否已收藏，包含失效收藏；未知 UUID 返回未收藏，不暴露其他用户记录。",
+        "additionalProperties": false,
+        "properties": {
+          "contentId": {
+            "type": "string",
+            "description": "UUID v4。",
+            "format": "uuid",
+            "example": "fedb46b4-eae6-44a8-8abd-1739bb089611"
+          },
+          "favorited": {
+            "type": "boolean",
+            "description": "本人是否保存此收藏关系。",
+            "example": false
+          },
+          "favorite": {
+            "$ref": "#/components/schemas/NullableContentFavorite"
+          }
+        },
+        "required": [
+          "contentId",
+          "favorited",
+          "favorite"
+        ]
+      },
+      "PageCartItem": {
+        "type": "object",
+        "description": "CartItem 的分页结果。固定按白名单排序；同值用 id 排序。",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CartItem"
+            },
+            "description": "当前页数据；空页为 []"
+          },
+          "total": {
+            "type": "integer",
+            "description": "匹配记录总数",
+            "minimum": 0,
+            "example": 1
+          },
+          "page": {
+            "type": "integer",
+            "description": "页码，从 1 开始",
+            "minimum": 1,
+            "example": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "description": "每页条数",
+            "minimum": 1,
+            "example": 20,
+            "maximum": 100
+          },
+          "hasNext": {
+            "type": "boolean",
+            "description": "是否有下一页",
+            "example": false
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageSize",
+          "hasNext"
+        ]
+      },
+      "PageContentFavorite": {
+        "type": "object",
+        "description": "ContentFavorite 的分页结果。固定按白名单排序；同值用 id 排序。",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContentFavorite"
+            },
+            "description": "当前页数据；空页为 []"
+          },
+          "total": {
+            "type": "integer",
+            "description": "匹配记录总数",
+            "minimum": 0,
+            "example": 1
+          },
+          "page": {
+            "type": "integer",
+            "description": "页码，从 1 开始",
+            "minimum": 1,
+            "example": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "description": "每页条数",
+            "minimum": 1,
+            "example": 20,
+            "maximum": 100
+          },
+          "hasNext": {
+            "type": "boolean",
+            "description": "是否有下一页",
+            "example": false
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageSize",
+          "hasNext"
         ]
       },
       "ContentCategory": {
@@ -47352,6 +47957,2099 @@
                     "page": 1,
                     "pageSize": 20,
                     "hasNext": false
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/cart": {
+      "get": {
+        "operationId": "get_me_cart",
+        "summary": "查询本人购物车",
+        "description": "最多保存 200 种 SKU。按加入时间、ID 倒序，分页默认 20、最多 100。失效商品保留，购买资格和金额每次重算；前端仅展示，不据此跳过试算。",
+        "tags": [
+          "18 购物车与内容收藏"
+        ],
+        "security": [
+          {
+            "ClientBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "页码，默认 1。",
+              "minimum": 1,
+              "example": 1,
+              "default": 1
+            },
+            "description": "页码，默认 1。"
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "每页条数，默认 20，最多 100。",
+              "minimum": 1,
+              "example": 20,
+              "maximum": 100,
+              "default": 20
+            },
+            "description": "每页条数，默认 20，最多 100。"
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": false,
+        "x-auth-mode": "user",
+        "x-permissions": [],
+        "x-idempotency-required": false,
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PageCartItem"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "items": [
+                      {
+                        "id": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+                        "skuId": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+                        "productId": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+                        "quantity": 2,
+                        "selected": true,
+                        "version": 1,
+                        "createdAt": "2026-10-22T02:00:00Z",
+                        "updatedAt": "2026-10-22T02:00:00Z",
+                        "availability": "AVAILABLE",
+                        "canPurchase": true,
+                        "availableStock": 5,
+                        "maxQuantity": 5,
+                        "product": {
+                          "name": "cs商品",
+                          "coverUrl": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/cs.png",
+                          "skuAttributes": [
+                            {
+                              "name": "规格",
+                              "value": "标准"
+                            }
+                          ],
+                          "unitPriceCents": 1200,
+                          "subtotalCents": 2400,
+                          "currency": "CNY"
+                        }
+                      }
+                    ],
+                    "total": 1,
+                    "page": 1,
+                    "pageSize": 20,
+                    "hasNext": false
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/cart/items/{skuId}": {
+      "put": {
+        "operationId": "put_me_cart_items_skuId",
+        "summary": "加入购物车／设置数量和勾选",
+        "description": "只能操作本人购物车。数量为绝对值；首次 version=0，已有条目须传最新版本。新增、增加数量或从未选变已选时必须可购买；已失效条目允许减量、取消勾选或保持原值。相同版本相同值不增加版本，陈旧版本返回 409 后须刷新，不能盲目累加。无需 Idempotency-Key。",
+        "tags": [
+          "18 购物车与内容收藏"
+        ],
+        "security": [
+          {
+            "ClientBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "skuId",
+            "required": true,
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "schema": {
+              "type": "string",
+              "description": "不透明业务 ID；前端必须按字符串保存。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "id_10001"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": false,
+        "x-auth-mode": "user",
+        "x-permissions": [],
+        "x-idempotency-required": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CartItemPut"
+              },
+              "example": {
+                "quantity": 2,
+                "version": 0
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/CartItem"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "id": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+                    "skuId": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+                    "productId": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+                    "quantity": 2,
+                    "selected": true,
+                    "version": 1,
+                    "createdAt": "2026-10-22T02:00:00Z",
+                    "updatedAt": "2026-10-22T02:00:00Z",
+                    "availability": "AVAILABLE",
+                    "canPurchase": true,
+                    "availableStock": 5,
+                    "maxQuantity": 5,
+                    "product": {
+                      "name": "cs商品",
+                      "coverUrl": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/cs.png",
+                      "skuAttributes": [
+                        {
+                          "name": "规格",
+                          "value": "标准"
+                        }
+                      ],
+                      "unitPriceCents": 1200,
+                      "subtotalCents": 2400,
+                      "currency": "CNY"
+                    }
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "delete_me_cart_items_skuId",
+        "summary": "移除本人购物车条目",
+        "description": "仅删除本人的该 SKU；须携带当前条目版本；已不存在时重复删除成功。下架或库存不足不妨碍删除。",
+        "tags": [
+          "18 购物车与内容收藏"
+        ],
+        "security": [
+          {
+            "ClientBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "skuId",
+            "required": true,
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "schema": {
+              "type": "string",
+              "description": "不透明业务 ID；前端必须按字符串保存。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "id_10001"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "乐观锁版本；写操作必须提交最近读取的版本。",
+              "minimum": 1,
+              "example": 1
+            },
+            "description": "乐观锁版本；写操作必须提交最近读取的版本。"
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": false,
+        "x-auth-mode": "user",
+        "x-permissions": [],
+        "x-idempotency-required": false,
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ActionResult"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "success": true
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/cart/quote": {
+      "post": {
+        "operationId": "post_me_cart_quote",
+        "summary": "购物车结算试算",
+        "description": "明确提交本次勾选的 SKU 和购物车条目 version，地址须本人所有。任一版本、选择状态、商品状态或数量不符均整体失败。按当前价格生成十分钟报价，不占库存。随后 POST /orders + Idempotency-Key；下单时重查状态、价格、规格和库存并预占。订单成功后同事务移除与试算时 id/version/quantity 仍一致的条目；已改动、重新加入、未参与结算的条目保留，失败不清理。取消订单释放库存但不自动恢复购物车。普通 /order-quotes 下单不清理购物车。",
+        "tags": [
+          "18 购物车与内容收藏"
+        ],
+        "security": [
+          {
+            "ClientBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": false,
+        "x-auth-mode": "user",
+        "x-permissions": [],
+        "x-idempotency-required": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CartQuoteCreate"
+              },
+              "example": {
+                "addressId": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+                "items": [
+                  {
+                    "skuId": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+                    "version": 1
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/OrderQuote"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "quoteId": "id_10001",
+                    "type": "PRODUCT",
+                    "items": [
+                      {
+                        "id": "id_10001",
+                        "resourceId": "id_10001",
+                        "resourceType": "SKU",
+                        "productId": "id_10001",
+                        "title": "健康护理用品",
+                        "skuAttributes": [
+                          {
+                            "name": "规格",
+                            "value": "标准装"
+                          }
+                        ],
+                        "coverUrl": "https://cdn.example.com/cover.jpg",
+                        "quantity": 1,
+                        "unitPriceCents": 9900,
+                        "subtotalCents": 9900,
+                        "refundedQuantity": 0,
+                        "refundedAmountCents": 0
+                      }
+                    ],
+                    "itemsAmountCents": 9900,
+                    "shippingFeeCents": 0,
+                    "payableAmountCents": 9900,
+                    "currency": "CNY",
+                    "expiresAt": "2026-10-22T02:10:00Z",
+                    "address": {
+                      "recipient": "张女士",
+                      "phone": "+8613800000000",
+                      "provinceCode": "310000",
+                      "province": "上海市",
+                      "cityCode": "310100",
+                      "city": "上海市",
+                      "districtCode": "310101",
+                      "district": "黄浦区",
+                      "detail": "示例路 100 号"
+                    }
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/favorites": {
+      "get": {
+        "operationId": "get_me_favorites",
+        "summary": "查询本人收藏",
+        "description": "默认包含有效和失效收藏，按收藏时间、ID 倒序。内容下架／分类停用时 valid=false、content=null；重新上架恢复。正文和播放仍走原鉴权接口。已购下架课程保留原购买权益，可从 /me/courses 访问，不因收藏失效撤销。",
+        "tags": [
+          "18 购物车与内容收藏"
+        ],
+        "security": [
+          {
+            "ClientBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "页码，默认 1。",
+              "minimum": 1,
+              "example": 1,
+              "default": 1
+            },
+            "description": "页码，默认 1。"
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "每页条数，默认 20，最多 100。",
+              "minimum": 1,
+              "example": 20,
+              "maximum": 100,
+              "default": 20
+            },
+            "description": "每页条数，默认 20，最多 100。"
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "内容类型；收藏整门课程，不收藏章节或专栏。",
+              "enum": [
+                "SCIENCE_ARTICLE",
+                "SCIENCE_VIDEO",
+                "ARTICLE_COURSE",
+                "VIDEO_COURSE"
+              ],
+              "example": "SCIENCE_ARTICLE"
+            },
+            "description": "内容类型；收藏整门课程，不收藏章节或专栏。"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "可选过滤有效／失效收藏；与是否已购买或为会员无关。",
+              "enum": [
+                "VALID",
+                "INVALID"
+              ],
+              "example": "VALID"
+            },
+            "description": "可选过滤有效／失效收藏；与是否已购买或为会员无关。"
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": false,
+        "x-auth-mode": "user",
+        "x-permissions": [],
+        "x-idempotency-required": false,
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PageContentFavorite"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "items": [
+                      {
+                        "id": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+                        "contentId": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+                        "createdAt": "2026-10-27T00:00:00Z",
+                        "valid": false,
+                        "invalidReason": "CONTENT_UNAVAILABLE",
+                        "content": null,
+                        "access": {
+                          "canAccess": false,
+                          "reason": "CONTENT_UNAVAILABLE"
+                        }
+                      }
+                    ],
+                    "total": 1,
+                    "page": 1,
+                    "pageSize": 20,
+                    "hasNext": false
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/favorites/{contentId}": {
+      "get": {
+        "operationId": "get_me_favorites_contentId",
+        "summary": "查询本人收藏状态",
+        "description": "favorite=null 表示未收藏，包含不存在的内容 UUID；不能指定其他用户 ID。",
+        "tags": [
+          "18 购物车与内容收藏"
+        ],
+        "security": [
+          {
+            "ClientBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contentId",
+            "required": true,
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "schema": {
+              "type": "string",
+              "description": "不透明业务 ID；前端必须按字符串保存。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "id_10001"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": false,
+        "x-auth-mode": "user",
+        "x-permissions": [],
+        "x-idempotency-required": false,
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/FavoriteState"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "contentId": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+                    "favorited": false,
+                    "favorite": null
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "put_me_favorites_contentId",
+        "summary": "收藏图文／视频／整门课程",
+        "description": "无请求体或 {}。只新增已上架且分类启用的内容；免费、付费、会员内容均可收藏，不要求已购买。重复请求幂等，保留首次收藏时间；已收藏但已下架时返回原关系的失效状态，不泄露内容。每用户最多 1000 条。",
+        "tags": [
+          "18 购物车与内容收藏"
+        ],
+        "security": [
+          {
+            "ClientBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contentId",
+            "required": true,
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "schema": {
+              "type": "string",
+              "description": "不透明业务 ID；前端必须按字符串保存。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "id_10001"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": false,
+        "x-auth-mode": "user",
+        "x-permissions": [],
+        "x-idempotency-required": false,
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ContentFavorite"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "id": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+                    "contentId": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+                    "createdAt": "2026-10-27T00:00:00Z",
+                    "valid": false,
+                    "invalidReason": "CONTENT_UNAVAILABLE",
+                    "content": null,
+                    "access": {
+                      "canAccess": false,
+                      "reason": "CONTENT_UNAVAILABLE"
+                    }
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "delete_me_favorites_contentId",
+        "summary": "取消本人收藏",
+        "description": "有效和失效收藏均可取消；重复取消成功，只操作本人记录。",
+        "tags": [
+          "18 购物车与内容收藏"
+        ],
+        "security": [
+          {
+            "ClientBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contentId",
+            "required": true,
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "schema": {
+              "type": "string",
+              "description": "不透明业务 ID；前端必须按字符串保存。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "id_10001"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": false,
+        "x-auth-mode": "user",
+        "x-permissions": [],
+        "x-idempotency-required": false,
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ActionResult"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "success": true
                   },
                   "requestId": "req_demo_001",
                   "timestamp": "2026-10-22T02:00:00Z"

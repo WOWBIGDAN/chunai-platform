@@ -1,10 +1,10 @@
 # 接口文档
 
-> 更新：2026-10-26。已实现认证、用户资料与后台用户管理、实物交易、科普／课程／专栏、会员方案购买、统一 OSS 上传与私有凭证及 B 站／飞书访问；线上以部署版本为准。当前测试服务器已配置杭州区域的 chunai-photo、chunai-private 与 ECS RAM 角色 chunai-oss；公开图片桶已允许对象公开访问，私有桶仍阻止公共访问，最新状态见统一上传说明。支付退款使用测试模式，短信及第三方收付款暂缓。
+> 更新：2026-10-27。已实现认证、用户资料与后台用户管理、实物交易、购物车与内容收藏、科普／课程／专栏、会员方案购买、统一 OSS 上传与私有凭证及 B 站／飞书访问；线上以部署版本为准。当前测试服务器已配置杭州区域的 chunai-photo、chunai-private 与 ECS RAM 角色 chunai-oss；公开图片桶已允许对象公开访问，私有桶仍阻止公共访问，最新状态见统一上传说明。支付退款使用测试模式，短信及第三方收付款暂缓。
 
 已实现接口的运行方法见 [后端启动与数据库](04-backend-auth.md)。
 
-测试 API：`http://47.97.46.242/api/v1`。详见 [交易模块](06-commerce.md)、[科普与课程](08-content-courses.md)、[会员购买与用户管理](09-membership-users.md)、[统一上传](10-unified-uploads.md) 及 [部署说明](05-deployment.md)。
+测试 API：`http://47.97.46.242/api/v1`。详见 [交易模块](06-commerce.md)、[科普与课程](08-content-courses.md)、[会员购买与用户管理](09-membership-users.md)、[统一上传](10-unified-uploads.md)、[购物车与收藏](11-cart-favorites.md) 及 [部署说明](05-deployment.md)。
 注册示例采用本地默认协议版本 `2026-10-01`；公网测试环境当前为 `2026-10-23-test`，提交前须读取当前环境的协议接口。
 
 所有下列 URL 统一加前缀 `/api/v1`。请求默认 `application/json`；返回默认使用统一响应结构，表中的响应类型指 `data`。
@@ -34,6 +34,7 @@
 - [16 订单、物流与售后管理](#module-16)
 - [17 用户与会员管理](#module-17)
 - [18 站内通知与审计管理](#module-18)
+- [18 购物车与内容收藏](#module-18)
 
 <a id="module-01"></a>
 ## 01 登录与鉴权
@@ -2959,12 +2960,162 @@ COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整�
 
 成功：HTTP `200`，`data` 为 [PageAuditLog](02-data-models.md#pageauditlog)。
 
+
+<a id="module-18"></a>
+## 18 购物车与内容收藏
+
+| 编号 | 接口名称 | 方法 | URL | 是否登录 | 是否管理员 | 额外权限 | 请求体 | 成功 data | HTTP |
+|---|---|---|---|---|---|---|---|---|---|
+| [A171](#a171) | 查询本人购物车 | `GET` | `/me/cart` | 是 | 否 | `—` | — | [PageCartItem](02-data-models.md#pagecartitem) | 200 |
+| [A172](#a172) | 加入购物车／设置数量和勾选 | `PUT` | `/me/cart/items/{skuId}` | 是 | 否 | `—` | [CartItemPut](02-data-models.md#cartitemput) | [CartItem](02-data-models.md#cartitem) | 200 |
+| [A173](#a173) | 移除本人购物车条目 | `DELETE` | `/me/cart/items/{skuId}` | 是 | 否 | `—` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
+| [A174](#a174) | 购物车结算试算 | `POST` | `/me/cart/quote` | 是 | 否 | `—` | [CartQuoteCreate](02-data-models.md#cartquotecreate) | [OrderQuote](02-data-models.md#orderquote) | 201 |
+| [A175](#a175) | 查询本人收藏 | `GET` | `/me/favorites` | 是 | 否 | `—` | — | [PageContentFavorite](02-data-models.md#pagecontentfavorite) | 200 |
+| [A176](#a176) | 查询本人收藏状态 | `GET` | `/me/favorites/{contentId}` | 是 | 否 | `—` | — | [FavoriteState](02-data-models.md#favoritestate) | 200 |
+| [A177](#a177) | 收藏图文／视频／整门课程 | `PUT` | `/me/favorites/{contentId}` | 是 | 否 | `—` | — | [ContentFavorite](02-data-models.md#contentfavorite) | 200 |
+| [A178](#a178) | 取消本人收藏 | `DELETE` | `/me/favorites/{contentId}` | 是 | 否 | `—` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
+
+### 参数与业务约束
+
+<a id="a171"></a>
+#### A171 查询本人购物车
+
+`GET /api/v1/me/cart`
+
+**实现状态：** 已实现
+
+最多保存 200 种 SKU。按加入时间、ID 倒序，分页默认 20、最多 100。失效商品保留，购买资格和金额每次重算；前端仅展示，不据此跳过试算。
+
+| 位置 | 名称 | 类型 | 必填 | 说明与约束 |
+|---|---|---|---|---|
+| query | `page` | integer | 否 | 页码，默认 1。 最小: `1`；默认: `1` |
+| query | `pageSize` | integer | 否 | 每页条数，默认 20，最多 100。 最小: `1`；最大: `100`；默认: `20` |
+
+成功：HTTP `200`，`data` 为 [PageCartItem](02-data-models.md#pagecartitem)。
+
+<a id="a172"></a>
+#### A172 加入购物车／设置数量和勾选
+
+`PUT /api/v1/me/cart/items/{skuId}`
+
+**实现状态：** 已实现
+
+只能操作本人购物车。数量为绝对值；首次 version=0，已有条目须传最新版本。新增、增加数量或从未选变已选时必须可购买；已失效条目允许减量、取消勾选或保持原值。相同版本相同值不增加版本，陈旧版本返回 409 后须刷新，不能盲目累加。无需 Idempotency-Key。
+
+| 位置 | 名称 | 类型 | 必填 | 说明与约束 |
+|---|---|---|---|---|
+| path | `skuId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+
+请求体：[CartItemPut](02-data-models.md#cartitemput)，完整字段及必填规则见对应对象。
+
+成功：HTTP `200`，`data` 为 [CartItem](02-data-models.md#cartitem)。
+
+<a id="a173"></a>
+#### A173 移除本人购物车条目
+
+`DELETE /api/v1/me/cart/items/{skuId}`
+
+**实现状态：** 已实现
+
+仅删除本人的该 SKU；须携带当前条目版本；已不存在时重复删除成功。下架或库存不足不妨碍删除。
+
+| 位置 | 名称 | 类型 | 必填 | 说明与约束 |
+|---|---|---|---|---|
+| path | `skuId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+| query | `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 最小: `1` |
+
+成功：HTTP `200`，`data` 为 [ActionResult](02-data-models.md#actionresult)。
+
+<a id="a174"></a>
+#### A174 购物车结算试算
+
+`POST /api/v1/me/cart/quote`
+
+**实现状态：** 已实现
+
+明确提交本次勾选的 SKU 和购物车条目 version，地址须本人所有。任一版本、选择状态、商品状态或数量不符均整体失败。按当前价格生成十分钟报价，不占库存。随后 POST /orders + Idempotency-Key；下单时重查状态、价格、规格和库存并预占。订单成功后同事务移除与试算时 id/version/quantity 仍一致的条目；已改动、重新加入、未参与结算的条目保留，失败不清理。取消订单释放库存但不自动恢复购物车。普通 /order-quotes 下单不清理购物车。
+
+请求体：[CartQuoteCreate](02-data-models.md#cartquotecreate)，完整字段及必填规则见对应对象。
+
+成功：HTTP `201`，`data` 为 [OrderQuote](02-data-models.md#orderquote)。
+
+<a id="a175"></a>
+#### A175 查询本人收藏
+
+`GET /api/v1/me/favorites`
+
+**实现状态：** 已实现
+
+默认包含有效和失效收藏，按收藏时间、ID 倒序。内容下架／分类停用时 valid=false、content=null；重新上架恢复。正文和播放仍走原鉴权接口。已购下架课程保留原购买权益，可从 /me/courses 访问，不因收藏失效撤销。
+
+| 位置 | 名称 | 类型 | 必填 | 说明与约束 |
+|---|---|---|---|---|
+| query | `page` | integer | 否 | 页码，默认 1。 最小: `1`；默认: `1` |
+| query | `pageSize` | integer | 否 | 每页条数，默认 20，最多 100。 最小: `1`；最大: `100`；默认: `20` |
+| query | `kind` | string | 否 | 内容类型；收藏整门课程，不收藏章节或专栏。 枚举: `SCIENCE_ARTICLE, SCIENCE_VIDEO, ARTICLE_COURSE, VIDEO_COURSE` |
+| query | `status` | string | 否 | 可选过滤有效／失效收藏；与是否已购买或为会员无关。 枚举: `VALID, INVALID` |
+
+成功：HTTP `200`，`data` 为 [PageContentFavorite](02-data-models.md#pagecontentfavorite)。
+
+<a id="a176"></a>
+#### A176 查询本人收藏状态
+
+`GET /api/v1/me/favorites/{contentId}`
+
+**实现状态：** 已实现
+
+favorite=null 表示未收藏，包含不存在的内容 UUID；不能指定其他用户 ID。
+
+| 位置 | 名称 | 类型 | 必填 | 说明与约束 |
+|---|---|---|---|---|
+| path | `contentId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+
+成功：HTTP `200`，`data` 为 [FavoriteState](02-data-models.md#favoritestate)。
+
+<a id="a177"></a>
+#### A177 收藏图文／视频／整门课程
+
+`PUT /api/v1/me/favorites/{contentId}`
+
+**实现状态：** 已实现
+
+无请求体或 {}。只新增已上架且分类启用的内容；免费、付费、会员内容均可收藏，不要求已购买。重复请求幂等，保留首次收藏时间；已收藏但已下架时返回原关系的失效状态，不泄露内容。每用户最多 1000 条。
+
+| 位置 | 名称 | 类型 | 必填 | 说明与约束 |
+|---|---|---|---|---|
+| path | `contentId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+
+成功：HTTP `200`，`data` 为 [ContentFavorite](02-data-models.md#contentfavorite)。
+
+<a id="a178"></a>
+#### A178 取消本人收藏
+
+`DELETE /api/v1/me/favorites/{contentId}`
+
+**实现状态：** 已实现
+
+有效和失效收藏均可取消；重复取消成功，只操作本人记录。
+
+| 位置 | 名称 | 类型 | 必填 | 说明与约束 |
+|---|---|---|---|---|
+| path | `contentId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+
+成功：HTTP `200`，`data` 为 [ActionResult](02-data-models.md#actionresult)。
+
 ## 通用失败响应
 
 所有平台 JSON API 失败返回 [ErrorResponse](02-data-models.md#errorresponse)。HTTP 状态与业务码对应如下；鉴权、参数校验、依赖失败等均按此约定。
 
 | HTTP | code | 含义 | 前端处理 |
 |---|---|---|---|
+| 409 | `PRODUCT_UNAVAILABLE` | 商品未上架、SKU 停用或分类不可用，不能购买 | 刷新商品状态 |
+| 409 | `CATEGORY_UNAVAILABLE` | 所关联分类当前不可用 | 选择启用的分类或等待恢复 |
+| 409 | `STOCK_INSUFFICIENT` | 保存或购买数量超过当前可售库存 | 刷新库存并减少数量 |
+| 409 | `QUOTE_CHANGED` | 试算后价格或规格发生变化 | 重新试算并确认订单 |
+| 409 | `CART_LIMIT` | 购物车已达 200 种 SKU | 先移除不需要的条目 |
+| 409 | `CART_ITEM_NOT_SELECTED` | 结算条目未勾选 | 刷新购物车并勾选 |
+| 409 | `SKU_DISABLED` | 购物车 SKU 已停用 | 改选可售规格或移除 |
+| 409 | `FAVORITE_LIMIT` | 收藏已达 1000 条 | 先取消不需要的收藏 |
 | 400 | `VALIDATION_ERROR` | DTO、Query 或 Path 参数不合法 | 根据 error.details 标记字段 |
 | 400 | `SMS_CODE_INVALID` | 验证码无效、过期、用途不符或超过尝试次数 | 重新获取对应用途验证码 |
 | 400 | `MEDIA_NOT_READY` | 素材未完成处理或用途／类型不匹配 | 轮询素材状态或重新上传 |

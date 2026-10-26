@@ -7,8 +7,9 @@ import { AdminContentController, ContentController, ContentPlaybackController, O
 import { ContentService } from './content.service';
 import { ContentMediaService } from './media.service';
 import { UploadStorageModule } from '../uploads/storage.module';
+import { FavoritesController, FavoritesService } from './favorites';
 
 @Module({ imports: [AuthModule, AdminAuthModule, CommerceModule, UploadStorageModule, JwtModule.register({})],
-  controllers: [ContentController, AdminContentController, ContentPlaybackController],
-  providers: [ContentService, ContentMediaService, OptionalUserGuard] })
+  controllers: [ContentController, AdminContentController, ContentPlaybackController, FavoritesController],
+  providers: [ContentService, ContentMediaService, OptionalUserGuard, FavoritesService] })
 export class ContentModule {}

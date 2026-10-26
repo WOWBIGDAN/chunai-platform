@@ -71,4 +71,9 @@ export class CourseEntitlement extends RecordBase {
   @Column({ type: 'varchar', length: 16 }) status!: 'ACTIVE' | 'REVOKED';
   @Column({ name: 'revoked_at', type: 'datetime', precision: 3, nullable: true }) revokedAt!: Date | null;
 }
-export const contentEntities = [ContentMedia, Content, Chapter, ContentColumn, ColumnContent, CourseEntitlement];
+@Entity('content_favorites')
+export class ContentFavorite extends RecordBase {
+  @Column({ name: 'user_id', type: 'varchar', length: 36 }) userId!: string;
+  @Column({ name: 'content_id', type: 'varchar', length: 36 }) contentId!: string;
+}
+export const contentEntities = [ContentMedia, Content, Chapter, ContentColumn, ColumnContent, CourseEntitlement, ContentFavorite];

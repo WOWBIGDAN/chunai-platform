@@ -922,6 +922,8 @@ from membership_users_contract import apply_membership_users_contract
 apply_membership_users_contract(globals())
 from uploads_contract import apply_uploads_contract, finalize_uploads_spec
 apply_uploads_contract(globals())
+from cart_favorites_contract import apply_cart_favorites_contract
+apply_cart_favorites_contract(globals())
 
 AUTH_LABELS = {
     "public": ("否", "否"), "optional": ("可选", "否"), "user": ("是", "否"),
@@ -931,6 +933,14 @@ AUTH_LABELS = {
 }
 
 ERRORS = [
+    (409, 'PRODUCT_UNAVAILABLE', '商品未上架、SKU 停用或分类不可用，不能购买', '刷新商品状态'),
+    (409, 'CATEGORY_UNAVAILABLE', '所关联分类当前不可用', '选择启用的分类或等待恢复'),
+    (409, 'STOCK_INSUFFICIENT', '保存或购买数量超过当前可售库存', '刷新库存并减少数量'),
+    (409, 'QUOTE_CHANGED', '试算后价格或规格发生变化', '重新试算并确认订单'),
+    (409, 'CART_LIMIT', '购物车已达 200 种 SKU', '先移除不需要的条目'),
+    (409, 'CART_ITEM_NOT_SELECTED', '结算条目未勾选', '刷新购物车并勾选'),
+    (409, 'SKU_DISABLED', '购物车 SKU 已停用', '改选可售规格或移除'),
+    (409, 'FAVORITE_LIMIT', '收藏已达 1000 条', '先取消不需要的收藏'),
     (400, "VALIDATION_ERROR", "DTO、Query 或 Path 参数不合法", "根据 error.details 标记字段"),
     (400, "SMS_CODE_INVALID", "验证码无效、过期、用途不符或超过尝试次数", "重新获取对应用途验证码"),
     (400, "MEDIA_NOT_READY", "素材未完成处理或用途／类型不匹配", "轮询素材状态或重新上传"),
@@ -1047,8 +1057,8 @@ def operation_id(operation):
 def make_spec():
     spec = {
         "openapi": "3.0.3",
-        "info": {"title": "两性健康服务平台 API", "version": "1.6.0",
-                 "description": "已实现认证、用户资料与后台用户管理、实物交易、科普与课程、专栏、会员方案购买与期限管理、统一 OSS 上传与私有售后凭证、B 站／飞书视频授权。当前测试服务器已配置杭州区域的 chunai-photo、chunai-private 与 ECS RAM 角色 chunai-oss；公开图片桶已允许对象公开访问，私有桶仍阻止公共访问。配置缺失或存储不可用时返回 503。x-implementation-status 表示仓库实现状态；线上以部署版本为准。支付退款使用 TEST 模式；短信、真实支付、AI、通知和第三方物流暂未接入。"},
+        "info": {"title": "两性健康服务平台 API", "version": "1.7.0",
+                 "description": "已实现认证、用户资料与后台用户管理、实物交易、购物车与内容收藏、科普与课程、专栏、会员方案购买与期限管理、统一 OSS 上传与私有售后凭证、B 站／飞书视频授权。当前测试服务器已配置杭州区域的 chunai-photo、chunai-private 与 ECS RAM 角色 chunai-oss；公开图片桶已允许对象公开访问，私有桶仍阻止公共访问。配置缺失或存储不可用时返回 503。x-implementation-status 表示仓库实现状态；线上以部署版本为准。支付退款使用 TEST 模式；短信、真实支付、AI、通知和第三方物流暂未接入。"},
         "servers": [{"url": "http://localhost:3000/api/v1", "description": "本地开发（示例）"},
                     {"url": "http://47.97.46.242/api/v1", "description": "staging 测试服务；可用接口以部署版本为准，协议版本以接口返回值为准"},
                     {"url": "https://api.example.com/api/v1", "description": "生产域名占位，必须替换"}],
@@ -1158,9 +1168,9 @@ def schema_link(name):
 
 
 def build_api_markdown():
-    lines = ["# 接口文档", "", "> 更新：2026-10-26。已实现认证、用户资料与后台用户管理、实物交易、科普／课程／专栏、会员方案购买、统一 OSS 上传与私有凭证及 B 站／飞书访问；线上以部署版本为准。当前测试服务器已配置杭州区域的 chunai-photo、chunai-private 与 ECS RAM 角色 chunai-oss；公开图片桶已允许对象公开访问，私有桶仍阻止公共访问，最新状态见统一上传说明。支付退款使用测试模式，短信及第三方收付款暂缓。",
+    lines = ["# 接口文档", "", "> 更新：2026-10-27。已实现认证、用户资料与后台用户管理、实物交易、购物车与内容收藏、科普／课程／专栏、会员方案购买、统一 OSS 上传与私有凭证及 B 站／飞书访问；线上以部署版本为准。当前测试服务器已配置杭州区域的 chunai-photo、chunai-private 与 ECS RAM 角色 chunai-oss；公开图片桶已允许对象公开访问，私有桶仍阻止公共访问，最新状态见统一上传说明。支付退款使用测试模式，短信及第三方收付款暂缓。",
              "", "已实现接口的运行方法见 [后端启动与数据库](04-backend-auth.md)。",
-             "", "测试 API：`http://47.97.46.242/api/v1`。详见 [交易模块](06-commerce.md)、[科普与课程](08-content-courses.md)、[会员购买与用户管理](09-membership-users.md)、[统一上传](10-unified-uploads.md) 及 [部署说明](05-deployment.md)。",
+             "", "测试 API：`http://47.97.46.242/api/v1`。详见 [交易模块](06-commerce.md)、[科普与课程](08-content-courses.md)、[会员购买与用户管理](09-membership-users.md)、[统一上传](10-unified-uploads.md)、[购物车与收藏](11-cart-favorites.md) 及 [部署说明](05-deployment.md)。",
              "注册示例采用本地默认协议版本 `2026-10-01`；公网测试环境当前为 `2026-10-23-test`，提交前须读取当前环境的协议接口。",
              "", "所有下列 URL 统一加前缀 `/api/v1`。请求默认 `application/json`；返回默认使用统一响应结构，表中的响应类型指 `data`。",
              "请求及响应对象的全部字段见 [数据格式文档](02-data-models.md)，状态与联调步骤见 [业务流程文档](03-business-flows.md)。",

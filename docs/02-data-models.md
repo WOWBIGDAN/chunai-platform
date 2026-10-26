@@ -232,6 +232,17 @@
 - [PageMembershipPeriod](#pagemembershipperiod)
 - [UploadImageCreate](#uploadimagecreate)
 - [UploadVideoCreate](#uploadvideocreate)
+- [CartProduct](#cartproduct)
+- [CartItem](#cartitem)
+- [CartItemPut](#cartitemput)
+- [CartQuoteLine](#cartquoteline)
+- [CartQuoteCreate](#cartquotecreate)
+- [FavoriteContent](#favoritecontent)
+- [ContentFavorite](#contentfavorite)
+- [NullableContentFavorite](#nullablecontentfavorite)
+- [FavoriteState](#favoritestate)
+- [PageCartItem](#pagecartitem)
+- [PageContentFavorite](#pagecontentfavorite)
 - [ContentCategory](#contentcategory)
 - [ProductCategory](#productcategory)
 - [CourseSummary](#coursesummary)
@@ -5985,6 +5996,356 @@ MembershipPeriod 的分页结果。固定按白名单排序；同值用 id 排�
   "fileName": "cs-video.mp4",
   "mimeType": "video/mp4",
   "sizeBytes": 102400
+}
+```
+
+
+<a id="cartproduct"></a>
+## CartProduct
+
+当前公开商品信息；下架或分类停用后为 null。不保存旧价格快照。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `name` | string | 是 | 商品名称。 |  |
+| `coverUrl` | string / null | 是 | HTTPS URL。 | 格式: `uri` |
+| `skuAttributes` | [SkuAttribute[]](#skuattribute) | 是 | 当前规格。 |  |
+| `unitPriceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `0`；最大: `9007199254740991` |
+| `subtotalCents` | integer | 是 | 当前单价 × 保存数量，仅供展示，不是订单报价。 | 最小: `0` |
+| `currency` | string | 是 | 币种。 | 枚举: `CNY` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "name": "cs商品",
+  "coverUrl": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/cs.png",
+  "skuAttributes": [
+    {
+      "name": "规格",
+      "value": "标准"
+    }
+  ],
+  "unitPriceCents": 1200,
+  "subtotalCents": 2400,
+  "currency": "CNY"
+}
+```
+
+
+<a id="cartitem"></a>
+## CartItem
+
+本人购物车的一种 SKU；数量不占库存；可购买状态在每次读取时重新计算。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `id` | string | 是 | UUID v4。 | 格式: `uuid` |
+| `skuId` | string | 是 | UUID v4。 | 格式: `uuid` |
+| `productId` | string | 是 | UUID v4。 | 格式: `uuid` |
+| `quantity` | integer | 是 | 保存的期望数量，库存减少时不自动改写。 | 最小: `1`；最大: `999` |
+| `selected` | boolean | 是 | 是否勾选；失效后保留选择意图，仍不可结算。 |  |
+| `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1` |
+| `createdAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
+| `updatedAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
+| `availability` | string | 是 | 按商品、分类、SKU、可售库存、保存数量依次判定。 | 枚举: `AVAILABLE, PRODUCT_UNAVAILABLE, CATEGORY_UNAVAILABLE, SKU_DISABLED, OUT_OF_STOCK, STOCK_INSUFFICIENT` |
+| `canPurchase` | boolean | 是 | 仅 availability=AVAILABLE 为 true；不取决于 selected。 |  |
+| `availableStock` | integer | 是 | 实物库存减去订单预占；购物车本身不预占。 | 最小: `0` |
+| `maxQuantity` | integer | 是 | min(999, availableStock)；仍需同时判断 canPurchase／availability。 | 最小: `0`；最大: `999` |
+| `product` | [CartProduct](#cartproduct) | 是 | 见关联对象。 |  |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "id": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+  "skuId": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+  "productId": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+  "quantity": 2,
+  "selected": true,
+  "version": 1,
+  "createdAt": "2026-10-22T02:00:00Z",
+  "updatedAt": "2026-10-22T02:00:00Z",
+  "availability": "AVAILABLE",
+  "canPurchase": true,
+  "availableStock": 5,
+  "maxQuantity": 5,
+  "product": {
+    "name": "cs商品",
+    "coverUrl": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/cs.png",
+    "skuAttributes": [
+      {
+        "name": "规格",
+        "value": "标准"
+      }
+    ],
+    "unitPriceCents": 1200,
+    "subtotalCents": 2400,
+    "currency": "CNY"
+  }
+}
+```
+
+
+<a id="cartitemput"></a>
+## CartItemPut
+
+按 SKU 设置绝对数量，不累加。首次 version=0；已有条目使用最新 version。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `quantity` | integer | 是 | 整数 1–999；不能用 0 删除。 | 最小: `1`；最大: `999` |
+| `version` | integer | 是 | 首次为 0；旧版本返回 VERSION_CONFLICT。 | 最小: `0`；最大: `2147483647` |
+| `selected` | boolean | 否 | 可省略：新建默认 true；更新保留原值。 |  |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "quantity": 2,
+  "version": 0
+}
+```
+
+
+<a id="cartquoteline"></a>
+## CartQuoteLine
+
+本次明确选择的购物车 SKU 与当前购物车条目版本。数量从数据库取。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `skuId` | string | 是 | UUID v4。 | 格式: `uuid` |
+| `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "skuId": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+  "version": 1
+}
+```
+
+
+<a id="cartquotecreate"></a>
+## CartQuoteCreate
+
+购物车结算试算；不接受客户端金额、数量或用户 ID。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `addressId` | string | 是 | UUID v4。 | 格式: `uuid` |
+| `items` | [CartQuoteLine[]](#cartquoteline) | 是 | 1–50 个不重复的本人已勾选 SKU；任一不可购买则整个试算失败。 | 最少项: `1`；最多项: `50`；元素不重复 |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "addressId": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+  "items": [
+    {
+      "skuId": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+      "version": 1
+    }
+  ]
+}
+```
+
+
+<a id="favoritecontent"></a>
+## FavoriteContent
+
+有效收藏返回当前公开摘要；下架或分类停用为 null，不返回旧标题、封面、正文或视频链接。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `id` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+| `kind` | string | 是 | 内容类型；课程由章节组成。 | 枚举: `SCIENCE_VIDEO, SCIENCE_ARTICLE, VIDEO_COURSE, ARTICLE_COURSE` |
+| `title` | string | 是 | 标题。 | 最短: `1`；最长: `120` |
+| `summary` | string | 是 | 简介。 | 最长: `2000` |
+| `cover` | [MediaSummary](#mediasummary) | 是 | 见关联对象。 |  |
+| `category` | [Category](#category) | 是 | 见关联对象。 |  |
+| `tags` | string[] | 是 | 标签 | 最多项: `10` |
+| `accessPolicy` | string | 是 | FREE 免费、PURCHASE 独立购买、MEMBER 按网站会员有效期；MEMBER 仅课程且 priceCents=0。 | 枚举: `FREE, PURCHASE, MEMBER` |
+| `priceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `0`；最大: `9007199254740991` |
+| `currency` | string | 是 | 币种。 | 枚举: `CNY` |
+| `chapterCount` | integer | 是 | 科普为 0；课程为已发布章节数。 | 最小: `0` |
+| `publishedAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+null
+```
+
+
+<a id="contentfavorite"></a>
+## ContentFavorite
+
+收藏关系不等于访问权益。失效项保留供取消或重新上架后恢复。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `id` | string | 是 | UUID v4。 | 格式: `uuid` |
+| `contentId` | string | 是 | UUID v4。 | 格式: `uuid` |
+| `createdAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
+| `valid` | boolean | 是 | 当前内容是否上架且所属分类启用。 |  |
+| `invalidReason` | string / null | 是 | 有效时 null；下架优先于分类停用。 | 枚举: `None, CONTENT_UNAVAILABLE, CATEGORY_UNAVAILABLE` |
+| `content` | [FavoriteContent](#favoritecontent) | 是 | 见关联对象。 |  |
+| `access` | [AccessDecision](#accessdecision) | 是 | 见关联对象。 |  |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "id": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+  "contentId": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+  "createdAt": "2026-10-27T00:00:00Z",
+  "valid": false,
+  "invalidReason": "CONTENT_UNAVAILABLE",
+  "content": null,
+  "access": {
+    "canAccess": false,
+    "reason": "CONTENT_UNAVAILABLE"
+  }
+}
+```
+
+
+<a id="nullablecontentfavorite"></a>
+## NullableContentFavorite
+
+未收藏时为 null；收藏后包含当前有效性与访问判定。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `id` | string | 是 | UUID v4。 | 格式: `uuid` |
+| `contentId` | string | 是 | UUID v4。 | 格式: `uuid` |
+| `createdAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
+| `valid` | boolean | 是 | 当前内容是否上架且所属分类启用。 |  |
+| `invalidReason` | string / null | 是 | 有效时 null；下架优先于分类停用。 | 枚举: `None, CONTENT_UNAVAILABLE, CATEGORY_UNAVAILABLE` |
+| `content` | [FavoriteContent](#favoritecontent) | 是 | 见关联对象。 |  |
+| `access` | [AccessDecision](#accessdecision) | 是 | 见关联对象。 |  |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+null
+```
+
+
+<a id="favoritestate"></a>
+## FavoriteState
+
+查询本人是否已收藏，包含失效收藏；未知 UUID 返回未收藏，不暴露其他用户记录。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `contentId` | string | 是 | UUID v4。 | 格式: `uuid` |
+| `favorited` | boolean | 是 | 本人是否保存此收藏关系。 |  |
+| `favorite` | [NullableContentFavorite](#nullablecontentfavorite) | 是 | 见关联对象。 |  |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "contentId": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+  "favorited": false,
+  "favorite": null
+}
+```
+
+
+<a id="pagecartitem"></a>
+## PageCartItem
+
+CartItem 的分页结果。固定按白名单排序；同值用 id 排序。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `items` | [CartItem[]](#cartitem) | 是 | 当前页数据；空页为 [] |  |
+| `total` | integer | 是 | 匹配记录总数 | 最小: `0` |
+| `page` | integer | 是 | 页码，从 1 开始 | 最小: `1` |
+| `pageSize` | integer | 是 | 每页条数 | 最小: `1`；最大: `100` |
+| `hasNext` | boolean | 是 | 是否有下一页 |  |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "items": [
+    {
+      "id": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+      "skuId": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+      "productId": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+      "quantity": 2,
+      "selected": true,
+      "version": 1,
+      "createdAt": "2026-10-22T02:00:00Z",
+      "updatedAt": "2026-10-22T02:00:00Z",
+      "availability": "AVAILABLE",
+      "canPurchase": true,
+      "availableStock": 5,
+      "maxQuantity": 5,
+      "product": {
+        "name": "cs商品",
+        "coverUrl": "https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/cs.png",
+        "skuAttributes": [
+          {
+            "name": "规格",
+            "value": "标准"
+          }
+        ],
+        "unitPriceCents": 1200,
+        "subtotalCents": 2400,
+        "currency": "CNY"
+      }
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "pageSize": 20,
+  "hasNext": false
+}
+```
+
+
+<a id="pagecontentfavorite"></a>
+## PageContentFavorite
+
+ContentFavorite 的分页结果。固定按白名单排序；同值用 id 排序。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `items` | [ContentFavorite[]](#contentfavorite) | 是 | 当前页数据；空页为 [] |  |
+| `total` | integer | 是 | 匹配记录总数 | 最小: `0` |
+| `page` | integer | 是 | 页码，从 1 开始 | 最小: `1` |
+| `pageSize` | integer | 是 | 每页条数 | 最小: `1`；最大: `100` |
+| `hasNext` | boolean | 是 | 是否有下一页 |  |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "items": [
+    {
+      "id": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+      "contentId": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+      "createdAt": "2026-10-27T00:00:00Z",
+      "valid": false,
+      "invalidReason": "CONTENT_UNAVAILABLE",
+      "content": null,
+      "access": {
+        "canAccess": false,
+        "reason": "CONTENT_UNAVAILABLE"
+      }
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "pageSize": 20,
+  "hasNext": false
 }
 ```
 

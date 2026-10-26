@@ -1,0 +1,57 @@
+@base = http://47.97.46.242/api/v1
+@token = replace-with-user-token
+@skuId = replace-with-published-sku-uuid
+@contentId = replace-with-published-content-uuid
+@addressId = replace-with-own-address-uuid
+@cartVersion = 1
+@quoteId = replace-with-cart-quote-uuid
+
+### 首次加入；已有条目使用最新 version；quantity 为绝对数量
+PUT {{base}}/me/cart/items/{{skuId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"quantity":2,"selected":true,"version":0}
+
+### 获取实际库存、可购买状态和最新版本
+GET {{base}}/me/cart?page=1&pageSize=20
+Authorization: Bearer {{token}}
+
+### 服务端从本人购物车取数量并重新试算
+POST {{base}}/me/cart/quote
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"addressId":"{{addressId}}","items":[{"skuId":"{{skuId}}","version":{{cartVersion}}}]}
+
+### 创建订单；每次新业务使用新幂等键，网络重试沿用原键
+POST {{base}}/orders
+Authorization: Bearer {{token}}
+Idempotency-Key: replace-with-unique-key-123456
+Content-Type: application/json
+
+{"quoteId":"{{quoteId}}"}
+
+### 删除剩余条目；须使用最新版本
+DELETE {{base}}/me/cart/items/{{skuId}}?version={{cartVersion}}
+Authorization: Bearer {{token}}
+
+### 收藏整条图文／视频／整门课程
+PUT {{base}}/me/favorites/{{contentId}}
+Authorization: Bearer {{token}}
+
+### 查询本人收藏状态
+GET {{base}}/me/favorites/{{contentId}}
+Authorization: Bearer {{token}}
+
+### 默认包含有效和失效项
+GET {{base}}/me/favorites?page=1&pageSize=20
+Authorization: Bearer {{token}}
+
+### 只看有效科普视频；课程分别用 VIDEO_COURSE／ARTICLE_COURSE
+GET {{base}}/me/favorites?kind=SCIENCE_VIDEO&status=VALID
+Authorization: Bearer {{token}}
+
+### 取消收藏，失效内容也可取消
+DELETE {{base}}/me/favorites/{{contentId}}
+Authorization: Bearer {{token}}

@@ -93,8 +93,17 @@ export interface ItemSnapshot {
   subtotalCents: number; refundedQuantity: number; refundedAmountCents: number;
   membershipSnapshot?: { planId: string; name: string; durationDays: number; priceCents: number; benefitCodes: string[] };
 }
+@Entity('cart_items')
+export class CartItem extends Versioned {
+  @Column({ name: 'user_id', type: 'varchar', length: 36 }) userId!: string;
+  @Column({ name: 'sku_id', type: 'varchar', length: 36 }) skuId!: string;
+  @Column({ type: 'int', unsigned: true }) quantity!: number;
+  @Column({ type: 'boolean', default: true }) selected!: boolean;
+}
+export interface CartSnapshot { id: string; skuId: string; quantity: number; version: number }
 @Entity('order_quotes')
 export class Quote extends RecordBase {
+  @Column({ name: 'cart_items', type: 'json', nullable: true }) cartItems!: CartSnapshot[] | null;
   @Column({ type: 'varchar', length: 16, default: 'PRODUCT' }) type!: 'PRODUCT' | 'COURSE' | 'MEMBERSHIP';
   @Column({ name: 'user_id', type: 'varchar', length: 36 }) userId!: string;
   @Column({ type: 'json', nullable: true }) address!: AddressSnapshot | null;
@@ -224,5 +233,5 @@ export class AuditLog extends RecordBase {
   @Column({ type: 'json' }) details!: Record<string, unknown>;
 }
 export const commerceEntities = [AdminAccount, AdminSession, AdminRefreshToken, Category, ProductImage,
-  Product, Sku, StockMovement, Address, Quote, Order, OrderItem, Shipment, LogisticsEvent,
+  Product, Sku, StockMovement, Address, CartItem, Quote, Order, OrderItem, Shipment, LogisticsEvent,
   AfterSale, AfterSaleItem, PaymentRecord, Refund, IdempotencyRecord, AuditLog];
