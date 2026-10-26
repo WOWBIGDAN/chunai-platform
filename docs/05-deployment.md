@@ -2,7 +2,7 @@
 
 目标仓库：`WOWBIGDAN/chunai-platform`，分支 `main`。服务器 `47.97.46.242`，Ubuntu 24.04，Node.js 22、MySQL 8.0、Nginx、systemd。此次按测试服务部署，使用公网 IP 访问。
 
-更新时间：2026-10-25。
+更新时间：2026-10-26。
 
 实物交易、科普、课程购买访问与专栏使用同一 CI/CD。外链视频和有效期会员的配置、调用说明见 [内容模块](08-content-courses.md)。部署使用增量迁移，保留已有用户、产品与订单。视频目录使用 `/var/lib/chunai/content-media`，需安装当前 Nginx、systemd 模板并配置 `PUBLIC_API_URL`。新外链视频需要独立的 `CONTENT_MEDIA_ENCRYPTION_KEY`，必须先在服务器配置后再发布；数据库、私有视频及密钥须一起备份。以下首次部署记录保留为历史事实。
 
@@ -18,6 +18,7 @@
 | 自动部署账号 | `chunai-deploy`，使用专用 SSH 密钥 |
 | 管理入口 | `ssh root@47.97.46.242`，SSH 端口 22 |
 | 数据库 | `chunai_platform`，应用账号 `chunai`，仅通过本机 3306 连接 |
+| OSS | 杭州 `cn-hangzhou`；公开图片 Bucket `chunai-photo`，私有 Bucket `chunai-private`，ECS RAM 角色 `chunai-oss`；全局与公开图片桶关闭“阻止公共访问”，私有桶保持开启 |
 | 当前协议版本 | TERMS、PRIVACY 均为 `2026-10-23-test`，后续以协议接口为准 |
 
 首次成功部署提交：[6745b62bcbc96d6d8369539d0ee8abf73e1d1637](https://github.com/WOWBIGDAN/chunai-platform/commit/6745b62bcbc96d6d8369539d0ee8abf73e1d1637)。[对应 GitHub Actions](https://github.com/WOWBIGDAN/chunai-platform/actions/runs/39931044243) 已完成测试、构建、契约校验、数据库迁移、自动发布和公网健康检查。公网注册、资料读取、密码登录、刷新、退出与令牌失效验证已通过，验证用临时账号及其会话已删除。
@@ -97,12 +98,21 @@ curl --fail http://127.0.0.1:3000/api/v1/health
 | DB_HOST / DB_PORT / DB_NAME | 127.0.0.1 / 3306 / chunai_platform |
 | DB_PASSWORD / JWT_SECRET | 保存在服务器文件中；修改数据库口令时需同步修改 MySQL 账号 |
 | CONTENT_IMAGE_OSS_HOST | chunai-photo.oss-cn-hangzhou.aliyuncs.com；新内容／专栏封面须为该主机下已存在的公开 HTTPS 对象 |
+| UPLOAD_OSS_REGION | cn-hangzhou |
+| UPLOAD_OSS_PUBLIC_BUCKET / UPLOAD_OSS_PRIVATE_BUCKET | chunai-photo / chunai-private；两桶 ACL 为 private，版本控制均未开启 |
+| UPLOAD_OSS_RAM_ROLE | chunai-oss；通过已绑定的 ECS RAM 角色获取临时凭证，不混用 AccessKey／STS 环境变量 |
 | CONTENT_MEDIA_ENCRYPTION_KEY | 32 字节随机密钥的标准 base64；仅存服务器环境文件，用于外链及飞书密码加密，必须备份，不能直接换值 |
 | CONTENT_MEDIA_DIR / PUBLIC_API_URL | /var/lib/chunai/content-media 与 http://47.97.46.242/api/v1；保留本地视频及短时播放授权 |
 | TERMS_VERSION / PRIVACY_VERSION | 当前均为 2026-10-23-test；更新协议时同时更新内容和版本 |
 | TERMS_HTML / PRIVACY_HTML / LEGAL_UPDATED_AT | 协议正文和更新时间，更新时间使用 UTC ISO 8601 |
 
 `/etc/chunai/api.env` 权限为 600、所有者 root，systemd 读取后传给应用。GitHub 发布不会覆盖该文件。服务器使用原生 MySQL 服务；仓库根目录的 Compose 配置用于本地开发。
+
+私有 Bucket 已配置 `uploads/staging/` 一天过期的生命周期规则，CORS 允许 `http://47.97.46.242`、`http://localhost:5173` 的 `POST` 和 `Content-Type` 请求头。新增前端来源时同步维护 OSS CORS 与 API 的 `CORS_ORIGINS`。配置与完整联调步骤见 [统一上传说明](10-unified-uploads.md)；可按 [RAM 权限模板](../deploy/oss-ram-policy.example.json) 收窄角色权限。
+
+发布公开图片还要求 OSS 全局与 `chunai-photo` 关闭“阻止公共访问”，以允许最终图片对象的 `public-read` ACL；当前已按此配置，`chunai-private` 保持开启。两桶 ACL 仍为 `private`，具体规则见[阿里云官方说明](https://help.aliyun.com/zh/oss/user-guide/block-public-access)。
+
+2026-10-26 已通过 38 项真实 API 检查，覆盖公开头像／封面、私有售后凭证和 MP4 的 OSS 直传、完成确认、读取隔离、头像引用保护、退出撤权及会员视频 Range／撤权；本次测试用户、素材和课程分类已清理，详见 [真实 OSS 联调记录](10-unified-uploads.md#oss-配置与启用)。
 
 修改 [发布程序](../deploy/chunai-release)、[systemd 模板](../deploy/chunai-api.service) 或 [Nginx 模板](../deploy/nginx.conf) 后，还需要管理员将对应文件安装到上表中的服务器路径。systemd 单元更新后执行 `systemctl daemon-reload` 并重启应用；Nginx 更新后先执行 `nginx -t`，通过后再 `systemctl reload nginx`。
 
@@ -149,7 +159,7 @@ mysqldump --protocol=socket -uroot --single-transaction --no-tablespaces \
 gzip --test "$backup_file"
 ```
 
-将验证通过的备份复制到服务器外部；仓库当前没有配置定时备份任务。恢复备份前，应核对目标库和备份时间，并先备份当前数据，因为 SQL 导入可能替换同名表。全部迁移执行后数据库有 34 张业务表（认证、交易、内容、会员及统一上传）和 schema_migrations。另行备份 `/var/lib/chunai/content-media` 与受保护的 `/etc/chunai/api.env`；丢失媒体加密密钥将无法解密数据库中的外链和密码。密钥备份按秘密保管，不能提交 Git。统一上传启用后还需备份 OSS 正式对象，不能仅备份数据库；配置要求见 [统一上传](10-unified-uploads.md)。
+将验证通过的备份复制到服务器外部；仓库当前没有配置定时备份任务。恢复备份前，应核对目标库和备份时间，并先备份当前数据，因为 SQL 导入可能替换同名表。全部迁移执行后数据库有 34 张业务表（认证、交易、内容、会员及统一上传）和 schema_migrations。另行备份 `/var/lib/chunai/content-media` 与受保护的 `/etc/chunai/api.env`；丢失媒体加密密钥将无法解密数据库中的外链和密码。密钥备份按秘密保管，不能提交 Git。统一上传的 OSS 正式对象也需备份，不能仅备份数据库；配置要求见 [统一上传](10-unified-uploads.md)。
 
 ## 常见联调与部署问题
 
@@ -163,7 +173,8 @@ gzip --test "$backup_file"
 | 健康接口返回 500 | 检查 MySQL 服务、应用数据库连接和迁移日志 |
 | 旧令牌返回 401 | 退出、改密或刷新令牌重放后重新登录；刷新请求须单飞并保存新令牌 |
 | Actions 上传或登录失败 | 检查部署账号的 authorized_keys、SSH 22 端口、四项 Secrets 和服务器主机公钥是否匹配 |
-| 统一上传返回 503 STORAGE_UNAVAILABLE | 检查 OSS 凭证／ECS RAM 角色、独立私有 Bucket、区域、Bucket ACL／Policy／版本控制及 RAM 授权；当前服务器尚待配置，变量模板见 `.env.example`，完整步骤见 [统一上传配置](10-unified-uploads.md#oss-配置与启用) |
+| 统一上传返回 503 STORAGE_UNAVAILABLE | 检查 ECS RAM 角色临时凭证、两桶区域、Bucket ACL／Policy／版本控制及 RAM 授权；当前使用杭州区域的 chunai-photo、chunai-private 与角色 chunai-oss，变量模板见 `.env.example`，完整步骤见 [统一上传配置](10-unified-uploads.md#oss-配置与启用) |
+| OSS POST 成功但公开图片完成确认失败，OSS 返回 403／EC 0016-00000901 | 检查 OSS 全局与 chunai-photo 的“阻止公共访问”是否均已关闭；私有桶保持开启，公开图片需要服务端设置对象 public-read ACL |
 
 部署私钥轮换时，更新 `chunai-deploy` 的 authorized_keys 和 GitHub 的 DEPLOY_SSH_KEY；服务器主机密钥变化时，核实新指纹后更新 DEPLOY_KNOWN_HOSTS。
 

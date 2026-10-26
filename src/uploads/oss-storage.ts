@@ -18,13 +18,14 @@ export interface PromoteObjectInput {
   sourceKey: string; targetKey: string; etag: string; contentType: string; visibility: ObjectVisibility;
 }
 interface CredentialValues { accessKeyId: string; accessKeySecret: string; securityToken?: string }
-interface OssResponse { res: { status: number; headers: Record<string, string | number | undefined> } }
+interface OssResponse { res: { status: number; headers: Record<string, string | number | undefined>; data?: Buffer | string } }
 // Keep the adapter independent of the SDK's occasionally lagging declaration package.
 interface OssClient {
   signPostObjectPolicyV4(policy: object, date: Date): string;
   getBucketACL(bucket: string): Promise<{ acl: string }>;
   getBucketVersioning(bucket: string): Promise<{ versionStatus?: string }>;
-  getBucketPolicy(bucket: string): Promise<{ policy: unknown }>;
+  getBucketPolicy(bucket: string): Promise<OssResponse & { policy: unknown }>;
+  requestError(response: OssResponse['res']): Promise<{ code?: unknown; status?: unknown }>;
   head(key: string): Promise<OssResponse>;
   getStream(key: string, options?: object): Promise<OssResponse & { stream: Readable }>;
   copy(key: string, source: string, bucket: string, options: object): Promise<OssResponse & { data: { etag: string } }>;
@@ -184,10 +185,20 @@ export class OssStorage {
   private async checkBuckets(context: Awaited<ReturnType<OssStorage['context']>>): Promise<void> {
     try {
       const { config, privateClient, publicClient } = context;
-      const getPolicy = (client: OssClient, bucket: string) => client.getBucketPolicy(bucket).catch((error: unknown) => {
-        if ((error as { code?: string } | null)?.code === 'NoSuchBucketPolicy') return { policy: null };
-        throw error;
-      });
+      const getPolicy = async (client: OssClient, bucket: string) => {
+        try {
+          const result = await client.getBucketPolicy(bucket);
+          if (result.res?.status === 200) return { policy: result.policy };
+          // ali-oss 6.23 may return unsuccessful policy responses instead of throwing.
+          // A 404 proves absence only when its OSS error code names the missing policy.
+          if (result.res?.status === 404) throw await client.requestError(result.res);
+          throw unavailable();
+        } catch (error: unknown) {
+          const info = error as { code?: unknown; status?: unknown } | null;
+          if (info?.code === 'NoSuchBucketPolicy' && info.status === 404) return { policy: null };
+          throw error;
+        }
+      };
       const [acl, privateVersion, publicVersion, policy, publicAcl, publicPolicy] = await Promise.all([
         privateClient.getBucketACL(config.privateBucket),
         privateClient.getBucketVersioning(config.privateBucket),

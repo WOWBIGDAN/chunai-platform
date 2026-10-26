@@ -2,7 +2,9 @@
 
 更新：2026-10-26，接口契约版本 `1.6.0`。后端提供 OSS 表单直传、完成校验、素材查询与删除，以及私有售后凭证授权读取。头像、产品、内容、专栏和售后继续引用媒体 ID；课程视频仍通过既有购买／会员权限控制播放。
 
-**当前服务器尚未配置 OSS 凭证、ECS RAM 角色或私有 Bucket。** 统一上传代码与对象存储配置是两项条件：配置齐全后才能签发真实上传表单；配置缺失或存储不可用返回 `503 STORAGE_UNAVAILABLE`。现有公开图片地址登记、B 站／飞书外链和本地视频不依赖本次 OSS 上传配置，仍可使用。
+当前测试服务器已配置杭州区域（`cn-hangzhou`）的公开图片 Bucket `chunai-photo`、私有 Bucket `chunai-private`，通过 ECS RAM 角色 `chunai-oss` 获取临时凭证。两桶 ACL 均为 `private`，版本控制均未开启；最终公开图片由服务端单独设置对象 ACL。配置缺失或存储不可用仍返回 `503 STORAGE_UNAVAILABLE`。
+
+OSS 全局与 `chunai-photo` 的“阻止公共访问”已关闭，`chunai-private` 保持开启。统一上传已于 2026-10-26 通过真实 OSS 联调，公开图片、私有售后凭证及私有 MP4 均可使用。
 
 接口前缀为 `/api/v1`。完整字段见 [数据格式](02-data-models.md)，可导入 [已实现 OpenAPI](openapi-implemented.json)，操作示例见 [uploads.http](../examples/uploads.http)。
 
@@ -79,7 +81,7 @@ if (!upload.ok) throw new Error('OSS 上传失败');
 
 删除先变更数据库状态并返回 `{"success":true}`，重复删除同样成功。后台等待上传票据到期并再过 60 秒后清理 OSS 对象，避免旧表单仍有效时重建已删对象。临时上传过期后转 FAILED，校验失败对象也会清理；外部存储失败保留清理状态以便重试。READY 且尚未绑定的素材保留，需显式 DELETE。应用只处理本系统生成的上传前缀，不批量清理已有 OSS 业务文件。不要为 `uploads/private/` 或 `uploads/public/` 设置会主动删除仍在使用素材的生命周期规则。
 
-还需在**私有 Bucket** 配置一条生命周期规则：前缀 `uploads/staging/`，按最后修改时间设置一天过期。OSS 按日执行规则，并非满 24 小时立即删除，详见[官方生命周期说明](https://www.alibabacloud.com/help/en/oss/user-guide/lifecycle-rules-based-on-the-last-modified-time)。表单在到期前开始的慢上传可能在后台清理后才结束，60 秒宽限无法覆盖所有迟到对象；OSS 生命周期负责清理这些暂存文件。规则只用于暂存前缀，不能扩展至正式文件目录。
+**私有 Bucket** 必须配置一条生命周期规则：前缀 `uploads/staging/`，按最后修改时间设置一天过期；当前 `chunai-private` 已配置此规则。OSS 按日执行规则，并非满 24 小时立即删除，详见[官方生命周期说明](https://www.alibabacloud.com/help/en/oss/user-guide/lifecycle-rules-based-on-the-last-modified-time)。表单在到期前开始的慢上传可能在后台清理后才结束，60 秒宽限无法覆盖所有迟到对象；OSS 生命周期负责清理这些暂存文件。规则只用于暂存前缀，不能扩展至正式文件目录。
 
 ## OSS 配置与启用
 
@@ -88,11 +90,11 @@ if (!upload.ok) throw new Error('OSS 上传失败');
 ```dotenv
 UPLOAD_OSS_REGION=cn-hangzhou
 UPLOAD_OSS_PUBLIC_BUCKET=chunai-photo
-UPLOAD_OSS_PRIVATE_BUCKET=<另建的私有Bucket名称>
+UPLOAD_OSS_PRIVATE_BUCKET=chunai-private
 CONTENT_IMAGE_OSS_HOST=chunai-photo.oss-cn-hangzhou.aliyuncs.com
 
 # 二选一：使用服务器已绑定的 ECS RAM 角色。
-UPLOAD_OSS_RAM_ROLE=<角色名称>
+UPLOAD_OSS_RAM_ROLE=chunai-oss
 
 # 或使用受限 RAM 账号/STS 凭证；此时不要设置 RAM_ROLE。
 # UPLOAD_OSS_ACCESS_KEY_ID=<在受保护环境文件中配置>
@@ -104,7 +106,9 @@ UPLOAD_OSS_RAM_ROLE=<角色名称>
 
 当前适配器要求两个 Bucket 的版本控制均未开启（`Enabled` 与 `Suspended` 均拒绝），防止删除当前对象后遗留历史私有版本。私有 Bucket ACL 必须为 `private`，不得通过 Bucket Policy 向匿名用户授权。公开 Bucket 可为 `private` 或 `public-read`，最终公开对象由服务端设置为可读；禁止 `public-read-write` 和匿名写权限。
 
-RAM 权限限制到以下 Bucket 与对象前缀，不需要整个账户的 OSS 管理员权限：
+公开图片使用对象级 `public-read` ACL，因此 **OSS 全局与公开图片 Bucket 的“阻止公共访问”（Block Public Access）均须关闭**；私有 Bucket 保持开启，并继续使用私有 ACL。仅保持公开 Bucket ACL 为 `private` 不足以保证公开图片可以发布：Block Public Access 开启时会阻止新建公共访问权限，并忽略已有公共权限，见[阿里云官方说明](https://help.aliyun.com/zh/oss/user-guide/block-public-access)。如果申请和直传已成功、完成确认却被 OSS 以 `403`、`EC 0016-00000901` 拒绝，应先检查公开 Bucket 及 OSS 全局的这一设置。
+
+应用所需的 RAM 权限可限制到以下 Bucket 与对象前缀：
 
 | 资源 | 权限用途 |
 |---|---|
@@ -113,9 +117,13 @@ RAM 权限限制到以下 Bucket 与对象前缀，不需要整个账户的 OSS 
 | 私有 Bucket 的 `uploads/private/*` | 同上，用于复制发布、私有流读取和删除 |
 | 公开 Bucket 的 `uploads/public/*` | 同上，用于复制发布、校验及删除 |
 
-跨 Bucket Copy 需要源对象 `GetObject` 和目标对象 `PutObject` 权限。应用不需要列出全部对象的权限。为私有 Bucket 配置浏览器跨域：允许实际前端来源、`POST` 方法及所需请求头；避免把 OSS CORS 与 API 的 `CORS_ORIGINS` 混为一项。读取公开图片若用于 Canvas，也需按前端需求配置公开 Bucket CORS。
+可按 [RAM 最小权限模板](../deploy/oss-ram-policy.example.json) 收窄角色权限。模板只允许两个指定 Bucket 的配置读取，以及上述三个对象前缀的上传、读取、删除和对象 ACL 操作，不包含 Bucket 管理或列举全部对象权限。更换 Bucket 时同步修改模板资源；策略格式见[阿里云 RAM 权限说明](https://www.alibabacloud.com/help/en/oss/user-guide/ram-policy/)。
 
-配置后重启 `chunai-api`，使用一个 `cs` 测试头像实际完成「申请 → OSS POST → 确认 → 绑定 → 解绑 → 删除」，并用售后凭证检查匿名读取被拒绝、其他用户无法读取、管理员须先获得售后关联。普通健康检查只验证应用及数据库，不代表 OSS 配置已生效。真实 OSS 联调需完成这些配置后执行；自动测试使用存储替身结合真实 MySQL 验证业务和权限。
+跨 Bucket Copy 需要源对象 `GetObject` 和目标对象 `PutObject` 权限，见[官方 CopyObject 权限说明](https://www.alibabacloud.com/help/en/oss/developer-reference/copyobject)。为私有 Bucket 配置浏览器跨域：允许实际前端来源、`POST` 方法及所需请求头；避免把 OSS CORS 与 API 的 `CORS_ORIGINS` 混为一项。当前私有 Bucket 允许 `http://47.97.46.242`、`http://localhost:5173` 的 `POST` 和 `Content-Type` 请求头；新增前端来源时需同时检查 API 与 OSS 的跨域配置。读取公开图片若用于 Canvas，也需按前端需求配置公开 Bucket CORS。
+
+今后修改配置后，重启 `chunai-api`，使用一个 `cs` 测试头像实际完成「申请 → OSS POST → 确认 → 绑定 → 解绑 → 删除」，并用售后凭证检查匿名读取被拒绝、其他用户无法读取、管理员须先获得售后关联。普通健康检查只验证应用及数据库，不代表 OSS 配置已生效。自动测试使用存储替身结合真实 MySQL 验证业务和权限。
+
+2026-10-26 已完成 **38 项真实 API 检查**：`AVATAR`、`AFTERSALE_EVIDENCE`、`CONTENT_COVER`、`CONTENT_VIDEO` 均取得 OSS POST `201` 并完成为 `READY`；公开图片匿名读取 `200`，暂存对象与私有最终对象拒绝匿名读取；头像所有权与引用保护有效；售后凭证授权可读取，退出登录后旧链接失效；会员课程 MP4 支持 Range `206`，撤销会员后旧播放授权返回 `403`。本次创建的两名 `cs` 临时用户、4 份上传素材及临时课程、分类均已精确清理。
 
 OSS 表单及签名规则参考阿里云官方 [PostObject](https://www.alibabacloud.com/help/en/oss/developer-reference/postobject)、[V4 签名](https://www.alibabacloud.com/help/en/oss/developer-reference/signature-version-4-recommend)。
 

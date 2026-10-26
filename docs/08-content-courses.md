@@ -84,7 +84,7 @@
 
 图文 HTML 保存在 MySQL 的 `contents.body_html` 或 `course_chapters.body_html`，图片文件由 OSS 或既有外部图片服务提供，正文中只保存经过清洗的图片引用。
 
-内容封面用 `CONTENT_COVER`，专栏封面用 `COLUMN_COVER`，正文图片用 `CONTENT_BODY_IMAGE`，不能跨用途引用。新文件可通过 [统一上传](10-unified-uploads.md) 申请 OSS 表单并完成服务端校验，直接使用返回的素材 `id`，需要 `media:write` + `content:write`。统一上传需要服务器 OSS 凭证与独立私有 Bucket，当前测试服务器尚待配置。
+内容封面用 `CONTENT_COVER`，专栏封面用 `COLUMN_COVER`，正文图片用 `CONTENT_BODY_IMAGE`，不能跨用途引用。新文件可通过 [统一上传](10-unified-uploads.md) 申请 OSS 表单并完成服务端校验，直接使用返回的素材 `id`，需要 `media:write` + `content:write`。当前测试服务器已配置杭州区域的公开图片 Bucket `chunai-photo`、私有 Bucket `chunai-private` 与 ECS RAM 角色 `chunai-oss`；OSS 全局与公开图片桶已关闭“阻止公共访问”，私有桶保持开启，最新记录见统一上传说明。
 
 兼容图片登记接口接受已存在的 HTTPS 公开地址、MIME、大小和 `purpose`；新封面登记仅接受 `https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/<对象路径>`，主机由 `CONTENT_IMAGE_OSS_HOST` 配置。此登记路径不代传、下载或校验远程对象，不需要 OSS AccessKey；正文图片继续兼容已托管的 HTTPS 地址。
 

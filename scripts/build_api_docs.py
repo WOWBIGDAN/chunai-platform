@@ -1048,7 +1048,7 @@ def make_spec():
     spec = {
         "openapi": "3.0.3",
         "info": {"title": "两性健康服务平台 API", "version": "1.6.0",
-                 "description": "已实现认证、用户资料与后台用户管理、实物交易、科普与课程、专栏、会员方案购买与期限管理、统一 OSS 上传与私有售后凭证、B 站／飞书视频授权。统一上传需要配置 OSS 凭证及公私 Bucket，配置缺失时返回 503。x-implementation-status 表示仓库实现状态；线上以部署版本为准。支付退款使用 TEST 模式；短信、真实支付、AI、通知和第三方物流暂未接入。"},
+                 "description": "已实现认证、用户资料与后台用户管理、实物交易、科普与课程、专栏、会员方案购买与期限管理、统一 OSS 上传与私有售后凭证、B 站／飞书视频授权。当前测试服务器已配置杭州区域的 chunai-photo、chunai-private 与 ECS RAM 角色 chunai-oss；公开图片桶已允许对象公开访问，私有桶仍阻止公共访问。配置缺失或存储不可用时返回 503。x-implementation-status 表示仓库实现状态；线上以部署版本为准。支付退款使用 TEST 模式；短信、真实支付、AI、通知和第三方物流暂未接入。"},
         "servers": [{"url": "http://localhost:3000/api/v1", "description": "本地开发（示例）"},
                     {"url": "http://47.97.46.242/api/v1", "description": "staging 测试服务；可用接口以部署版本为准，协议版本以接口返回值为准"},
                     {"url": "https://api.example.com/api/v1", "description": "生产域名占位，必须替换"}],
@@ -1158,7 +1158,7 @@ def schema_link(name):
 
 
 def build_api_markdown():
-    lines = ["# 接口文档", "", "> 更新：2026-10-26。已实现认证、用户资料与后台用户管理、实物交易、科普／课程／专栏、会员方案购买、统一 OSS 上传与私有凭证及 B 站／飞书访问；线上以部署版本为准。统一上传在 OSS 凭证及公私 Bucket 配置齐全后启用。支付退款使用测试模式，短信及第三方收付款暂缓。",
+    lines = ["# 接口文档", "", "> 更新：2026-10-26。已实现认证、用户资料与后台用户管理、实物交易、科普／课程／专栏、会员方案购买、统一 OSS 上传与私有凭证及 B 站／飞书访问；线上以部署版本为准。当前测试服务器已配置杭州区域的 chunai-photo、chunai-private 与 ECS RAM 角色 chunai-oss；公开图片桶已允许对象公开访问，私有桶仍阻止公共访问，最新状态见统一上传说明。支付退款使用测试模式，短信及第三方收付款暂缓。",
              "", "已实现接口的运行方法见 [后端启动与数据库](04-backend-auth.md)。",
              "", "测试 API：`http://47.97.46.242/api/v1`。详见 [交易模块](06-commerce.md)、[科普与课程](08-content-courses.md)、[会员购买与用户管理](09-membership-users.md)、[统一上传](10-unified-uploads.md) 及 [部署说明](05-deployment.md)。",
              "注册示例采用本地默认协议版本 `2026-10-01`；公网测试环境当前为 `2026-10-23-test`，提交前须读取当前环境的协议接口。",

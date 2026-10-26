@@ -259,7 +259,7 @@ Content-Type: application/json
 | 部分退款 | 订单继续履约剩余商品；客户可在原申请时限内对剩余数量再次申请 |
 | 全额退款 | 订单 status=CLOSED，paymentStatus=REFUNDED，不可发货或确认收货 |
 
-证据图片使用 `AFTERSALE_EVIDENCE` 用途 [统一上传](10-unified-uploads.md)，确认 READY 后将真实素材 ID 填入 `evidenceMediaIds`，并通过 60 秒 `read-grant` 查看。售后创建校验凭证归属、用途和状态，并在事务中绑定；每份图片最多关联一张售后。当前服务器尚未配置 OSS 凭证与私有 Bucket，配置齐全前仍可省略或传 `[]` 提交文字售后。
+证据图片使用 `AFTERSALE_EVIDENCE` 用途 [统一上传](10-unified-uploads.md)，确认 READY 后将真实素材 ID 填入 `evidenceMediaIds`，并通过 60 秒 `read-grant` 查看。售后创建校验凭证归属、用途和状态，并在事务中绑定；每份图片最多关联一张售后。当前测试服务器已配置 OSS 公私 Bucket 与 ECS RAM 角色，配置和联调记录见统一上传说明；仍可省略或传 `[]` 提交文字售后。
 
 ## 课程与会员购买
 

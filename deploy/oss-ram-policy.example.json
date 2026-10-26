@@ -1,0 +1,31 @@
+{
+  "Version": "1",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "oss:GetBucketAcl",
+        "oss:GetBucketVersioning",
+        "oss:GetBucketPolicy"
+      ],
+      "Resource": [
+        "acs:oss:*:*:chunai-photo",
+        "acs:oss:*:*:chunai-private"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "oss:PutObject",
+        "oss:GetObject",
+        "oss:DeleteObject",
+        "oss:PutObjectAcl"
+      ],
+      "Resource": [
+        "acs:oss:*:*:chunai-private/uploads/staging/*",
+        "acs:oss:*:*:chunai-private/uploads/private/*",
+        "acs:oss:*:*:chunai-photo/uploads/public/*"
+      ]
+    }
+  ]
+}

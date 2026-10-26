@@ -19,10 +19,12 @@ function signature(policy: object, date: Date) {
   return client.signPostObjectPolicyV4(policy, date);
 }
 function makeClient(acl: string) {
+  const parser = new OSS({ region: 'oss-cn-hangzhou', bucket: 'cs-private', accessKeyId: 'test-key', accessKeySecret: secret });
   return {
     getBucketACL: jest.fn().mockResolvedValue({ acl }),
     getBucketVersioning: jest.fn().mockResolvedValue({ versionStatus: undefined }),
-    getBucketPolicy: jest.fn().mockResolvedValue({ policy: null }),
+    getBucketPolicy: jest.fn().mockResolvedValue({ policy: null, res: { status: 200, headers: {} } }),
+    requestError: jest.fn((response: unknown) => parser.requestError(response)),
     signPostObjectPolicyV4: jest.fn(signature),
     head: jest.fn().mockResolvedValue({ res: { status: 200, headers: {
       'content-length': '128', 'content-type': 'image/png', etag: `"${etag}"`, 'x-oss-object-type': 'Normal',
@@ -139,8 +141,8 @@ describe('OSS upload adapter', () => {
       if (change === 'publicAcl') publicClient.getBucketACL.mockResolvedValue({ acl: 'public-read-write' });
       if (change === 'privateVersion') privateClient.getBucketVersioning.mockResolvedValue({ versionStatus: 'Enabled' });
       if (change === 'publicVersion') publicClient.getBucketVersioning.mockResolvedValue({ versionStatus: 'Suspended' });
-      if (change === 'policy') privateClient.getBucketPolicy.mockResolvedValue({ policy: { Statement: [{ Effect: 'Allow', Principal: ['*'] }] } });
-      if (change === 'publicPolicy') publicClient.getBucketPolicy.mockResolvedValue({ policy: { Statement: [{ Effect: 'Allow', Principal: ['*'], Action: ['oss:PutObject'] }] } });
+      if (change === 'policy') privateClient.getBucketPolicy.mockResolvedValue({ policy: { Statement: [{ Effect: 'Allow', Principal: ['*'] }] }, res: { status: 200, headers: {} } });
+      if (change === 'publicPolicy') publicClient.getBucketPolicy.mockResolvedValue({ policy: { Statement: [{ Effect: 'Allow', Principal: ['*'], Action: ['oss:PutObject'] }] }, res: { status: 200, headers: {} } });
       await failure(storage.createUploadGrant(grant()), 'STORAGE_UNAVAILABLE', 503);
       expect(privateClient.signPostObjectPolicyV4).not.toHaveBeenCalled();
     }
@@ -148,7 +150,46 @@ describe('OSS upload adapter', () => {
 
   it('permits anonymous GetObject on the public image bucket without weakening the private bucket', async () => {
     const { storage, publicClient } = fixture();
-    publicClient.getBucketPolicy.mockResolvedValue({ policy: { Statement: [{ Effect: 'Allow', Principal: ['*'], Action: ['oss:GetObject'] }] } });
+    publicClient.getBucketPolicy.mockResolvedValue({ policy: { Statement: [{ Effect: 'Allow', Principal: ['*'], Action: ['oss:GetObject'] }] }, res: { status: 200, headers: {} } });
+    await expect(storage.createUploadGrant(grant())).resolves.toMatchObject({ method: 'POST' });
+  });
+
+  it.each(['private', 'public'])('fails closed for unsuccessful %s bucket policy reads returned by the SDK', async bucket => {
+    for (const response of [
+      { status: 403, data: `<Error><Code>AccessDenied</Code><Message>${secret}</Message></Error>` },
+      { status: 500, data: '' },
+      { status: 404, data: '' },
+      { status: 404, data: `<Error><Code>NoSuchBucket</Code><Message>${secret}</Message></Error>` },
+      { status: 403, data: '<Error><Code>NoSuchBucketPolicy</Code></Error>' },
+    ]) {
+      const { storage, privateClient, publicClient } = fixture();
+      const client = bucket === 'private' ? privateClient : publicClient;
+      client.getBucketPolicy.mockResolvedValue({ policy: null, res: { ...response, headers: {} } });
+      await failure(storage.createUploadGrant(grant()), 'STORAGE_UNAVAILABLE', 503);
+      expect(privateClient.signPostObjectPolicyV4).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each(['private', 'public'])('accepts an absent %s policy only after parsing the real OSS 404 error code', async bucket => {
+    const { storage, privateClient, publicClient } = fixture();
+    const client = bucket === 'private' ? privateClient : publicClient;
+    const res = { status: 404, headers: {}, data: Buffer.from('<Error><Code>NoSuchBucketPolicy</Code><Message>The bucket policy does not exist.</Message></Error>') };
+    client.getBucketPolicy.mockResolvedValue({ policy: null, res });
+    await expect(storage.createUploadGrant(grant())).resolves.toMatchObject({ method: 'POST' });
+    expect(client.requestError).toHaveBeenCalledWith(res);
+  });
+
+  it('accepts thrown missing-policy errors only when their status and code both identify policy absence', async () => {
+    const { storage, privateClient } = fixture();
+    for (const error of [
+      { code: 'AccessDenied', status: 403, message: secret },
+      { code: 'NoSuchBucketPolicy', status: 403, message: secret },
+      { code: 'NoSuchBucketPolicy', message: secret },
+    ]) {
+      privateClient.getBucketPolicy.mockRejectedValue(error);
+      await failure(storage.createUploadGrant(grant()), 'STORAGE_UNAVAILABLE', 503);
+    }
+    privateClient.getBucketPolicy.mockRejectedValue({ code: 'NoSuchBucketPolicy', status: 404 });
     await expect(storage.createUploadGrant(grant())).resolves.toMatchObject({ method: 'POST' });
   });
 
