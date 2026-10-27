@@ -8,6 +8,8 @@
 
 物流查询使用 `LogisticsTracking1793318400000` 增量迁移，扩展包裹同步字段、RETURNED 状态约束及轨迹去重索引。服务器 `/etc/chunai/api.env` 配置 `LOGISTICS_PROVIDER=ALIYUN` 和 `LOGISTICS_APPCODE`，权限 0600，真实凭证不提交仓库。默认 30 分钟缓存、每分钟扫描最多 10 单；配置、回退为人工模式及测试说明见 [物流轨迹](12-logistics.md)。发布前备份环境文件和数据库，迁移完成后重启服务。
 
+分类拆分迁移为 `SplitContentCategories1793404800000`，将 CONTENT 拆成 SCIENCE 和 COURSE，保留原科普分类 ID，为课程复制同层级分类并更新课程关联。发布前备份；前端分类查询/创建须改用新 scope，旧 CONTENT 返回 400。无新增环境变量，详见 [分类说明](13-category-scopes.md)。
+
 实物交易、科普、课程购买访问与专栏使用同一 CI/CD。外链视频和有效期会员的配置、调用说明见 [内容模块](08-content-courses.md)。部署使用增量迁移，保留已有用户、产品与订单。视频目录使用 `/var/lib/chunai/content-media`，需安装当前 Nginx、systemd 模板并配置 `PUBLIC_API_URL`。新外链视频需要独立的 `CONTENT_MEDIA_ENCRYPTION_KEY`，必须先在服务器配置后再发布；数据库、私有视频及密钥须一起备份。以下首次部署记录保留为历史事实。
 
 ## 当前环境与部署记录

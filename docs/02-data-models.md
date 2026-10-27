@@ -245,8 +245,10 @@
 - [PageContentFavorite](#pagecontentfavorite)
 - [LogisticsCarrier](#logisticscarrier)
 - [LogisticsCarriers](#logisticscarriers)
-- [ContentCategory](#contentcategory)
+- [ScienceCategory](#sciencecategory)
+- [CourseCategory](#coursecategory)
 - [ProductCategory](#productcategory)
+- [ContentCategory](#contentcategory)
 - [CourseSummary](#coursesummary)
 
 <a id="actionresult"></a>
@@ -788,13 +790,13 @@
 <a id="category"></a>
 ## Category
 
-内容或产品分类；禁止跨 scope 使用或产生父子循环。
+商品、科普或课程分类；三种 scope 独立，禁止跨域使用或产生父子循环。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
 | `id` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 | `name` | string | 是 | 分类名。 | 最短: `1`；最长: `32` |
-| `scope` | string | 是 | 分类作用域。 | 枚举: `CONTENT, PRODUCT` |
+| `scope` | string | 是 | 分类作用域。 | 枚举: `PRODUCT, SCIENCE, COURSE` |
 | `parentId` | string / null | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 | `sortOrder` | integer | 是 | 升序展示。 | 最小: `0` |
 | `enabled` | boolean | 是 | 是否可用。 |  |
@@ -806,7 +808,7 @@
 {
   "id": "id_10001",
   "name": "健康科普",
-  "scope": "CONTENT",
+  "scope": "PRODUCT",
   "parentId": "id_10001",
   "sortOrder": 0,
   "enabled": true,
@@ -823,7 +825,7 @@
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
 | `name` | string | 是 | 名称。 | 最短: `1`；最长: `32` |
-| `scope` | string | 是 | 作用域。 | 枚举: `CONTENT, PRODUCT` |
+| `scope` | string | 是 | 作用域。 | 枚举: `PRODUCT, SCIENCE, COURSE` |
 | `parentId` | string / null | 否 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 | `sortOrder` | integer | 否 | 排序。 | 最小: `0` |
 | `enabled` | boolean | 否 | 启用。 |  |
@@ -833,7 +835,7 @@
 ```json
 {
   "name": "健康科普",
-  "scope": "CONTENT"
+  "scope": "PRODUCT"
 }
 ```
 
@@ -902,7 +904,7 @@ scope 不可修改；有子分类或引用时不可删除。
   "category": {
     "id": "id_10001",
     "name": "健康科普",
-    "scope": "CONTENT",
+    "scope": "SCIENCE",
     "parentId": "id_10001",
     "sortOrder": 0,
     "enabled": true,
@@ -983,7 +985,7 @@ scope 不可修改；有子分类或引用时不可删除。
   "category": {
     "id": "id_10001",
     "name": "健康科普",
-    "scope": "CONTENT",
+    "scope": "SCIENCE",
     "parentId": "id_10001",
     "sortOrder": 0,
     "enabled": true,
@@ -1259,8 +1261,8 @@ scope 不可修改；有子分类或引用时不可删除。
 | `title` | string | 是 | 标题。 | 最短: `1`；最长: `120` |
 | `summary` | string | 是 | 文本。 | 最长: `2000` |
 | `descriptionHtml` | string | 否 | 介绍 HTML；服务端清洗。 | 最长: `100000` |
-| `coverMediaId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
-| `categoryId` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+| `coverMediaId` | string | 是 | 科普必须选择 SCIENCE 分类，课程必须选择 COURSE 分类；分类须启用。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+| `categoryId` | string | 是 | 科普必须选择 SCIENCE 分类，课程必须选择 COURSE 分类；分类须启用。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 | `authorName` | string | 否 | 作者。 | 最长: `64` |
 | `tags` | string[] | 否 | 标签 | 最多项: `10`；元素不重复 |
 | `accessPolicy` | string | 是 | FREE 免费、PURCHASE 独立购买、MEMBER 按网站会员有效期；MEMBER 仅课程且 priceCents=0。 | 枚举: `FREE, PURCHASE, MEMBER` |
@@ -1291,8 +1293,8 @@ scope 不可修改；有子分类或引用时不可删除。
 | `title` | string | 否 | 标题。 | 最短: `1`；最长: `120` |
 | `summary` | string | 否 | 文本。 | 最长: `2000` |
 | `descriptionHtml` | string | 否 | 介绍 HTML；服务端清洗。 | 最长: `100000` |
-| `coverMediaId` | string | 否 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
-| `categoryId` | string | 否 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+| `coverMediaId` | string | 否 | 必须与内容 kind 匹配：科普用 SCIENCE，课程用 COURSE。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+| `categoryId` | string | 否 | 必须与内容 kind 匹配：科普用 SCIENCE，课程用 COURSE。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 | `authorName` | string | 否 | 作者。 | 最长: `64` |
 | `tags` | string[] | 否 | 标签 | 最多项: `10`；元素不重复 |
 | `accessPolicy` | string | 否 | FREE 免费、PURCHASE 独立购买、MEMBER 按网站会员有效期；MEMBER 仅课程且 priceCents=0。 | 枚举: `FREE, PURCHASE, MEMBER` |
@@ -1358,7 +1360,7 @@ scope 不可修改；有子分类或引用时不可删除。
   "category": {
     "id": "id_10001",
     "name": "健康科普",
-    "scope": "CONTENT",
+    "scope": "SCIENCE",
     "parentId": "id_10001",
     "sortOrder": 0,
     "enabled": true,
@@ -3278,7 +3280,7 @@ SKU 的规格维度。
     "category": {
       "id": "id_10001",
       "name": "健康科普",
-      "scope": "CONTENT",
+      "scope": "COURSE",
       "parentId": "id_10001",
       "sortOrder": 0,
       "enabled": true,
@@ -4293,7 +4295,7 @@ Category 的分页结果。固定按白名单排序；同值用 id 排序。
     {
       "id": "id_10001",
       "name": "健康科普",
-      "scope": "CONTENT",
+      "scope": "PRODUCT",
       "parentId": "id_10001",
       "sortOrder": 0,
       "enabled": true,
@@ -4342,7 +4344,7 @@ ContentSummary 的分页结果。固定按白名单排序；同值用 id 排序�
       "category": {
         "id": "id_10001",
         "name": "健康科普",
-        "scope": "CONTENT",
+        "scope": "SCIENCE",
         "parentId": "id_10001",
         "sortOrder": 0,
         "enabled": true,
@@ -4683,7 +4685,7 @@ CourseEntitlement 的分页结果。固定按白名单排序；同值用 id 排�
         "category": {
           "id": "id_10001",
           "name": "健康科普",
-          "scope": "CONTENT",
+          "scope": "COURSE",
           "parentId": "id_10001",
           "sortOrder": 0,
           "enabled": true,
@@ -4879,7 +4881,7 @@ AdminContent 的分页结果。固定按白名单排序；同值用 id 排序。
       "category": {
         "id": "id_10001",
         "name": "健康科普",
-        "scope": "CONTENT",
+        "scope": "SCIENCE",
         "parentId": "id_10001",
         "sortOrder": 0,
         "enabled": true,
@@ -6406,16 +6408,16 @@ ContentFavorite 的分页结果。固定按白名单排序；同值用 id 排序
 ```
 
 
-<a id="contentcategory"></a>
-## ContentCategory
+<a id="sciencecategory"></a>
+## ScienceCategory
 
-作用域固定为 CONTENT 的分类。
+作用域固定为 SCIENCE 的分类。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
 | `id` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 | `name` | string | 是 | 分类名。 | 最短: `1`；最长: `32` |
-| `scope` | string | 是 | 固定作用域。 | 枚举: `CONTENT` |
+| `scope` | string | 是 | 固定作用域。 | 枚举: `SCIENCE` |
 | `parentId` | string / null | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 | `sortOrder` | integer | 是 | 升序展示。 | 最小: `0` |
 | `enabled` | boolean | 是 | 是否可用。 |  |
@@ -6427,7 +6429,37 @@ ContentFavorite 的分页结果。固定按白名单排序；同值用 id 排序
 {
   "id": "id_10001",
   "name": "健康科普",
-  "scope": "CONTENT",
+  "scope": "SCIENCE",
+  "parentId": "id_10001",
+  "sortOrder": 0,
+  "enabled": true,
+  "version": 1
+}
+```
+
+
+<a id="coursecategory"></a>
+## CourseCategory
+
+作用域固定为 COURSE 的分类。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `id` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+| `name` | string | 是 | 分类名。 | 最短: `1`；最长: `32` |
+| `scope` | string | 是 | 固定作用域。 | 枚举: `COURSE` |
+| `parentId` | string / null | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+| `sortOrder` | integer | 是 | 升序展示。 | 最小: `0` |
+| `enabled` | boolean | 是 | 是否可用。 |  |
+| `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "id": "id_10001",
+  "name": "健康科普",
+  "scope": "COURSE",
   "parentId": "id_10001",
   "sortOrder": 0,
   "enabled": true,
@@ -6466,6 +6498,36 @@ ContentFavorite 的分页结果。固定按白名单排序；同值用 id 排序
 ```
 
 
+<a id="contentcategory"></a>
+## ContentCategory
+
+作用域固定为 SCIENCE|COURSE 的分类。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `id` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+| `name` | string | 是 | 分类名。 | 最短: `1`；最长: `32` |
+| `scope` | string | 是 | 固定作用域。 | 枚举: `SCIENCE, COURSE` |
+| `parentId` | string / null | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+| `sortOrder` | integer | 是 | 升序展示。 | 最小: `0` |
+| `enabled` | boolean | 是 | 是否可用。 |  |
+| `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "id": "id_10001",
+  "name": "健康科普",
+  "scope": "SCIENCE",
+  "parentId": "id_10001",
+  "sortOrder": 0,
+  "enabled": true,
+  "version": 1
+}
+```
+
+
 <a id="coursesummary"></a>
 ## CourseSummary
 
@@ -6478,7 +6540,7 @@ ContentFavorite 的分页结果。固定按白名单排序；同值用 id 排序
 | `title` | string | 是 | 标题。 | 最短: `1`；最长: `120` |
 | `summary` | string | 是 | 简介。 | 最长: `2000` |
 | `cover` | [MediaSummary](#mediasummary) | 是 | 见关联对象。 |  |
-| `category` | [ContentCategory](#contentcategory) | 是 | 见关联对象。 |  |
+| `category` | [CourseCategory](#coursecategory) | 是 | 见关联对象。 |  |
 | `tags` | string[] | 是 | 标签 | 最多项: `10` |
 | `accessPolicy` | string | 是 | 课程当前访问策略；编辑价格不会改写历史订单。 | 枚举: `FREE, PURCHASE, MEMBER` |
 | `priceCents` | integer | 是 | 金额，单位为人民币分；由服务端计算，禁止浮点。 | 最小: `0`；最大: `9007199254740991` |
@@ -6505,7 +6567,7 @@ ContentFavorite 的分页结果。固定按白名单排序；同值用 id 排序
   "category": {
     "id": "id_10001",
     "name": "健康科普",
-    "scope": "CONTENT",
+    "scope": "COURSE",
     "parentId": "id_10001",
     "sortOrder": 0,
     "enabled": true,

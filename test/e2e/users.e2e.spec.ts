@@ -56,7 +56,7 @@ describe('user profiles and admin moderation with real MySQL', () => {
       startsAt: new Date(Date.now() - 60000).toISOString(), expiresAt: new Date(Date.now() + 86400000).toISOString(), reason: 'cs资料会员测试', ...overrides });
   }
   async function videoFixture() {
-    const category = data(await post('/admin/categories', admin, { name: 'cs用户播放鉴权', scope: 'CONTENT' }).expect(201)); categoryIds.push(category.id);
+    const category = data(await post('/admin/categories', admin, { name: 'cs用户播放鉴权', scope: 'SCIENCE' }).expect(201)); categoryIds.push(category.id);
     const image = data(await post('/admin/content-media/images', admin, { purpose: 'CONTENT_COVER', publicUrl: `${oss}/cs-users.png`, mimeType: 'image/png', sizeBytes: 100 }).expect(201)); mediaIds.push(image.id);
     const video = data(await request(app.getHttpServer()).post('/api/v1/admin/content-media/videos?durationSeconds=3').auth(admin.accessToken, { type: 'bearer' })
       .set('Content-Type', 'video/mp4').send(readFileSync('database/seeds/cs-sample.mp4')).expect(201)); mediaIds.push(video.id);

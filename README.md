@@ -64,6 +64,7 @@ npm.cmd run start:dev
 | [会员购买与用户管理](docs/09-membership-users.md) | 会员套餐、购买续期与退款、昵称头像、用户查询和封禁；[HTTP 示例](examples/membership-users.http) |
 | [统一文件上传](docs/10-unified-uploads.md) | OSS 表单直传、素材归属和清理、私有售后凭证、配置要求；[HTTP 示例](examples/uploads.http) |
 | [物流轨迹与录单](docs/12-logistics.md) | 阿里云快递查询、管理录单与纠错、权限、缓存及数据库迁移；[HTTP 示例](examples/logistics.http) |
+| [商品／科普／课程分类](docs/13-category-scopes.md) | 分类作用域、内容匹配规则、旧 CONTENT 迁移；[HTTP 示例](examples/category-scopes.http) |
 | [CI/CD 与服务器部署](docs/05-deployment.md) | GitHub Actions、服务器布局、更新、回滚与运维 |
 | [HTTP 请求示例](examples/auth.http) | 注册、登录、刷新、资料、改密、退出 |
 | [建表 SQL](database/schema.sql) | MySQL 字段、索引和外键 |

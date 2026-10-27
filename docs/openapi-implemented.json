@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "两性健康服务平台 · 已实现认证、交易与内容 API",
-    "version": "1.8.0",
+    "version": "1.9.0",
     "description": "已实现认证、用户资料与后台用户管理、实物交易、购物车与内容收藏、科普与课程、专栏、会员方案购买与期限管理、统一 OSS 上传与私有售后凭证、B 站／飞书视频授权。当前测试服务器已配置杭州区域的 chunai-photo、chunai-private 与 ECS RAM 角色 chunai-oss；公开图片桶已允许对象公开访问，私有桶仍阻止公共访问。配置缺失或存储不可用时返回 503。x-implementation-status 表示仓库实现状态；线上以部署版本为准。支付退款使用 TEST 模式；短信、真实支付、AI、通知和第三方物流暂未接入。"
   },
   "servers": [
@@ -729,7 +729,7 @@
       },
       "Category": {
         "type": "object",
-        "description": "内容或产品分类；禁止跨 scope 使用或产生父子循环。",
+        "description": "商品、科普或课程分类；三种 scope 独立，禁止跨域使用或产生父子循环。",
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -751,10 +751,11 @@
             "type": "string",
             "description": "分类作用域。",
             "enum": [
-              "CONTENT",
-              "PRODUCT"
+              "PRODUCT",
+              "SCIENCE",
+              "COURSE"
             ],
-            "example": "CONTENT"
+            "example": "PRODUCT"
           },
           "parentId": {
             "type": "string",
@@ -809,10 +810,11 @@
             "type": "string",
             "description": "作用域。",
             "enum": [
-              "CONTENT",
-              "PRODUCT"
+              "PRODUCT",
+              "SCIENCE",
+              "COURSE"
             ],
-            "example": "CONTENT"
+            "example": "PRODUCT"
           },
           "parentId": {
             "type": "string",
@@ -1631,7 +1633,7 @@
           },
           "coverMediaId": {
             "type": "string",
-            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "description": "科普必须选择 SCIENCE 分类，课程必须选择 COURSE 分类；分类须启用。",
             "minLength": 1,
             "maxLength": 64,
             "pattern": "^[A-Za-z0-9_-]{1,64}$",
@@ -1639,7 +1641,7 @@
           },
           "categoryId": {
             "type": "string",
-            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "description": "科普必须选择 SCIENCE 分类，课程必须选择 COURSE 分类；分类须启用。",
             "minLength": 1,
             "maxLength": 64,
             "pattern": "^[A-Za-z0-9_-]{1,64}$",
@@ -1717,7 +1719,7 @@
           },
           "coverMediaId": {
             "type": "string",
-            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "description": "必须与内容 kind 匹配：科普用 SCIENCE，课程用 COURSE。",
             "minLength": 1,
             "maxLength": 64,
             "pattern": "^[A-Za-z0-9_-]{1,64}$",
@@ -1725,7 +1727,7 @@
           },
           "categoryId": {
             "type": "string",
-            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "description": "必须与内容 kind 匹配：科普用 SCIENCE，课程用 COURSE。",
             "minLength": 1,
             "maxLength": 64,
             "pattern": "^[A-Za-z0-9_-]{1,64}$",
@@ -9159,9 +9161,9 @@
           "items"
         ]
       },
-      "ContentCategory": {
+      "CourseCategory": {
         "type": "object",
-        "description": "作用域固定为 CONTENT 的分类。",
+        "description": "作用域固定为 COURSE 的分类。",
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -9183,9 +9185,9 @@
             "type": "string",
             "description": "固定作用域。",
             "enum": [
-              "CONTENT"
+              "COURSE"
             ],
-            "example": "CONTENT"
+            "example": "COURSE"
           },
           "parentId": {
             "type": "string",
@@ -9289,6 +9291,72 @@
           "version"
         ]
       },
+      "ContentCategory": {
+        "type": "object",
+        "description": "作用域固定为 SCIENCE|COURSE 的分类。",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "example": "id_10001"
+          },
+          "name": {
+            "type": "string",
+            "description": "分类名。",
+            "minLength": 1,
+            "maxLength": 32,
+            "example": "健康科普"
+          },
+          "scope": {
+            "type": "string",
+            "description": "固定作用域。",
+            "enum": [
+              "SCIENCE",
+              "COURSE"
+            ],
+            "example": "SCIENCE"
+          },
+          "parentId": {
+            "type": "string",
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "example": "id_10001",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "description": "升序展示。",
+            "minimum": 0,
+            "example": 0
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "是否可用。",
+            "example": true
+          },
+          "version": {
+            "type": "integer",
+            "description": "乐观锁版本；写操作必须提交最近读取的版本。",
+            "minimum": 1,
+            "example": 1
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "scope",
+          "parentId",
+          "sortOrder",
+          "enabled",
+          "version"
+        ]
+      },
       "CourseSummary": {
         "type": "object",
         "description": "已购课程摘要，仅付费课程类型；不含授权正文。",
@@ -9328,7 +9396,7 @@
             "$ref": "#/components/schemas/MediaSummary"
           },
           "category": {
-            "$ref": "#/components/schemas/ContentCategory"
+            "$ref": "#/components/schemas/CourseCategory"
           },
           "tags": {
             "type": "array",
@@ -13344,7 +13412,7 @@
       "get": {
         "operationId": "get_categories",
         "summary": "查询启用分类",
-        "description": "支持 CONTENT 和 PRODUCT；父子分类必须同域。被子分类、产品或内容引用时不可删除。",
+        "description": "支持 PRODUCT（商品）、SCIENCE（科普）、COURSE（课程）；旧 CONTENT 返回 400，父子分类必须同域。被子分类、产品或内容引用时不可删除。",
         "tags": [
           "03 视频、图文与专栏"
         ],
@@ -13385,10 +13453,11 @@
               "type": "string",
               "description": "分类作用域；公共列表省略时默认 PRODUCT。",
               "enum": [
-                "CONTENT",
-                "PRODUCT"
+                "PRODUCT",
+                "SCIENCE",
+                "COURSE"
               ],
-              "example": "CONTENT"
+              "example": "PRODUCT"
             },
             "description": "分类域。"
           },
@@ -13487,7 +13556,7 @@
                       {
                         "id": "id_10001",
                         "name": "健康科普",
-                        "scope": "CONTENT",
+                        "scope": "PRODUCT",
                         "parentId": "id_10001",
                         "sortOrder": 0,
                         "enabled": true,
@@ -13860,7 +13929,7 @@
                         "category": {
                           "id": "id_10001",
                           "name": "健康科普",
-                          "scope": "CONTENT",
+                          "scope": "SCIENCE",
                           "parentId": "id_10001",
                           "sortOrder": 0,
                           "enabled": true,
@@ -14131,7 +14200,7 @@
                     "category": {
                       "id": "id_10001",
                       "name": "健康科普",
-                      "scope": "CONTENT",
+                      "scope": "SCIENCE",
                       "parentId": "id_10001",
                       "sortOrder": 0,
                       "enabled": true,
@@ -14516,7 +14585,7 @@
                         "category": {
                           "id": "id_10001",
                           "name": "健康科普",
-                          "scope": "CONTENT",
+                          "scope": "SCIENCE",
                           "parentId": "id_10001",
                           "sortOrder": 0,
                           "enabled": true,
@@ -14787,7 +14856,7 @@
                     "category": {
                       "id": "id_10001",
                       "name": "健康科普",
-                      "scope": "CONTENT",
+                      "scope": "SCIENCE",
                       "parentId": "id_10001",
                       "sortOrder": 0,
                       "enabled": true,
@@ -16893,7 +16962,7 @@
                         "category": {
                           "id": "id_10001",
                           "name": "健康科普",
-                          "scope": "CONTENT",
+                          "scope": "SCIENCE",
                           "parentId": "id_10001",
                           "sortOrder": 0,
                           "enabled": true,
@@ -21267,7 +21336,7 @@
                           "category": {
                             "id": "id_10001",
                             "name": "健康科普",
-                            "scope": "CONTENT",
+                            "scope": "COURSE",
                             "parentId": "id_10001",
                             "sortOrder": 0,
                             "enabled": true,
@@ -25639,7 +25708,7 @@
       "get": {
         "operationId": "get_admin_categories",
         "summary": "查询分类列表",
-        "description": "支持 CONTENT 和 PRODUCT；父子分类必须同域。被子分类、产品或内容引用时不可删除。",
+        "description": "支持 PRODUCT（商品）、SCIENCE（科普）、COURSE（课程）；旧 CONTENT 返回 400，父子分类必须同域。被子分类、产品或内容引用时不可删除。",
         "tags": [
           "13 分类与内容管理"
         ],
@@ -25684,10 +25753,11 @@
               "type": "string",
               "description": "分类作用域；公共列表省略时默认 PRODUCT。",
               "enum": [
-                "CONTENT",
-                "PRODUCT"
+                "PRODUCT",
+                "SCIENCE",
+                "COURSE"
               ],
-              "example": "CONTENT"
+              "example": "PRODUCT"
             },
             "description": "作用域。"
           },
@@ -25786,7 +25856,7 @@
                       {
                         "id": "id_10001",
                         "name": "健康科普",
-                        "scope": "CONTENT",
+                        "scope": "PRODUCT",
                         "parentId": "id_10001",
                         "sortOrder": 0,
                         "enabled": true,
@@ -25929,7 +25999,7 @@
       "post": {
         "operationId": "post_admin_categories",
         "summary": "创建分类",
-        "description": "支持 CONTENT 和 PRODUCT；父子分类必须同域。被子分类、产品或内容引用时不可删除。",
+        "description": "支持 PRODUCT（商品）、SCIENCE（科普）、COURSE（课程）；旧 CONTENT 返回 400，父子分类必须同域。被子分类、产品或内容引用时不可删除。",
         "tags": [
           "13 分类与内容管理"
         ],
@@ -25970,7 +26040,7 @@
               },
               "example": {
                 "name": "健康科普",
-                "scope": "CONTENT"
+                "scope": "PRODUCT"
               }
             }
           }
@@ -26034,7 +26104,7 @@
                   "data": {
                     "id": "id_10001",
                     "name": "健康科普",
-                    "scope": "CONTENT",
+                    "scope": "PRODUCT",
                     "parentId": "id_10001",
                     "sortOrder": 0,
                     "enabled": true,
@@ -26278,7 +26348,7 @@
                   "data": {
                     "id": "id_10001",
                     "name": "健康科普",
-                    "scope": "CONTENT",
+                    "scope": "PRODUCT",
                     "parentId": "id_10001",
                     "sortOrder": 0,
                     "enabled": true,
@@ -26534,7 +26604,7 @@
                   "data": {
                     "id": "id_10001",
                     "name": "健康科普",
-                    "scope": "CONTENT",
+                    "scope": "PRODUCT",
                     "parentId": "id_10001",
                     "sortOrder": 0,
                     "enabled": true,
@@ -27128,7 +27198,7 @@
                         "category": {
                           "id": "id_10001",
                           "name": "健康科普",
-                          "scope": "CONTENT",
+                          "scope": "SCIENCE",
                           "parentId": "id_10001",
                           "sortOrder": 0,
                           "enabled": true,
@@ -27416,7 +27486,7 @@
                     "category": {
                       "id": "id_10001",
                       "name": "健康科普",
-                      "scope": "CONTENT",
+                      "scope": "SCIENCE",
                       "parentId": "id_10001",
                       "sortOrder": 0,
                       "enabled": true,
@@ -27695,7 +27765,7 @@
                     "category": {
                       "id": "id_10001",
                       "name": "健康科普",
-                      "scope": "CONTENT",
+                      "scope": "SCIENCE",
                       "parentId": "id_10001",
                       "sortOrder": 0,
                       "enabled": true,
@@ -27986,7 +28056,7 @@
                     "category": {
                       "id": "id_10001",
                       "name": "健康科普",
-                      "scope": "CONTENT",
+                      "scope": "SCIENCE",
                       "parentId": "id_10001",
                       "sortOrder": 0,
                       "enabled": true,
@@ -28526,7 +28596,7 @@
                     "category": {
                       "id": "id_10001",
                       "name": "健康科普",
-                      "scope": "CONTENT",
+                      "scope": "SCIENCE",
                       "parentId": "id_10001",
                       "sortOrder": 0,
                       "enabled": true,
@@ -28818,7 +28888,7 @@
                     "category": {
                       "id": "id_10001",
                       "name": "健康科普",
-                      "scope": "CONTENT",
+                      "scope": "SCIENCE",
                       "parentId": "id_10001",
                       "sortOrder": 0,
                       "enabled": true,
@@ -35129,7 +35199,7 @@
                         "category": {
                           "id": "id_10001",
                           "name": "健康科普",
-                          "scope": "CONTENT",
+                          "scope": "SCIENCE",
                           "parentId": "id_10001",
                           "sortOrder": 0,
                           "enabled": true,

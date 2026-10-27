@@ -21,7 +21,7 @@ Object.assign(process.env, { NODE_ENV: 'test', DB_HOST: process.env.TEST_DB_HOST
   CONTENT_IMAGE_OSS_HOST: 'chunai-photo.oss-cn-hangzhou.aliyuncs.com', CONTENT_MEDIA_ENCRYPTION_KEY: randomBytes(32).toString('base64') });
 
 describe('cart checkout and content favorites with real MySQL', () => {
-  let app: INestApplication, db: DataSource, admin: any, customer: any, stranger: any, category: any, contentCategory: any, image: any, cover: any, video: any, address: any;
+  let app: INestApplication, db: DataSource, admin: any, customer: any, stranger: any, category: any, contentCategory: any, courseCategory: any, image: any, cover: any, video: any, address: any;
   const products: string[] = [], contents: string[] = [], users: string[] = [];
   const responses: { method: string; path: string; status: number; data: unknown }[] = [];
   const password = 'csCartFavorites#123'; let phone = 16000000000 + Math.floor(Math.random() * 100000000);
@@ -62,7 +62,7 @@ describe('cart checkout and content favorites with real MySQL', () => {
     return data(await post('/me/cart/quote', who, { addressId, items: lines.map(i => ({ skuId: i.skuId, version: i.version })) }).expect(201));
   }
   async function content(kind = 'SCIENCE_ARTICLE', accessPolicy = 'FREE', publish = true) {
-    let c = data(await post('/admin/contents', admin, { kind, title: `cs收藏${randomUUID()}`, summary: 'cs摘要', categoryId: contentCategory.id, coverMediaId: cover.id, accessPolicy, priceCents: accessPolicy === 'PURCHASE' ? 1500 : 0 }).expect(201));
+    let c = data(await post('/admin/contents', admin, { kind, title: `cs收藏${randomUUID()}`, summary: 'cs摘要', categoryId: (kind.endsWith('COURSE') ? courseCategory : contentCategory).id, coverMediaId: cover.id, accessPolicy, priceCents: accessPolicy === 'PURCHASE' ? 1500 : 0 }).expect(201));
     contents.push(c.id);
     let ch: any;
     if (kind.endsWith('COURSE')) {
@@ -85,7 +85,8 @@ describe('cart checkout and content favorites with real MySQL', () => {
     admin = { ...data(await post('/admin/auth/login', null, { username, password }).expect(200)), id };
     customer = await user(); stranger = await user();
     category = data(await post('/admin/categories', admin, { name: 'cs购物分类', scope: 'PRODUCT' }).expect(201));
-    contentCategory = data(await post('/admin/categories', admin, { name: 'cs收藏分类', scope: 'CONTENT' }).expect(201));
+    contentCategory = data(await post('/admin/categories', admin, { name: 'cs收藏分类', scope: 'SCIENCE' }).expect(201));
+    courseCategory = data(await post('/admin/categories', admin, { name: 'cs收藏课程分类', scope: 'COURSE' }).expect(201));
     image = data(await post('/admin/product-images', admin, { publicUrl: 'https://example.com/cs.png', mimeType: 'image/png', sizeBytes: 1024 }).expect(201));
     cover = data(await post('/admin/content-media/images', admin, { purpose: 'CONTENT_COVER', publicUrl: 'https://chunai-photo.oss-cn-hangzhou.aliyuncs.com/cs.png', mimeType: 'image/png', sizeBytes: 1024 }).expect(201));
     video = data(await post('/admin/content-media/external-videos', admin, { provider: 'BILIBILI', externalUrl: 'https://www.bilibili.com/video/BV1xx411c7mD/', durationSeconds: 3 }).expect(201));
@@ -106,7 +107,7 @@ describe('cart checkout and content favorites with real MySQL', () => {
         await db.query('DELETE FROM product_skus WHERE product_id = ?', [id]); await db.query('DELETE FROM products WHERE id = ?', [id]);
       }
       for (const id of contents) { await db.query('DELETE FROM course_chapters WHERE course_id = ?', [id]); await db.query('DELETE FROM contents WHERE id = ?', [id]); }
-      for (const id of [category?.id, contentCategory?.id].filter(Boolean)) await db.query('DELETE FROM product_categories WHERE id = ?', [id]);
+      for (const id of [category?.id, contentCategory?.id, courseCategory?.id].filter(Boolean)) await db.query('DELETE FROM product_categories WHERE id = ?', [id]);
       if (admin?.id) {
         await db.query('DELETE FROM product_images WHERE operator_id = ?', [admin.id]); await db.query('DELETE FROM content_media WHERE operator_id = ?', [admin.id]);
         await db.query('DELETE FROM admin_accounts WHERE id = ?', [admin.id]);
@@ -261,6 +262,30 @@ describe('cart checkout and content favorites with real MySQL', () => {
     expect((await favoriteState(c.id)).favorite.access.canAccess).toBe(true);
     await post(`/admin/users/${customer.user.id}/membership/revoke`, admin, { version: term.membership.version, reason: 'cs撤销' }).expect(200);
     expect((await favoriteState(c.id)).favorite).toMatchObject({ valid: true, access: { canAccess: false, reason: 'MEMBERSHIP_REQUIRED' } });
+  });
+  it('isolates science/course category availability across public access, favorites and course checkout', async () => {
+    const science = await content('SCIENCE_ARTICLE'), course = await content('ARTICLE_COURSE', 'PURCHASE');
+    await favorite(science.id).expect(200); await favorite(course.id).expect(200);
+    try {
+      await db.getRepository(Category).update(contentCategory.id, { enabled: false });
+      expect((await favoriteState(science.id)).favorite.valid).toBe(false);
+      expect((await favoriteState(course.id)).favorite.valid).toBe(true);
+      expect(data(await call('get', '/me/favorites?status=VALID', customer).expect(200)).items.map((v: any) => v.contentId)).toContain(course.id);
+      await db.getRepository(Category).update(contentCategory.id, { enabled: true });
+      await db.getRepository(Content).update(science.id, { categoryId: courseCategory.id });
+      await db.getRepository(Content).update(course.id, { categoryId: contentCategory.id });
+      expect((await favoriteState(science.id)).favorite).toMatchObject({ valid: false, invalidReason: 'CATEGORY_UNAVAILABLE', content: null });
+      const invalid = data(await call('get', '/me/favorites?status=INVALID', customer).expect(200));
+      expect(invalid.items.map((v: any) => v.contentId)).toEqual(expect.arrayContaining([science.id, course.id]));
+      await call('get', `/articles/${science.id}/body`, customer).expect(404);
+      await post('/order-quotes', customer, { type: 'COURSE', courseId: course.id }).expect(409).expect(code('RESOURCE_NOT_SELLABLE'));
+      const publicList = data(await call('get', '/articles').expect(200));
+      expect(publicList.items.map((v: any) => v.id)).not.toEqual(expect.arrayContaining([science.id, course.id]));
+    } finally {
+      await db.getRepository(Category).update(contentCategory.id, { enabled: true });
+      await db.getRepository(Content).update(science.id, { categoryId: contentCategory.id });
+      await db.getRepository(Content).update(course.id, { categoryId: courseCategory.id });
+    }
   });
   it('migration retry preserves data and database constraints enforce uniqueness and quantity limits', async () => {
     const { s } = await product(); const item = data(await cartPut(s.id).expect(200));

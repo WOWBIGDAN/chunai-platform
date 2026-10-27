@@ -25,7 +25,7 @@ Object.assign(process.env, { NODE_ENV: 'test', DB_HOST: process.env.TEST_DB_HOST
   PUBLIC_API_URL: 'http://localhost:3000/api/v1' });
 
 describe('unified upload business bindings and private access with real MySQL', () => {
-  let app: INestApplication, db: DataSource, admin: any, editor: any, reviewer: any, reader: any, productCategory: any, contentCategory: any, cover: any;
+  let app: INestApplication, db: DataSource, admin: any, editor: any, reviewer: any, reader: any, productCategory: any, contentCategory: any, courseCategory: any, cover: any;
   const storage = new MemoryOssStorage(), password = 'csUploadBusiness#123';
   const users: string[] = [], admins: string[] = [], uploads: string[] = [], products: string[] = [], contents: string[] = [], columns: string[] = [], categories: string[] = [];
   const responses: { method: string; path: string; status: number; data: unknown }[] = [];
@@ -75,7 +75,7 @@ describe('unified upload business bindings and private access with real MySQL', 
   }
   function saleBody(order: any, ids: string[]) { return { orderId: order.id, type: 'REFUND_ONLY', items: [{ orderItemId: order.items[0].id, quantity: 1 }], reasonCode: 'OTHER', description: 'cs凭证测试', evidenceMediaIds: ids }; }
   async function content(kind = 'SCIENCE_ARTICLE', extra = {}) {
-    const c = data(await post('/admin/contents', admin, { kind, title: 'cs上传内容', summary: 'cs内容说明', categoryId: contentCategory.id,
+    const c = data(await post('/admin/contents', admin, { kind, title: 'cs上传内容', summary: 'cs内容说明', categoryId: (kind.endsWith('COURSE') ? courseCategory : contentCategory).id,
       coverMediaId: cover.id, accessPolicy: 'FREE', priceCents: 0, ...extra }).expect(201)); contents.push(c.id); return c;
   }
   async function videoContent(member = false) {
@@ -100,7 +100,8 @@ describe('unified upload business bindings and private access with real MySQL', 
     app = module.createNestApplication({ bodyParser: false }); setupApp(app); db = app.get(DataSource); await db.runMigrations(); await app.init();
     admin = await account(PERMISSIONS); editor = await account(['products:write', 'content:write', 'media:write']); reviewer = await account(['aftersales:review']); reader = await account(['orders:read']);
     productCategory = data(await post('/admin/categories', admin, { name: 'cs上传商品分类', scope: 'PRODUCT' }).expect(201)); categories.push(productCategory.id);
-    contentCategory = data(await post('/admin/categories', admin, { name: 'cs上传内容分类', scope: 'CONTENT' }).expect(201)); categories.push(contentCategory.id);
+    contentCategory = data(await post('/admin/categories', admin, { name: 'cs上传内容分类', scope: 'SCIENCE' }).expect(201)); categories.push(contentCategory.id);
+    courseCategory = data(await post('/admin/categories', admin, { name: 'cs上传课程分类', scope: 'COURSE' }).expect(201)); categories.push(courseCategory.id);
     cover = await upload(admin, 'CONTENT_COVER');
   }, 120000);
   afterAll(async () => {

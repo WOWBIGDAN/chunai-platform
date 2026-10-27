@@ -3,6 +3,7 @@ import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsBoolean, IsIn, IsIn
   IsString, IsUrl, IsUUID, Length, Matches, Max, Min, NotEquals, ValidateIf, ValidateNested } from 'class-validator';
 import { PageDto } from '../auth/auth.dto';
 import { AFTERSALE_STATUSES, ORDER_STATUSES } from './entities';
+import { CATEGORY_SCOPES, CategoryScope } from './category-scope';
 
 export const Optional = () => ValidateIf((_o, value) => value !== undefined);
 const queryInt = ({ value }: { value: unknown }) => typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value;
@@ -14,7 +15,7 @@ export class AdminLoginDto {
 }
 export class CategoryCreateDto {
   @IsString() @Length(1, 32) @Matches(/\S/) name!: string;
-  @IsIn(['PRODUCT', 'CONTENT']) scope!: 'PRODUCT' | 'CONTENT';
+  @IsIn(CATEGORY_SCOPES) scope!: CategoryScope;
   @ValidateIf((_o, v) => v !== undefined && v !== null) @IsUUID('4') parentId?: string | null;
   @Optional() @IsInt() @Min(0) @Max(1000000) sortOrder?: number;
   @Optional() @IsBoolean() enabled?: boolean;
@@ -26,7 +27,7 @@ export class CategoryPatchDto extends VersionDto {
   @Optional() @IsBoolean() enabled?: boolean;
 }
 export class CategoryQueryDto extends PageDto {
-  @Optional() @IsIn(['PRODUCT', 'CONTENT']) scope?: 'PRODUCT' | 'CONTENT';
+  @Optional() @IsIn(CATEGORY_SCOPES) scope?: CategoryScope;
   @Optional() @IsString() @Length(1, 120) keyword?: string;
   @Optional() @IsUUID('4') parentId?: string;
 }

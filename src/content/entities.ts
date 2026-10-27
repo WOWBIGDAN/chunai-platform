@@ -5,6 +5,7 @@ export const CONTENT_KINDS = ['SCIENCE_ARTICLE', 'SCIENCE_VIDEO', 'ARTICLE_COURS
 export type ContentKind = typeof CONTENT_KINDS[number];
 export type PublishStatus = 'DRAFT' | 'PUBLISHED' | 'OFFLINE';
 export const isCourse = (kind: ContentKind) => kind.endsWith('_COURSE');
+export const contentCategoryScope = (kind: ContentKind): 'SCIENCE' | 'COURSE' => isCourse(kind) ? 'COURSE' : 'SCIENCE';
 export const isVideo = (kind: ContentKind) => kind === 'SCIENCE_VIDEO' || kind === 'VIDEO_COURSE';
 
 @Entity('content_media')

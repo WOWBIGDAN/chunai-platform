@@ -8,7 +8,8 @@ import { ApiException, ApiRequest, Principal } from '../common/http';
 import { Optional } from '../commerce/commerce.dto';
 import { Category } from '../commerce/entities';
 import { Actor, actorId, CommerceTransaction, conflict, missing, page } from '../commerce/transaction';
-import { Content, ContentFavorite, ContentKind, CONTENT_KINDS } from './entities';
+import { Content, ContentFavorite, ContentKind, CONTENT_KINDS, contentCategoryScope } from './entities';
+import { CONTENT_SCOPE_SQL } from '../commerce/category-scope';
 import { ContentService } from './content.service';
 
 export class FavoriteQueryDto extends PageDto {
@@ -30,7 +31,7 @@ export class FavoritesService {
     const content = await m.findOneByOrFail(Content, { id: f.contentId });
     const category = await m.findOneBy(Category, { id: content.categoryId });
     const invalidReason = content.status !== 'PUBLISHED' ? 'CONTENT_UNAVAILABLE' :
-      !category?.enabled || category.scope !== 'CONTENT' ? 'CATEGORY_UNAVAILABLE' : null;
+      !category?.enabled || category.scope !== contentCategoryScope(content.kind) ? 'CATEGORY_UNAVAILABLE' : null;
     return { id: f.id, contentId: f.contentId, createdAt: f.createdAt, valid: invalidReason === null, invalidReason,
       content: invalidReason ? null : await this.content.view(m, content),
       access: invalidReason ? { canAccess: false, reason: 'CONTENT_UNAVAILABLE' } : await this.content.access(m, content, principal) };
@@ -40,7 +41,7 @@ export class FavoritesService {
       const b = m.getRepository(ContentFavorite).createQueryBuilder('f')
         .innerJoin(Content, 'c', 'c.id = f.contentId').innerJoin(Category, 'cat', 'cat.id = c.categoryId')
         .where('f.userId = :userId', { userId: principal.user.id });
-      const valid = "c.status = 'PUBLISHED' AND cat.enabled = true AND cat.scope = 'CONTENT'";
+      const valid = `c.status = 'PUBLISHED' AND cat.enabled = true AND cat.scope = ${CONTENT_SCOPE_SQL}`;
       if (q.kind) b.andWhere('c.kind = :kind', { kind: q.kind });
       if (q.status) b.andWhere(q.status === 'VALID' ? `(${valid})` : `NOT (${valid})`);
       const [items, total] = await b.orderBy('f.createdAt', 'DESC').addOrderBy('f.id', 'DESC')
@@ -62,7 +63,7 @@ export class FavoritesService {
       // Retrying an existing favorite never turns an offline resource into accessible content.
       if (existing) return this.view(m, existing, actor.principal);
       const category = await m.findOne(Category, { where: { id: c.categoryId }, lock: { mode: 'pessimistic_read' } });
-      if (c.status !== 'PUBLISHED' || !category?.enabled || category.scope !== 'CONTENT') throw missing();
+      if (c.status !== 'PUBLISHED' || !category?.enabled || category.scope !== contentCategoryScope(c.kind)) throw missing();
       if (await m.countBy(ContentFavorite, { userId }) >= 1000) conflict('FAVORITE_LIMIT', '最多保存 1000 条收藏');
       const f = m.create(ContentFavorite, { id: randomUUID(), userId, contentId });
       await m.save(f); return this.view(m, f, actor.principal);

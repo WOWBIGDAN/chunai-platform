@@ -174,12 +174,12 @@ obj("AdminAuthTokens", "管理员会话；accessToken aud=admin。", {
     "refreshToken": string("轮换刷新令牌。", "rt_admin_example"), "refreshExpiresAt": TIME,
     "tokenType": enum("认证方案。", "Bearer"), "admin": ref("AdminPrincipal")})
 
-obj("Category", "内容或产品分类；禁止跨 scope 使用或产生父子循环。", {
+obj("Category", "商品、科普或课程分类；三种 scope 独立，禁止跨域使用或产生父子循环。", {
     "id": ID, "name": string("分类名。", "健康科普", minLength=1, maxLength=32),
-    "scope": enum("分类作用域。", "CONTENT|PRODUCT"), "parentId": {**ID, "nullable": True},
+    "scope": enum("分类作用域。", "PRODUCT|SCIENCE|COURSE"), "parentId": {**ID, "nullable": True},
     "sortOrder": integer("升序展示。", 0), "enabled": boolean("是否可用。", True), "version": VERSION})
 obj("CategoryCreate", "创建分类。", {
-    "name": string("名称。", "健康科普", minLength=1, maxLength=32), "scope": enum("作用域。", "CONTENT|PRODUCT"),
+    "name": string("名称。", "健康科普", minLength=1, maxLength=32), "scope": enum("作用域。", "PRODUCT|SCIENCE|COURSE"),
     "parentId": {**ID, "nullable": True}, "sortOrder": integer("排序。", 0), "enabled": boolean("启用。", True)}, ["name", "scope"])
 obj("CategoryPatch", "scope 不可修改；有子分类或引用时不可删除。", {
     "name": string("名称。", "健康知识", minLength=1, maxLength=32), "parentId": {**ID, "nullable": True},
@@ -598,7 +598,7 @@ op("02 用户与地址", "delete", "/me/addresses/{id}", "删除收货地址", p
 
 # 03 Discovery and protected content.
 paged("03 视频、图文与专栏", "/categories", "查询启用分类", "Category", auth="public",
-      params=[query("scope", enum("分类域。", "CONTENT|PRODUCT"), True), query("parentId", ID)])
+      params=[query("scope", enum("分类域。", "PRODUCT|SCIENCE|COURSE"), True), query("parentId", ID)])
 for path, title, kinds in [("/videos", "视频科普／视频课程", "SCIENCE_VIDEO|VIDEO_COURSE"),
                            ("/articles", "图文科普／图文课程", "SCIENCE_ARTICLE|ARTICLE_COURSE")]:
     paged("03 视频、图文与专栏", path, f"浏览／搜索{title}", "ContentSummary", auth="public",
@@ -708,7 +708,7 @@ op("12 管理端鉴权", "post", "/admin/auth/refresh", "轮换管理员令牌",
 op("12 管理端鉴权", "post", "/admin/auth/logout", "管理员退出", auth="admin")
 op("12 管理端鉴权", "get", "/admin/me", "当前管理员与权限", auth="admin", data="AdminPrincipal")
 crud("13 分类与内容管理", "/admin/categories", "分类", "Category", "CategoryCreate", "CategoryPatch", "content:write",
-     filters=[query("scope", enum("作用域。", "CONTENT|PRODUCT")), KEYWORD])
+     filters=[query("scope", enum("作用域。", "PRODUCT|SCIENCE|COURSE")), KEYWORD])
 OPERATIONS[-1]["note"] = "分类存在子分类或内容／产品引用时拒绝删除。产品分类管理也需 content:write（共享分类权限）。"
 crud("13 分类与内容管理", "/admin/contents", "科普／课程", "AdminContent", "ContentCreate", "ContentPatch", "content:write",
      filters=[query("kind", CONTENT_KIND), STATUS_FILTER, CATEGORY_ID, KEYWORD, SORT_CREATED])
@@ -1063,7 +1063,7 @@ def operation_id(operation):
 def make_spec():
     spec = {
         "openapi": "3.0.3",
-        "info": {"title": "两性健康服务平台 API", "version": "1.8.0",
+        "info": {"title": "两性健康服务平台 API", "version": "1.9.0",
                  "description": "已实现认证、用户资料与后台用户管理、实物交易、购物车与内容收藏、科普与课程、专栏、会员方案购买与期限管理、统一 OSS 上传与私有售后凭证、B 站／飞书视频授权。当前测试服务器已配置杭州区域的 chunai-photo、chunai-private 与 ECS RAM 角色 chunai-oss；公开图片桶已允许对象公开访问，私有桶仍阻止公共访问。配置缺失或存储不可用时返回 503。x-implementation-status 表示仓库实现状态；线上以部署版本为准。支付退款使用 TEST 模式；短信、真实支付、AI、通知和第三方物流暂未接入。"},
         "servers": [{"url": "http://localhost:3000/api/v1", "description": "本地开发（示例）"},
                     {"url": "http://47.97.46.242/api/v1", "description": "staging 测试服务；可用接口以部署版本为准，协议版本以接口返回值为准"},
@@ -1280,7 +1280,7 @@ def build_data_markdown():
 
 
 def finish_examples():
-    for name, scope in (("ContentCategory", "CONTENT"), ("ProductCategory", "PRODUCT")):
+    for name, scope in (("ScienceCategory", "SCIENCE"), ("CourseCategory", "COURSE"), ("ProductCategory", "PRODUCT"), ("ContentCategory", "SCIENCE|COURSE")):
         SCHEMAS[name] = copy.deepcopy(SCHEMAS["Category"])
         SCHEMAS[name]["description"] = f"作用域固定为 {scope} 的分类。"
         SCHEMAS[name]["properties"]["scope"] = enum("固定作用域。", scope)
@@ -1291,6 +1291,7 @@ def finish_examples():
     SCHEMAS["CourseSummary"] = copy.deepcopy(SCHEMAS["ContentSummary"])
     SCHEMAS["CourseSummary"]["description"] = "已购课程摘要，仅付费课程类型；不含授权正文。"
     SCHEMAS["CourseSummary"]["properties"]["kind"] = enum("课程类型。", "VIDEO_COURSE|ARTICLE_COURSE")
+    SCHEMAS["CourseSummary"]["properties"]["category"] = ref("CourseCategory")
     SCHEMAS["CourseSummary"]["properties"]["priceCents"] = {**MONEY, "minimum": 0}
     SCHEMAS["CourseSummary"]["properties"]["accessPolicy"] = enum("课程当前访问策略；编辑价格不会改写历史订单。", "FREE|PURCHASE|MEMBER")
     SCHEMAS["CourseSummary"]["properties"]["chapterCount"]["example"] = 1

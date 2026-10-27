@@ -68,7 +68,7 @@ sudo systemd-run --quiet --wait --pty --collect \
 |---|---|
 | 游客 | 查询启用产品分类和上架商品、可售 SKU |
 | 普通用户 `aud=client` | 操作本人的地址、报价、订单、物流、售后、退款查询 |
-| `content:write` | PRODUCT／CONTENT 分类、科普课程章节、内容素材与专栏管理 |
+| `content:write` | PRODUCT／SCIENCE／COURSE 分类、科普课程章节、内容素材与专栏管理 |
 | `membership:write` | 会员套餐与启停、手工期限管理、购买期限查询；付费期限不能被手工覆盖 |
 | `users:read` | 后台脱敏用户列表、资料详情与即时会员状态 |
 | `users:ban` | 按版本封禁和解封用户；封禁同步撤销全部客户端会话 |

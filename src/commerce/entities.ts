@@ -1,4 +1,5 @@
 import { Column, CreateDateColumn, Entity, PrimaryColumn } from 'typeorm';
+import type { CategoryScope } from './category-scope';
 
 export abstract class RecordBase {
   @PrimaryColumn({ type: 'varchar', length: 36 }) id!: string;
@@ -31,7 +32,7 @@ export class AdminRefreshToken extends RecordBase {
 @Entity('product_categories')
 export class Category extends Versioned {
   @Column({ type: 'varchar', length: 32 }) name!: string;
-  @Column({ type: 'varchar', length: 16, default: 'PRODUCT' }) scope!: 'PRODUCT' | 'CONTENT';
+  @Column({ type: 'varchar', length: 16, default: 'PRODUCT' }) scope!: CategoryScope;
   @Column({ name: 'parent_id', type: 'varchar', length: 36, nullable: true }) parentId!: string | null;
   @Column({ name: 'sort_order', type: 'int', default: 0 }) sortOrder!: number;
   @Column({ type: 'boolean', default: true }) enabled!: boolean;

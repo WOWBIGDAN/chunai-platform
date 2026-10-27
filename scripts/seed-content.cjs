@@ -22,6 +22,7 @@ async function main() {
   const db = requireApp(resolve('dist/database/data-source.js')).default;
   const { AdminAccount, Category } = requireApp(resolve('dist/commerce/entities.js'));
   const { ContentMedia, Content, Chapter, ContentColumn, ColumnContent } = requireApp(resolve('dist/content/entities.js'));
+  const { legacyCourseCategoryId } = requireApp(resolve('dist/database/migrations/1793404800000-SplitContentCategories.js'));
   const { PasswordService } = requireApp(resolve('dist/auth/password.service.js'));
   const { AuditLog } = requireApp(resolve('dist/commerce/entities.js'));
   const videoFile = resolve(dirname(file), 'cs-sample.mp4');
@@ -58,9 +59,16 @@ async function main() {
       } return mediaId;
     }
     const names = { SCIENCE_ARTICLE: 'cs图文科普', SCIENCE_VIDEO: 'cs视频科普', ARTICLE_COURSE: 'cs付费图文课程', VIDEO_COURSE: 'cs付费视频课程' };
+    const categoryIds = {};
     for (const [kind, name] of Object.entries(names)) {
-      const categoryId = id('category', kind), columnId = id('column', kind);
-      if (!await m.existsBy(Category, { id: categoryId })) { await m.insert(Category, { id: categoryId, name, scope: 'CONTENT', parentId: null, sortOrder: Object.keys(names).indexOf(kind), enabled: true, version: 1 }); counts.categories++; }
+      const originalId = id('category', kind), columnId = id('column', kind);
+      const scope = kind.endsWith('COURSE') ? 'COURSE' : 'SCIENCE';
+      const original = await m.findOneBy(Category, { id: originalId });
+      const categoryId = original?.scope === 'SCIENCE' && scope === 'COURSE' ? legacyCourseCategoryId(originalId) : originalId;
+      const existing = await m.findOneBy(Category, { id: categoryId });
+      if (existing && existing.scope !== scope) throw new Error('Reserved seed category has incompatible scope');
+      if (!existing) { await m.insert(Category, { id: categoryId, name, scope, parentId: null, sortOrder: Object.keys(names).indexOf(kind), enabled: true, version: 1 }); counts.categories++; }
+      categoryIds[kind] = categoryId;
       if (!await m.existsBy(ContentColumn, { id: columnId })) { await m.insert(ContentColumn, { id: columnId, name: `${name}专栏`, description: 'cs测试专栏，分组不授予课程访问权。', coverMediaId: await image(`column-${kind}`, 'COLUMN_COVER'), status: 'PUBLISHED', sortOrder: Object.keys(names).indexOf(kind), version: 1 }); counts.columns++; }
     }
     for (const [index, sample] of fixture.contents.entries()) {
@@ -70,7 +78,7 @@ async function main() {
       const course = sample.kind.endsWith('COURSE'), videoKind = ['SCIENCE_VIDEO', 'VIDEO_COURSE'].includes(sample.kind);
       const publishedAt = sample.status === 'DRAFT' ? null : new Date();
       await m.insert(Content, { id: contentId, kind: sample.kind, title: sample.title, summary: sample.summary, descriptionHtml: sample.descriptionHtml,
-        coverMediaId: await image(sample.key, 'CONTENT_COVER'), categoryId: id('category', sample.kind), authorName: sample.authorName, tags: sample.tags,
+        coverMediaId: await image(sample.key, 'CONTENT_COVER'), categoryId: categoryIds[sample.kind], authorName: sample.authorName, tags: sample.tags,
         accessPolicy: sample.accessPolicy, priceCents: sample.priceCents, bodyHtml: !course && !videoKind ? sample.bodyHtml : null,
         imageMediaIds: [], videoMediaId: !course && videoKind ? await video(sample.key) : null, status: sample.status, publishedAt, version: 1 }); counts.contents++;
       for (const [j, ch] of sample.chapters.entries()) {

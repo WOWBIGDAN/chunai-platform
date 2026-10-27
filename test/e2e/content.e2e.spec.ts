@@ -15,6 +15,7 @@ import { PasswordService } from '../../src/auth/password.service';
 import { AdminAccount, Order } from '../../src/commerce/entities';
 import { Content, CourseEntitlement } from '../../src/content/entities';
 import { PERMISSIONS } from '../../src/commerce/permissions';
+import { SplitContentCategories1793404800000, legacyCourseCategoryId } from '../../src/database/migrations/1793404800000-SplitContentCategories';
 
 if (!process.env.TEST_DB_NAME || !/^[A-Za-z0-9_]+_test$/.test(process.env.TEST_DB_NAME) || !process.env.TEST_DB_PASSWORD) throw new Error('Content E2E requires an isolated _test database');
 Object.assign(process.env, { NODE_ENV: 'test', DB_HOST: process.env.TEST_DB_HOST ?? '127.0.0.1', DB_PORT: process.env.TEST_DB_PORT ?? '3306',
@@ -25,7 +26,7 @@ Object.assign(process.env, { NODE_ENV: 'test', DB_HOST: process.env.TEST_DB_HOST
 
 describe('content, paid access, columns and protected video with real MySQL', () => {
   let app: INestApplication, db: DataSource;
-  let admin: any, reader: any, editor: any, customer: any, stranger: any, category: any, cover: any, columnCover: any, video: any;
+  let admin: any, reader: any, editor: any, customer: any, stranger: any, category: any, scienceCategory: any, cover: any, columnCover: any, video: any;
   const admins: string[] = [], users: string[] = [], contentIds: string[] = [], columns: string[] = [], mediaIds: string[] = [], categories: string[] = [];
   const responses: { method: string; path: string; status: number; data: unknown }[] = [];
   const password = 'csContentTestPassword#123';
@@ -57,7 +58,7 @@ describe('content, paid access, columns and protected video with real MySQL', ()
   }
   async function create(kind = 'ARTICLE_COURSE', extra = {}) {
     const c = data(await post('/admin/contents', admin, { kind, title: `cs ${randomUUID()}`, summary: 'cs测试内容', coverMediaId: cover.id,
-      categoryId: category.id, descriptionHtml: '<p onclick="bad()">介绍<script>bad()</script></p>', authorName: 'cs编辑', tags: ['cs'],
+      categoryId: (kind.endsWith('COURSE') ? category : scienceCategory).id, descriptionHtml: '<p onclick="bad()">介绍<script>bad()</script></p>', authorName: 'cs编辑', tags: ['cs'],
       accessPolicy: kind.endsWith('COURSE') ? 'PURCHASE' : 'FREE', priceCents: kind.endsWith('COURSE') ? 1990 : 0, ...extra }).expect(201));
     contentIds.push(c.id); return c;
   }
@@ -107,7 +108,8 @@ describe('content, paid access, columns and protected video with real MySQL', ()
     const mod = await Test.createTestingModule({ imports: [AppModule] }).overrideProvider(ThrottlerGuard).useValue({ canActivate: () => true }).compile();
     app = mod.createNestApplication({ bodyParser: false }); setupApp(app); db = app.get(DataSource); await db.runMigrations(); await app.init();
     admin = await account(PERMISSIONS); reader = await account(['orders:read']); editor = await account(['content:write']); customer = await user(); stranger = await user();
-    category = data(await post('/admin/categories', admin, { name: 'cs内容分类', scope: 'CONTENT' }).expect(201)); categories.push(category.id);
+    category = data(await post('/admin/categories', admin, { name: 'cs课程分类', scope: 'COURSE' }).expect(201)); categories.push(category.id);
+    scienceCategory = data(await post('/admin/categories', admin, { name: 'cs科普分类', scope: 'SCIENCE' }).expect(201)); categories.push(scienceCategory.id);
     cover = await image('CONTENT_COVER'); columnCover = await image('COLUMN_COVER');
     const r = await request(app.getHttpServer()).post('/api/v1/admin/content-media/videos?durationSeconds=3').auth(admin.accessToken, { type: 'bearer' }).set('Content-Type', 'video/mp4').send(readFileSync('database/seeds/cs-sample.mp4')).expect(201);
     video = data(r); mediaIds.push(video.id);
@@ -141,20 +143,44 @@ describe('content, paid access, columns and protected video with real MySQL', ()
   });
   it('enforces category scope and blocks referenced category deletion', async () => {
     const product = data(await post('/admin/categories', admin, { name: 'cs产品分类', scope: 'PRODUCT' }).expect(201)); categories.push(product.id);
-    await post('/admin/categories', admin, { name: 'cs错域', scope: 'CONTENT', parentId: product.id }).expect(409);
+    await post('/admin/categories', admin, { name: 'cs错域', scope: 'SCIENCE', parentId: product.id }).expect(409);
     const c = await create();
     await call('patch', `/admin/contents/${c.id}`, admin, { version: c.version, categoryId: product.id }).expect(409);
     await call('delete', `/admin/categories/${category.id}?version=${category.version}`, admin).expect(409);
-    const listed = data(await call('get', '/categories?scope=CONTENT').expect(200)); expect(listed.items.every((x: any) => x.scope === 'CONTENT')).toBe(true);
+    const listed = data(await call('get', '/categories?scope=COURSE').expect(200)); expect(listed.items.every((x: any) => x.scope === 'COURSE')).toBe(true);
   });
   it('validates free science, paired price changes, immutable kind and media purpose', async () => {
-    const dto = { kind: 'SCIENCE_ARTICLE', title: 'cs非法', summary: '', categoryId: category.id, coverMediaId: cover.id, accessPolicy: 'PURCHASE', priceCents: 100 };
+    const dto = { kind: 'SCIENCE_ARTICLE', title: 'cs非法', summary: '', categoryId: scienceCategory.id, coverMediaId: cover.id, accessPolicy: 'PURCHASE', priceCents: 100 };
     await post('/admin/contents', admin, dto).expect(400);
     await post('/admin/contents', admin, { ...dto, accessPolicy: 'MEMBER_OR_PURCHASE' }).expect(400);
     const c = await create();
     await call('patch', `/admin/contents/${c.id}`, admin, { version: c.version, priceCents: 10 }).expect(400);
     await call('patch', `/admin/contents/${c.id}`, admin, { version: c.version, kind: 'SCIENCE_VIDEO' }).expect(400);
     await call('patch', `/admin/contents/${c.id}`, admin, { version: c.version, coverMediaId: columnCover.id }).expect(409);
+  });
+  it('offers separate science/course scopes, rejects legacy scope and cross-scope parents', async () => {
+    for (const scope of ['SCIENCE', 'COURSE', 'PRODUCT']) {
+      const list = data(await call('get', `/categories?scope=${scope}`).expect(200));
+      expect(list.items.every((c: any) => c.scope === scope)).toBe(true);
+    }
+    await call('get', '/categories?scope=CONTENT').expect(400);
+    await call('get', '/admin/categories?scope=CONTENT', admin).expect(400);
+    await post('/admin/categories', admin, { name: 'cs旧域', scope: 'CONTENT' }).expect(400);
+    await post('/admin/categories', admin, { name: 'cs跨域子分类', scope: 'COURSE', parentId: scienceCategory.id }).expect(409);
+    await post('/admin/categories', admin, { name: 'cs跨域子分类', scope: 'SCIENCE', parentId: category.id }).expect(409);
+    const child = data(await post('/admin/categories', admin, { name: 'cs同域子分类', scope: 'SCIENCE', parentId: scienceCategory.id }).expect(201)); categories.push(child.id);
+    await call('patch', `/admin/categories/${child.id}`, admin, { version: child.version, parentId: category.id }).expect(409);
+    await call('patch', `/admin/categories/${child.id}`, admin, { version: child.version, scope: 'COURSE' }).expect(400);
+    await call('get', '/admin/categories', customer).expect(401);
+  });
+  it('binds both science kinds and both course kinds exclusively to their own scope', async () => {
+    for (const kind of ['SCIENCE_ARTICLE', 'SCIENCE_VIDEO', 'ARTICLE_COURSE', 'VIDEO_COURSE']) {
+      const wrong = kind.endsWith('COURSE') ? scienceCategory : category;
+      await post('/admin/contents', admin, { kind, title: 'cs错域内容', summary: '', coverMediaId: cover.id, categoryId: wrong.id, accessPolicy: 'FREE', priceCents: 0 }).expect(409).expect(assertCode('CATEGORY_UNAVAILABLE'));
+      const c = await create(kind);
+      expect(c.category.scope).toBe(kind.endsWith('COURSE') ? 'COURSE' : 'SCIENCE');
+      await call('patch', `/admin/contents/${c.id}`, admin, { version: c.version, categoryId: wrong.id }).expect(409);
+    }
   });
   it('hides drafts and refuses publishing missing bodies or an empty course', async () => {
     const c = await create(); await call('get', `/articles/${c.id}`).expect(404);
@@ -348,7 +374,7 @@ describe('content, paid access, columns and protected video with real MySQL', ()
     const { c } = await fixture('SCIENCE_ARTICLE'); expect(data(await call('get', `/articles/${c.id}`).expect(200)).cover.publicUrl).toBe(cover.publicUrl);
     const legacy = await image('CONTENT_COVER');
     await db.query("UPDATE content_media SET public_url = 'https://example.com/legacy.png', provider = 'EXTERNAL_IMAGE' WHERE id = ?", [legacy.id]);
-    await post('/admin/contents', admin, { kind: 'SCIENCE_ARTICLE', title: 'cs旧封面', summary: '', coverMediaId: legacy.id, categoryId: category.id, accessPolicy: 'FREE', priceCents: 0 }).expect(400);
+    await post('/admin/contents', admin, { kind: 'SCIENCE_ARTICLE', title: 'cs旧封面', summary: '', coverMediaId: legacy.id, categoryId: scienceCategory.id, accessPolicy: 'FREE', priceCents: 0 }).expect(400);
     await call('patch', `/admin/contents/${c.id}`, admin, { version: c.version, coverMediaId: legacy.id }).expect(400);
   });
   it('stores external sources encrypted and returns Bilibili links only via the playback API', async () => {
@@ -444,6 +470,34 @@ describe('content, paid access, columns and protected video with real MySQL', ()
     await post(`${path}/revoke`, admin, { version: 3, reason: 'cs旧版本' }).expect(409);
     await call('put', path, admin, memberTerm(4)).expect(200);
     await post('/auth/logout', u, {}).expect(200); await call('get', playback, u).expect(401);
+  });
+  it('migrates shared legacy hierarchies atomically, moves courses and is safe to retry', async () => {
+    expect(process.env.DB_NAME).toMatch(/_test$/);
+    const root = data(await post('/admin/categories', admin, { name: 'cs迁移父分类', scope: 'SCIENCE' }).expect(201)); categories.push(root.id);
+    const child = data(await post('/admin/categories', admin, { name: 'cs迁移子分类', scope: 'SCIENCE', parentId: root.id, enabled: false }).expect(201)); categories.push(child.id);
+    const article = await create('SCIENCE_ARTICLE'), course = await create('ARTICLE_COURSE');
+    const ordersBefore = await db.query('SELECT * FROM commerce_orders ORDER BY id');
+    const rightsBefore = await db.query('SELECT * FROM course_entitlements ORDER BY id');
+    const q = db.createQueryRunner(); await q.connect();
+    try {
+      await q.query('ALTER TABLE product_categories DROP CHECK chk_category_scope');
+      await q.query("UPDATE product_categories SET scope='CONTENT' WHERE id IN (?,?)", [root.id, child.id]);
+      await q.query('UPDATE contents SET category_id=? WHERE id IN (?,?)', [child.id, article.id, course.id]);
+      const migration = new SplitContentCategories1793404800000(); await migration.up(q);
+      const newRoot = legacyCourseCategoryId(root.id), newChild = legacyCourseCategoryId(child.id); categories.push(newRoot, newChild);
+      const rows = await q.query('SELECT id,scope,parent_id,enabled,version FROM product_categories WHERE id IN (?,?,?,?) ORDER BY id', [root.id, child.id, newRoot, newChild]);
+      expect(rows.find((r: any) => r.id === root.id)).toMatchObject({ scope: 'SCIENCE', parent_id: null, version: 2 });
+      expect(rows.find((r: any) => r.id === child.id)).toMatchObject({ scope: 'SCIENCE', parent_id: root.id, enabled: 0 });
+      expect(rows.find((r: any) => r.id === newRoot)).toMatchObject({ scope: 'COURSE', parent_id: null });
+      expect(rows.find((r: any) => r.id === newChild)).toMatchObject({ scope: 'COURSE', parent_id: newRoot, enabled: 0 });
+      expect((await db.getRepository(Content).findOneByOrFail({ id: article.id })).categoryId).toBe(child.id);
+      expect(await db.getRepository(Content).findOneByOrFail({ id: course.id })).toMatchObject({ categoryId: newChild, version: course.version + 1 });
+      await migration.up(q);
+      expect((await q.query('SELECT id,scope,parent_id,enabled,version FROM product_categories WHERE id IN (?,?,?,?) ORDER BY id', [root.id, child.id, newRoot, newChild]))).toEqual(rows);
+      expect(await db.query('SELECT * FROM commerce_orders ORDER BY id')).toEqual(ordersBefore);
+      expect(await db.query('SELECT * FROM course_entitlements ORDER BY id')).toEqual(rightsBefore);
+      await expect(q.query("UPDATE product_categories SET scope='CONTENT' WHERE id=?", [root.id])).rejects.toBeDefined();
+    } finally { await q.release(); }
   });
   it('checks content visibility even for members and does not let membership unlock purchased-only courses', async () => {
     const { c, ch } = await memberVideo(); const u = await user(); await call('put', `/admin/users/${u.user.id}/membership`, admin, memberTerm()).expect(200);

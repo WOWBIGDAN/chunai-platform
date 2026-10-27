@@ -1,0 +1,41 @@
+@baseUrl = http://47.97.46.242/api/v1
+@adminToken = replace-with-admin-access-token
+@categoryId = replace-with-category-uuid
+
+### Public: science categories
+GET {{baseUrl}}/categories?scope=SCIENCE
+
+### Public: course categories
+GET {{baseUrl}}/categories?scope=COURSE
+
+### Public: product categories (default when scope is omitted)
+GET {{baseUrl}}/categories?scope=PRODUCT
+
+### Admin: all scopes, including disabled categories
+GET {{baseUrl}}/admin/categories?page=1&pageSize=100
+Authorization: Bearer {{adminToken}}
+
+### Admin: create science category
+POST {{baseUrl}}/admin/categories
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"name":"健康科普","scope":"SCIENCE","sortOrder":0,"enabled":true}
+
+### Admin: create course category
+POST {{baseUrl}}/admin/categories
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"name":"健康课程","scope":"COURSE","sortOrder":0,"enabled":true}
+
+### Admin: update category with latest version (scope is immutable)
+PATCH {{baseUrl}}/admin/categories/{{categoryId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"version":1,"name":"基础课程","sortOrder":10,"enabled":true}
+
+### Admin: delete only an unreferenced category, using its latest version
+DELETE {{baseUrl}}/admin/categories/{{categoryId}}?version=2
+Authorization: Bearer {{adminToken}}

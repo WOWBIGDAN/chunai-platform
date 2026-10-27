@@ -12,6 +12,8 @@ import * as D from './content.dto';
 import { activeMembership } from '../membership/membership-access';
 import { validateContentImageUrl } from './media-source';
 import { lockManagedReference } from '../uploads/references';
+import { contentCategoryScope } from './entities';
+import { CONTENT_SCOPE_SQL } from '../commerce/category-scope';
 
 export type Access = { canAccess: boolean; reason: 'FREE' | 'PURCHASED' | 'MEMBER' | 'PREVIEW' | 'ADMIN' | 'LOGIN_REQUIRED' | 'PURCHASE_REQUIRED' | 'MEMBERSHIP_REQUIRED' | 'CONTENT_UNAVAILABLE' };
 const emptyBody = { bodyHtml: null, imageMediaIds: [] as string[], videoMediaId: null, publishedAt: null };
@@ -41,7 +43,7 @@ export class ContentService {
     if (!c) throw missing(); return c;
   }
   private async references(m: EntityManager, c: Content) {
-    if (!await m.existsBy(Category, { id: c.categoryId, scope: 'CONTENT', enabled: true })) conflict('CATEGORY_UNAVAILABLE', '请选择启用的内容分类');
+    if (!await m.existsBy(Category, { id: c.categoryId, scope: contentCategoryScope(c.kind), enabled: true })) conflict('CATEGORY_UNAVAILABLE', isCourse(c.kind) ? '请选择启用的课程分类' : '请选择启用的科普分类');
     await this.boundMedia(m, c.coverMediaId, 'CONTENT_COVER');
     if ((!isCourse(c.kind) && c.accessPolicy !== 'FREE') || (c.accessPolicy === 'PURCHASE' ? c.priceCents <= 0 : c.priceCents !== 0)) invalid('科普必须免费；免费或会员课程价格为 0，购买课程价格须大于 0');
     if (c.accessPolicy === 'MEMBER' && await m.existsBy(OrderItem, { courseId: c.id })) conflict('RESOURCE_IN_USE', '已有购买订单的课程不能改为会员专享，请另建会员课程');
@@ -55,7 +57,7 @@ export class ContentService {
   }
   async access(m: EntityManager, c: Content, principal?: Principal, ch?: Chapter): Promise<Access> {
     const bought = await this.purchased(m, c, principal);
-    const visible = c.status === 'PUBLISHED' && await m.existsBy(Category, { id: c.categoryId, scope: 'CONTENT', enabled: true });
+    const visible = c.status === 'PUBLISHED' && await m.existsBy(Category, { id: c.categoryId, scope: contentCategoryScope(c.kind), enabled: true });
     if ((!visible && !(bought && c.status !== 'DRAFT' && c.publishedAt)) || (ch && (ch.status === 'DRAFT' || (ch.status === 'OFFLINE' && !(bought && ch.publishedAt)))))
       return { canAccess: false, reason: 'CONTENT_UNAVAILABLE' };
     if (bought && c.accessPolicy !== 'MEMBER') return { canAccess: true, reason: 'PURCHASED' };
@@ -107,7 +109,7 @@ export class ContentService {
         await this.getColumn(m, columnId, admin);
         b.innerJoin(ColumnContent, 'link', 'link.contentId = c.id AND link.columnId = :columnId', { columnId }).addSelect(['link.id', 'link.sortOrder']);
       }
-      if (!admin) b.innerJoin(Category, 'category', "category.id = c.categoryId AND category.enabled = true AND category.scope = 'CONTENT'").andWhere("c.status = 'PUBLISHED'");
+      if (!admin) b.innerJoin(Category, 'category', `category.id = c.categoryId AND category.enabled = true AND category.scope = ${CONTENT_SCOPE_SQL}`).andWhere("c.status = 'PUBLISHED'");
       if (admin && q.status) b.andWhere('c.status = :status', { status: q.status });
       if (kinds) b.andWhere('c.kind IN (:...kinds)', { kinds });
       for (const field of ['kind', 'categoryId', 'accessPolicy'] as const) if (q[field]) b.andWhere(`c.${field} = :${field}`, { [field]: q[field] });

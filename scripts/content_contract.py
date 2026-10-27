@@ -17,8 +17,8 @@ def apply_content_contract(api):
             o['note'] = '报价最多一单；重新校验可售状态与价格。产品预占库存，课程阻止同用户重复待付款单及重复已购。30 分钟付款超时可取消。课程支付成功原子授予永久访问权并完成订单。'
         if path in ('/categories', '/admin/categories'):
             for p in o['params']:
-                if p['name'] == 'scope': p['schema'] = enum('分类作用域；公共列表省略时默认 PRODUCT。', 'CONTENT|PRODUCT')
-            o['note'] = '支持 CONTENT 和 PRODUCT；父子分类必须同域。被子分类、产品或内容引用时不可删除。'
+                if p['name'] == 'scope': p['schema'] = enum('分类作用域；公共列表省略时默认 PRODUCT。', 'PRODUCT|SCIENCE|COURSE')
+            o['note'] = '支持 PRODUCT（商品）、SCIENCE（科普）、COURSE（课程）；旧 CONTENT 返回 400，父子分类必须同域。被子分类、产品或内容引用时不可删除。'
         if path in ('/articles', '/videos'):
             o['params'].append(query('tag', string('精确匹配公开标签。', 'cs', minLength=1, maxLength=20)))
         if path in ('/me/membership', '/admin/users/{id}/membership'):
@@ -43,7 +43,9 @@ def apply_content_contract(api):
         if path == '/admin/columns/{id}' and o['method'] == 'delete':
             o['note'] = '先下架专栏再删除；同时移除分组关联，内容、课程和购买权益保留。'
     api['union']('ImplementedPurchase', '当前可用的商品或课程试算，不包含会员购买。', ['ProductPurchase', 'CoursePurchase'], 'type')
-    s['CategoryCreate']['properties']['scope'] = enum('作用域。', 'CONTENT|PRODUCT')
+    s['CategoryCreate']['properties']['scope'] = enum('作用域。', 'PRODUCT|SCIENCE|COURSE')
+    s['ContentCreate']['properties']['categoryId']['description'] = '科普必须选择 SCIENCE 分类，课程必须选择 COURSE 分类；分类须启用。'
+    s['ContentPatch']['properties']['categoryId']['description'] = '必须与内容 kind 匹配：科普用 SCIENCE，课程用 COURSE。'
     for name in ('ContentCreate', 'ContentPatch', 'ContentSummary', 'ContentDetail', 'AdminContent'):
         s[name]['properties']['accessPolicy'] = enum('FREE 免费、PURCHASE 独立购买、MEMBER 按网站会员有效期；MEMBER 仅课程且 priceCents=0。', 'FREE|PURCHASE|MEMBER')
     s['ContentPatch']['description'] += ' 已有购买订单历史的课程不能改为 MEMBER，返回 RESOURCE_IN_USE，保留原有购买权益。'

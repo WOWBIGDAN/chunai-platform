@@ -2,6 +2,8 @@
 
 图文、视频及整门课程现已支持本人收藏。下架／分类停用后收藏保留为失效项，恢复上架后重新有效；收藏不授予购买或会员权益，详情见 [购物车与收藏](11-cart-favorites.md)。
 
+分类已拆为 SCIENCE（科普）和 COURSE（课程），原 CONTENT 停用，前端须按内容 kind 加载对应分类。迁移及调用说明见 [分类说明](13-category-scopes.md)。
+
 本模块与现有 NestJS / MySQL、管理员权限、订单和测试退款共用一套后端。支持图文科普、视频科普、图文课程、视频课程，以及 `FREE`、`PURCHASE`、`MEMBER` 三种访问策略。封面可通过统一 OSS 上传或登记已有地址；科普视频可跳转 B 站，会员视频可在校验有效期后返回飞书链接与密码；本地与 OSS 私有 MP4 共用访问鉴权。会员支持管理员开通及套餐购买，详细规则见 [会员购买与用户管理](09-membership-users.md)。真实收付款和视频转码暂未接入。
 
 ## 权限与业务关系
@@ -31,7 +33,8 @@
 
 | 功能 | 接口 |
 |---|---|
-| 内容分类 | `GET /categories?scope=CONTENT` |
+| 科普分类 | `GET /categories?scope=SCIENCE` |
+| 课程分类 | `GET /categories?scope=COURSE` |
 | 图文发现与详情 | `GET /articles`、`GET /articles/{id}` |
 | 视频发现与详情 | `GET /videos`、`GET /videos/{id}` |
 | 科普正文／视频 | `GET /articles/{id}/body`、`GET /videos/{id}/playback` |

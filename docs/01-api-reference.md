@@ -346,13 +346,13 @@
 
 **实现状态：** 已实现
 
-支持 CONTENT 和 PRODUCT；父子分类必须同域。被子分类、产品或内容引用时不可删除。
+支持 PRODUCT（商品）、SCIENCE（科普）、COURSE（课程）；旧 CONTENT 返回 400，父子分类必须同域。被子分类、产品或内容引用时不可删除。
 
 | 位置 | 名称 | 类型 | 必填 | 说明与约束 |
 |---|---|---|---|---|
 | query | `page` | integer | 否 | 页码，默认 1。 最小: `1`；默认: `1` |
 | query | `pageSize` | integer | 否 | 每页条数，默认 20，最多 100。 最小: `1`；最大: `100`；默认: `20` |
-| query | `scope` | string | 否 | 分类作用域；公共列表省略时默认 PRODUCT。 枚举: `CONTENT, PRODUCT` |
+| query | `scope` | string | 否 | 分类作用域；公共列表省略时默认 PRODUCT。 枚举: `PRODUCT, SCIENCE, COURSE` |
 | query | `parentId` | string | 否 | 不透明业务 ID；前端必须按字符串保存。 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
 
 成功：HTTP `200`，`data` 为 [PageCategory](02-data-models.md#pagecategory)。
@@ -1518,13 +1518,13 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 **实现状态：** 已实现
 
-支持 CONTENT 和 PRODUCT；父子分类必须同域。被子分类、产品或内容引用时不可删除。
+支持 PRODUCT（商品）、SCIENCE（科普）、COURSE（课程）；旧 CONTENT 返回 400，父子分类必须同域。被子分类、产品或内容引用时不可删除。
 
 | 位置 | 名称 | 类型 | 必填 | 说明与约束 |
 |---|---|---|---|---|
 | query | `page` | integer | 否 | 页码，默认 1。 最小: `1`；默认: `1` |
 | query | `pageSize` | integer | 否 | 每页条数，默认 20，最多 100。 最小: `1`；最大: `100`；默认: `20` |
-| query | `scope` | string | 否 | 分类作用域；公共列表省略时默认 PRODUCT。 枚举: `CONTENT, PRODUCT` |
+| query | `scope` | string | 否 | 分类作用域；公共列表省略时默认 PRODUCT。 枚举: `PRODUCT, SCIENCE, COURSE` |
 | query | `keyword` | string | 否 | 搜索标题／名称；去首尾空格，最长 100。 最长: `100` |
 
 成功：HTTP `200`，`data` 为 [PageCategory](02-data-models.md#pagecategory)。
@@ -1536,7 +1536,7 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 **实现状态：** 已实现
 
-支持 CONTENT 和 PRODUCT；父子分类必须同域。被子分类、产品或内容引用时不可删除。
+支持 PRODUCT（商品）、SCIENCE（科普）、COURSE（课程）；旧 CONTENT 返回 400，父子分类必须同域。被子分类、产品或内容引用时不可删除。
 
 请求体：[CategoryCreate](02-data-models.md#categorycreate)，完整字段及必填规则见对应对象。
 

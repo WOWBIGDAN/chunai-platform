@@ -10,7 +10,7 @@ export async function lockCourse(m: EntityManager, id: string) {
   if (!c || !isCourse(c.kind)) throw missing(); return c;
 }
 export async function courseSellable(m: EntityManager, c: Content, userId: string) {
-  if (c.status !== 'PUBLISHED' || c.accessPolicy !== 'PURCHASE' || c.priceCents <= 0 || !await m.existsBy(Category, { id: c.categoryId, scope: 'CONTENT', enabled: true })) conflict('RESOURCE_NOT_SELLABLE', '课程不可购买');
+  if (c.status !== 'PUBLISHED' || c.accessPolicy !== 'PURCHASE' || c.priceCents <= 0 || !await m.existsBy(Category, { id: c.categoryId, scope: 'COURSE', enabled: true })) conflict('RESOURCE_NOT_SELLABLE', '课程不可购买');
   if (await m.existsBy(CourseEntitlement, { userId, courseId: c.id, status: 'ACTIVE' })) conflict('COURSE_ALREADY_PURCHASED', '已拥有该课程');
 }
 export async function courseQuote(m: EntityManager, userId: string, id: string) {
