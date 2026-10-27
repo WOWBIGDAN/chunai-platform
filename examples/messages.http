@@ -1,0 +1,63 @@
+@baseUrl = http://localhost:3000/api/v1
+@accessToken = replace_with_user_access_token
+@adminToken = replace_with_admin_access_token
+@userId = fedb46b4-eae6-44a8-8abd-1739bb089611
+@messageId = fedb46b4-eae6-44a8-8abd-1739bb089612
+@revision = 0
+@throughSequence = 0
+
+### 管理员向指定 ACTIVE 用户发送测试通知；需要 messages:write
+# 新的业务意图使用新键；网络重试复用同一个键及相同正文
+POST {{baseUrl}}/admin/messages
+Authorization: Bearer {{adminToken}}
+Idempotency-Key: cs-message-send-20261027-001
+Content-Type: application/json
+
+{
+  "userIds": ["{{userId}}"],
+  "title": "cs站内消息测试",
+  "body": "这是一条用于检查轮询、已读和删除的测试消息。"
+}
+
+### 首次 revision=0；后续改为上次返回值。建议等待 60–70 秒再请求
+GET {{baseUrl}}/me/messages/poll?revision={{revision}}
+Authorization: Bearer {{accessToken}}
+
+### 最新 20 条，序号降序；不自动标记已读
+GET {{baseUrl}}/me/messages?limit=20
+Authorization: Bearer {{accessToken}}
+
+### 历史下一页：替换为上一页 nextBeforeSequence（为 null 时停止）
+GET {{baseUrl}}/me/messages?beforeSequence=12&limit=20
+Authorization: Bearer {{accessToken}}
+
+### 补增量消息：按序号升序，保存 nextAfterSequence 后继续
+# 不要用这个接口同步旧消息的已读／删除变化；这些变化需要刷新当前列表
+GET {{baseUrl}}/me/messages?afterSequence=0&limit=20
+Authorization: Bearer {{accessToken}}
+
+### 仅未读
+GET {{baseUrl}}/me/messages?unreadOnly=true&limit=20
+Authorization: Bearer {{accessToken}}
+
+### 详情不自动已读
+GET {{baseUrl}}/me/messages/{{messageId}}
+Authorization: Bearer {{accessToken}}
+
+### 批量标记已读，最多 100 个不同的本人消息 ID
+POST {{baseUrl}}/me/messages/read
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{"ids": ["{{messageId}}"]}
+
+### 全部已读：先把 throughSequence 改为此前 poll 返回的 latestSequence
+POST {{baseUrl}}/me/messages/read-all
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{"throughSequence": "{{throughSequence}}"}
+
+### 删除后隐藏，未读数同步减少；重复删除返回 404
+DELETE {{baseUrl}}/me/messages/{{messageId}}
+Authorization: Bearer {{accessToken}}

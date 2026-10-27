@@ -10,6 +10,8 @@
 
 分类拆分迁移为 `SplitContentCategories1793404800000`，将 CONTENT 拆成 SCIENCE 和 COURSE，保留原科普分类 ID，为课程复制同层级分类并更新课程关联。发布前备份；前端分类查询/创建须改用新 scope，旧 CONTENT 返回 400。无新增环境变量，详见 [分类说明](13-category-scopes.md)。
 
+站内消息使用 `InAppMessages1793491200000` 增量迁移，新增 `user_message_states` 和 `user_messages`。原有完整管理员增加 `messages:write`，受限管理员权限保持原样。无需新环境变量、Redis 或消息队列；迁移后重启应用即可启用业务通知。前端按 60 秒以上间隔调用短轮询接口，隐藏页暂停，详见 [站内消息](14-messages.md)。迁移不会给历史业务补发消息。
+
 实物交易、科普、课程购买访问与专栏使用同一 CI/CD。外链视频和有效期会员的配置、调用说明见 [内容模块](08-content-courses.md)。部署使用增量迁移，保留已有用户、产品与订单。视频目录使用 `/var/lib/chunai/content-media`，需安装当前 Nginx、systemd 模板并配置 `PUBLIC_API_URL`。新外链视频需要独立的 `CONTENT_MEDIA_ENCRYPTION_KEY`，必须先在服务器配置后再发布；数据库、私有视频及密钥须一起备份。以下首次部署记录保留为历史事实。
 
 ## 当前环境与部署记录

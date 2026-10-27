@@ -10,7 +10,7 @@
 | 金额 | `integer` 人民币分，`currency=CNY`；如 9900 = ¥99.00；不传浮点金额 |
 | 时间 | ISO 8601 UTC，如 `2026-10-22T02:00:00Z`；界面显示上海时间 |
 | 分页 | `page/pageSize` 从 1 开始；数据为 `items/total/page/pageSize/hasNext`；空列表为 `[]` |
-| 游标 | AI 消息用 `cursor/limit`，`nextCursor=null` 表示结束 |
+| 游标 | AI 消息用 `cursor/limit`；站内消息用互斥的 `beforeSequence/afterSequence` 与 `limit`，序号与 revision 均为十进制字符串 |
 | 空值 | 非必填字段可省略；只有标注 nullable 的字段可为 `null`；数组无值为 `[]` |
 | PATCH | 未传字段保持不变；仅允许标注 nullable 的字段显式清空；管理员修改须带 version |
 | 校验 | 未声明的 Body/Query 字段拒绝；枚举区分大小写；Query 中 boolean 仅接受 `true/false` |
@@ -31,7 +31,7 @@
 }
 ```
 
-所有成功 JSON API 返回 `code/message/data/requestId/timestamp`；成功 `code=OK`。创建通常 201，异步受理 202，普通查询／操作 200。删除也返回 200 和 `{success:true}`。
+所有成功 JSON API 返回 `code/message/data/requestId/timestamp`；成功 `code=OK`。创建通常 201，异步受理 202，普通查询／操作 200。删除也返回 200；通常为 `{success:true}`，站内消息删除返回更新数量及收件箱状态。
 
 ## 统一失败结构
 
@@ -164,12 +164,6 @@
 - [SseDeltaEvent](#ssedeltaevent)
 - [SseDoneEvent](#ssedoneevent)
 - [SseErrorEvent](#sseerrorevent)
-- [NotificationTarget](#notificationtarget)
-- [Notification](#notification)
-- [UnreadCount](#unreadcount)
-- [ReadAllInput](#readallinput)
-- [NotificationTaskInput](#notificationtaskinput)
-- [NotificationTask](#notificationtask)
 - [UploadCreate](#uploadcreate)
 - [UploadTicket](#uploadticket)
 - [MediaReadGrant](#mediareadgrant)
@@ -197,7 +191,6 @@
 - [PageCourseEntitlement](#pagecourseentitlement)
 - [PageAfterSale](#pageaftersale)
 - [PageAiConversation](#pageaiconversation)
-- [PageNotification](#pagenotification)
 - [PageAdminContent](#pageadmincontent)
 - [PageAdminChapter](#pageadminchapter)
 - [PageAdminColumn](#pageadmincolumn)
@@ -207,11 +200,8 @@
 - [PageAdminOrderSummary](#pageadminordersummary)
 - [PageAdminUser](#pageadminuser)
 - [PageAdminMembershipPlan](#pageadminmembershipplan)
-- [PageNotificationTask](#pagenotificationtask)
 - [PageAuditLog](#pageauditlog)
 - [PrivateEvidenceMedia](#privateevidencemedia)
-- [NotificationUsersInput](#notificationusersinput)
-- [NotificationAllInput](#notificationallinput)
 - [ProductImageCreate](#productimagecreate)
 - [TestPaymentInput](#testpaymentinput)
 - [TestRefundInput](#testrefundinput)
@@ -245,6 +235,14 @@
 - [PageContentFavorite](#pagecontentfavorite)
 - [LogisticsCarrier](#logisticscarrier)
 - [LogisticsCarriers](#logisticscarriers)
+- [InAppMessage](#inappmessage)
+- [MessagePollResult](#messagepollresult)
+- [MessagePage](#messagepage)
+- [MessageMutationResult](#messagemutationresult)
+- [MessagesReadInput](#messagesreadinput)
+- [MessagesReadAllInput](#messagesreadallinput)
+- [AdminMessageInput](#adminmessageinput)
+- [AdminMessageResult](#adminmessageresult)
 - [ScienceCategory](#sciencecategory)
 - [CourseCategory](#coursecategory)
 - [ProductCategory](#productcategory)
@@ -3584,136 +3582,6 @@ event: error；流已打开，不能改成 HTTP JSON 错误。
 ```
 
 
-<a id="notificationtarget"></a>
-## NotificationTarget
-
-前端按 type 路由；只传业务 ID，不接受任意跳转 URL。
-
-| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
-|---|---|---|---|---|
-| `type` | string | 是 | 目标页面。 | 枚举: `ORDER, AFTERSALE, CONTENT, MEMBERSHIP, NONE` |
-| `resourceId` | string / null | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
-
-示例（仅结构示意，不作为可用业务 ID）：
-
-```json
-{
-  "type": "ORDER",
-  "resourceId": "id_10001"
-}
-```
-
-
-<a id="notification"></a>
-## Notification
-
-站内消息；系统事件可靠投递，目标读取仍需鉴权。
-
-| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
-|---|---|---|---|---|
-| `id` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
-| `category` | string | 是 | 消息类别。 | 枚举: `ORDER, LOGISTICS, AFTERSALE, MEMBERSHIP, SYSTEM` |
-| `title` | string | 是 | 标题。 | 最长: `100` |
-| `body` | string | 是 | 纯文本正文。 | 最长: `2000` |
-| `target` | [NotificationTarget](#notificationtarget) | 是 | 见关联对象。 |  |
-| `readAt` | string / null | 是 | UTC 时间；未发生时为 null。 | 格式: `date-time` |
-| `createdAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
-
-示例（仅结构示意，不作为可用业务 ID）：
-
-```json
-{
-  "id": "id_10001",
-  "category": "ORDER",
-  "title": "订单已发货",
-  "body": "您的订单已发货，可查看物流。",
-  "target": {
-    "type": "ORDER",
-    "resourceId": "id_10001"
-  },
-  "readAt": null,
-  "createdAt": "2026-10-22T02:00:00Z"
-}
-```
-
-
-<a id="unreadcount"></a>
-## UnreadCount
-
-本人未读统计。
-
-| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
-|---|---|---|---|---|
-| `count` | integer | 是 | 未读条数。 | 最小: `0` |
-
-示例（仅结构示意，不作为可用业务 ID）：
-
-```json
-{
-  "count": 3
-}
-```
-
-
-<a id="readallinput"></a>
-## ReadAllInput
-
-只标记截止时间前的消息，避免吞掉并发新消息。
-
-| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
-|---|---|---|---|---|
-| `before` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
-
-示例（仅结构示意，不作为可用业务 ID）：
-
-```json
-{
-  "before": "2026-10-22T02:00:00Z"
-}
-```
-
-
-<a id="notificationtaskinput"></a>
-## NotificationTaskInput
-
-通知范围二选一。
-
-仅允许以下一种结构：
-
-- [NotificationUsersInput](#notificationusersinput)
-- [NotificationAllInput](#notificationallinput)
-
-
-<a id="notificationtask"></a>
-## NotificationTask
-
-异步站内通知任务；按 taskId+userId 去重，不暴露其他用户资料。
-
-| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
-|---|---|---|---|---|
-| `id` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 | 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
-| `status` | string | 是 | 投递状态。 | 枚举: `PENDING, RUNNING, COMPLETED, PARTIAL_FAILED, FAILED` |
-| `title` | string | 是 | 标题。 |  |
-| `recipientCount` | integer | 是 | 接收人数。 | 最小: `0` |
-| `sentCount` | integer | 是 | 已发送人数。 | 最小: `0` |
-| `failedCount` | integer | 是 | 失败人数。 | 最小: `0` |
-| `createdAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
-
-示例（仅结构示意，不作为可用业务 ID）：
-
-```json
-{
-  "id": "id_10001",
-  "status": "PENDING",
-  "title": "服务通知",
-  "recipientCount": 100,
-  "sentCount": 100,
-  "failedCount": 0,
-  "createdAt": "2026-10-22T02:00:00Z"
-}
-```
-
-
 <a id="uploadcreate"></a>
 ## UploadCreate
 
@@ -4808,45 +4676,6 @@ AiConversation 的分页结果。固定按白名单排序；同值用 id 排序�
 ```
 
 
-<a id="pagenotification"></a>
-## PageNotification
-
-Notification 的分页结果。固定按白名单排序；同值用 id 排序。
-
-| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
-|---|---|---|---|---|
-| `items` | [Notification[]](#notification) | 是 | 当前页数据；空页为 [] |  |
-| `total` | integer | 是 | 匹配记录总数 | 最小: `0` |
-| `page` | integer | 是 | 页码，从 1 开始 | 最小: `1` |
-| `pageSize` | integer | 是 | 每页条数 | 最小: `1`；最大: `100` |
-| `hasNext` | boolean | 是 | 是否有下一页 |  |
-
-示例（仅结构示意，不作为可用业务 ID）：
-
-```json
-{
-  "items": [
-    {
-      "id": "id_10001",
-      "category": "ORDER",
-      "title": "订单已发货",
-      "body": "您的订单已发货，可查看物流。",
-      "target": {
-        "type": "ORDER",
-        "resourceId": "id_10001"
-      },
-      "readAt": null,
-      "createdAt": "2026-10-22T02:00:00Z"
-    }
-  ],
-  "total": 1,
-  "page": 1,
-  "pageSize": 20,
-  "hasNext": false
-}
-```
-
-
 <a id="pageadmincontent"></a>
 ## PageAdminContent
 
@@ -5349,42 +5178,6 @@ AdminMembershipPlan 的分页结果。固定按白名单排序；同值用 id �
 ```
 
 
-<a id="pagenotificationtask"></a>
-## PageNotificationTask
-
-NotificationTask 的分页结果。固定按白名单排序；同值用 id 排序。
-
-| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
-|---|---|---|---|---|
-| `items` | [NotificationTask[]](#notificationtask) | 是 | 当前页数据；空页为 [] |  |
-| `total` | integer | 是 | 匹配记录总数 | 最小: `0` |
-| `page` | integer | 是 | 页码，从 1 开始 | 最小: `1` |
-| `pageSize` | integer | 是 | 每页条数 | 最小: `1`；最大: `100` |
-| `hasNext` | boolean | 是 | 是否有下一页 |  |
-
-示例（仅结构示意，不作为可用业务 ID）：
-
-```json
-{
-  "items": [
-    {
-      "id": "id_10001",
-      "status": "PENDING",
-      "title": "服务通知",
-      "recipientCount": 100,
-      "sentCount": 100,
-      "failedCount": 0,
-      "createdAt": "2026-10-22T02:00:00Z"
-    }
-  ],
-  "total": 1,
-  "page": 1,
-  "pageSize": 20,
-  "hasNext": false
-}
-```
-
-
 <a id="pageauditlog"></a>
 ## PageAuditLog
 
@@ -5447,64 +5240,6 @@ AuditLog 的分页结果。固定按白名单排序；同值用 id 排序。
   "mimeType": "image/jpeg",
   "sizeBytes": 102400,
   "publicUrl": null
-}
-```
-
-
-<a id="notificationusersinput"></a>
-## NotificationUsersInput
-
-向指定用户发送站内通知。
-
-| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
-|---|---|---|---|---|
-| `audience` | string | 是 | 指定用户。 | 枚举: `USERS` |
-| `userIds` | string[] | 是 | USERS 必填；ALL_ACTIVE 禁止传 | 最少项: `1`；最多项: `1000`；元素不重复 |
-| `title` | string | 是 | 标题。 | 最短: `1`；最长: `100` |
-| `body` | string | 是 | 纯文本。 | 最短: `1`；最长: `2000` |
-| `target` | [NotificationTarget](#notificationtarget) | 是 | 见关联对象。 |  |
-
-示例（仅结构示意，不作为可用业务 ID）：
-
-```json
-{
-  "audience": "USERS",
-  "userIds": [
-    "id_10001"
-  ],
-  "title": "服务通知",
-  "body": "平台内容已更新。",
-  "target": {
-    "type": "ORDER",
-    "resourceId": "id_10001"
-  }
-}
-```
-
-
-<a id="notificationallinput"></a>
-## NotificationAllInput
-
-任务创建时对活跃用户取接收者快照；不允许 userIds。
-
-| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
-|---|---|---|---|---|
-| `audience` | string | 是 | 全部活跃用户。 | 枚举: `ALL_ACTIVE` |
-| `title` | string | 是 | 标题。 | 最短: `1`；最长: `100` |
-| `body` | string | 是 | 纯文本。 | 最短: `1`；最长: `2000` |
-| `target` | [NotificationTarget](#notificationtarget) | 是 | 见关联对象。 |  |
-
-示例（仅结构示意，不作为可用业务 ID）：
-
-```json
-{
-  "audience": "ALL_ACTIVE",
-  "title": "服务通知",
-  "body": "平台内容已更新。",
-  "target": {
-    "type": "ORDER",
-    "resourceId": "id_10001"
-  }
 }
 ```
 
@@ -6403,6 +6138,210 @@ ContentFavorite 的分页结果。固定按白名单排序；同值用 id 排序
       "name": "顺丰速运",
       "phoneLast4Required": true
     }
+  ]
+}
+```
+
+
+<a id="inappmessage"></a>
+## InAppMessage
+
+本人站内消息。正文纯文本，使用 textContent 或框架默认转义渲染；资源跳转仍需对应业务接口鉴权。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `id` | string | 是 | UUID v4。 | 格式: `uuid` |
+| `sequence` | string | 是 | 本人收件箱内单调递增的序号，实际消息大于 0；不同用户序号独立。 | 最长: `19`；正则: `^(0 / [1-9]\d{0,18})$` |
+| `category` | string | 是 | 消息分类；发货与运单更正归 ORDER。 | 枚举: `ORDER, AFTERSALE, MEMBERSHIP, SYSTEM` |
+| `title` | string | 是 | 纯文本标题。 | 最短: `1`；最长: `120` |
+| `body` | string | 是 | 纯文本正文，不作为 HTML 执行。 | 最短: `1`；最长: `2000` |
+| `resourceType` | string / null | 是 | 关联资源类别；管理员手动消息为 null；前端使用固定路由。 | 枚举: `ORDER, AFTERSALE, MEMBERSHIP, None` |
+| `resourceId` | string / null | 是 | 关联订单或售后 ID；MEMBERSHIP 为本人用户 ID，前端读取 /me/membership；无关联时为 null。 | 格式: `uuid` |
+| `readAt` | string / null | 是 | UTC 时间；未发生时为 null。 | 格式: `date-time` |
+| `createdAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "id": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+  "sequence": "12",
+  "category": "ORDER",
+  "title": "订单已发货",
+  "body": "您的订单已发货，请进入订单查看物流。",
+  "resourceType": "ORDER",
+  "resourceId": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+  "readAt": "2026-10-22T02:00:00Z",
+  "createdAt": "2026-10-22T02:00:00Z"
+}
+```
+
+
+<a id="messagepollresult"></a>
+## MessagePollResult
+
+短轮询立即返回当前状态，不保持连接。无消息且 revision=0 时 changed=false。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `changed` | boolean | 是 | 收件箱当前 revision 是否与请求不同；已读和删除也可能触发。 |  |
+| `revision` | string | 是 | 本人收件箱版本；新增、已读、删除实际改变状态时递增，不能用作消息序号。 | 最长: `19`；正则: `^(0 / [1-9]\d{0,18})$` |
+| `unreadCount` | integer | 是 | 未删除消息的未读数量，由写事务维护；轮询不执行 COUNT。 | 最小: `0` |
+| `latestSequence` | string | 是 | 本人历来分配的最大消息序号；删除不回退，空收件箱为字符串 0。 | 最长: `19`；正则: `^(0 / [1-9]\d{0,18})$` |
+| `pollAfterSeconds` | integer | 是 | 建议至少等待的轮询间隔，固定 60 秒，可再增加 0–10 秒随机抖动。 | 最小: `60`；最大: `60` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "changed": true,
+  "revision": "12",
+  "unreadCount": 2,
+  "latestSequence": "12",
+  "pollAfterSeconds": 60
+}
+```
+
+
+<a id="messagepage"></a>
+## MessagePage
+
+游标分页，无 total 和 COUNT。afterSequence 升序读取新消息，其余按序号倒序读取历史。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `items` | [InAppMessage[]](#inappmessage) | 是 | 当前页，空列表为 []；不含已删除消息。 |  |
+| `hasMore` | boolean | 是 | 当前方向是否还有消息；使用 limit+1 判定。 |  |
+| `nextBeforeSequence` | string / null | 是 | 历史模式且 hasMore=true 时为本页最后序号；其他情况 null。 | 最长: `19`；正则: `^(0 / [1-9]\d{0,18})$` |
+| `nextAfterSequence` | string / null | 是 | 增量模式为本页最后序号；空页保留请求 afterSequence，即使 hasMore=false 也返回。历史模式为 null。 | 最长: `19`；正则: `^(0 / [1-9]\d{0,18})$` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "items": [
+    {
+      "id": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+      "sequence": "12",
+      "category": "ORDER",
+      "title": "订单已发货",
+      "body": "您的订单已发货，请进入订单查看物流。",
+      "resourceType": "ORDER",
+      "resourceId": "fedb46b4-eae6-44a8-8abd-1739bb089611",
+      "readAt": "2026-10-22T02:00:00Z",
+      "createdAt": "2026-10-22T02:00:00Z"
+    }
+  ],
+  "hasMore": false,
+  "nextBeforeSequence": "12",
+  "nextAfterSequence": "12"
+}
+```
+
+
+<a id="messagemutationresult"></a>
+## MessageMutationResult
+
+已读／删除操作后的收件箱状态；无实际变化时 revision 不增加。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `updated` | integer | 是 | 实际修改的消息数；重复已读为 0，成功删除为 1。 | 最小: `0` |
+| `revision` | string | 是 | 本人收件箱版本；新增、已读、删除实际改变状态时递增，不能用作消息序号。 | 最长: `19`；正则: `^(0 / [1-9]\d{0,18})$` |
+| `unreadCount` | integer | 是 | 未删除消息的未读数量，由写事务维护；轮询不执行 COUNT。 | 最小: `0` |
+| `latestSequence` | string | 是 | 本人历来分配的最大消息序号；删除不回退，空收件箱为字符串 0。 | 最长: `19`；正则: `^(0 / [1-9]\d{0,18})$` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "updated": 1,
+  "revision": "12",
+  "unreadCount": 2,
+  "latestSequence": "12"
+}
+```
+
+
+<a id="messagesreadinput"></a>
+## MessagesReadInput
+
+批量标记本人消息已读；任一 ID 不存在、已删除或属于他人，整个操作 404 并回滚。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `ids` | string[] | 是 | 1–100 个不重复的本人消息 UUID v4。 | 最少项: `1`；最多项: `100`；元素不重复 |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "ids": [
+    "fedb46b4-eae6-44a8-8abd-1739bb089611"
+  ]
+}
+```
+
+
+<a id="messagesreadallinput"></a>
+## MessagesReadAllInput
+
+标记已知快照范围内全部已读；不得使用未来上界，防止把并发到达的新消息标记已读。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `throughSequence` | string | 是 | 此前轮询返回的 latestSequence；只更新 <= 此值的本人未读消息，大于服务器当前最大序号返回 400。 | 最长: `19`；正则: `^(0 / [1-9]\d{0,18})$` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "throughSequence": "12"
+}
+```
+
+
+<a id="adminmessageinput"></a>
+## AdminMessageInput
+
+向明确指定的活跃用户同步发送 SYSTEM 纯文本消息；不接受任意链接、资源目标或用户群发选择器。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `userIds` | string[] | 是 | 1–100 个不重复的 ACTIVE 用户 UUID v4；任一接收者不可用则整体 404，不会部分发送。 | 最少项: `1`；最多项: `100`；元素不重复 |
+| `title` | string | 是 | 纯文本标题，不能全为空白。 | 最短: `1`；最长: `120`；正则: `\S` |
+| `body` | string | 是 | 纯文本正文，不能全为空白；前端必须转义显示。 | 最短: `1`；最长: `2000`；正则: `\S` |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "userIds": [
+    "fedb46b4-eae6-44a8-8abd-1739bb089611"
+  ],
+  "title": "cs服务通知",
+  "body": "您可以在消息中心查看订单、售后和会员通知。"
+}
+```
+
+
+<a id="adminmessageresult"></a>
+## AdminMessageResult
+
+已在同一事务内全部投递；相同幂等键及请求重放返回原结果。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `sentCount` | integer | 是 | 本次接收人数。 | 最小: `1`；最大: `100` |
+| `messageIds` | string[] | 是 | 生成的消息 ID；不承诺与输入 userIds 的顺序对应。 | 最少项: `1`；最多项: `100`；元素不重复 |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "sentCount": 1,
+  "messageIds": [
+    "fedb46b4-eae6-44a8-8abd-1739bb089611"
   ]
 }
 ```

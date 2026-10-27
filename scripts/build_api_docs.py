@@ -926,6 +926,8 @@ from cart_favorites_contract import apply_cart_favorites_contract
 apply_cart_favorites_contract(globals())
 from logistics_contract import apply_logistics_contract
 apply_logistics_contract(globals())
+from messages_contract import apply_messages_contract
+apply_messages_contract(globals())
 
 AUTH_LABELS = {
     "public": ("否", "否"), "optional": ("可选", "否"), "user": ("是", "否"),
@@ -935,6 +937,7 @@ AUTH_LABELS = {
 }
 
 ERRORS = [
+    (400, 'IDEMPOTENCY_KEY_REQUIRED', '管理端发送消息等写操作缺少合法幂等键', '提交 16–64 位合法 Idempotency-Key'),
     (400, 'CARRIER_UNSUPPORTED', '快递公司代码不支持', '读取管理端快递公司列表'),
     (409, 'SHIPMENT_STATE_INVALID', '当前物流或订单状态不允许操作', '刷新物流并检查揽收状态'),
     (429, 'LOGISTICS_REFRESH_TOO_FREQUENT', '同一运单主动查询不足 60 秒间隔', '稍后读取缓存或重试'),
@@ -1050,6 +1053,8 @@ def path_parameters(operation):
             schema = enum("支付渠道；只对接已经配置的商户协议。", "wechat|alipay")
         elif name == "type" and "legal-documents" in operation["path"]:
             schema = enum("协议类型。", "TERMS|PRIVACY")
+        elif name == "id" and operation["path"].startswith('/me/messages/'):
+            schema = string('本人消息 UUID v4。', 'fedb46b4-eae6-44a8-8abd-1739bb089611', format='uuid')
         results.append({"in": "path", "name": name, "required": True,
                         "description": schema["description"], "schema": schema})
     return results
@@ -1063,8 +1068,8 @@ def operation_id(operation):
 def make_spec():
     spec = {
         "openapi": "3.0.3",
-        "info": {"title": "两性健康服务平台 API", "version": "1.9.0",
-                 "description": "已实现认证、用户资料与后台用户管理、实物交易、购物车与内容收藏、科普与课程、专栏、会员方案购买与期限管理、统一 OSS 上传与私有售后凭证、B 站／飞书视频授权。当前测试服务器已配置杭州区域的 chunai-photo、chunai-private 与 ECS RAM 角色 chunai-oss；公开图片桶已允许对象公开访问，私有桶仍阻止公共访问。配置缺失或存储不可用时返回 503。x-implementation-status 表示仓库实现状态；线上以部署版本为准。支付退款使用 TEST 模式；短信、真实支付、AI、通知和第三方物流暂未接入。"},
+        "info": {"title": "两性健康服务平台 API", "version": "1.10.0",
+                 "description": "已实现认证、用户资料与后台用户管理、实物交易、购物车与内容收藏、科普与课程、专栏、会员方案购买与期限管理、统一 OSS 上传与私有售后凭证、B 站／飞书视频授权、阿里云物流查询与录单，以及站内消息短轮询和业务通知。当前测试服务器已配置杭州区域的 chunai-photo、chunai-private 与 ECS RAM 角色 chunai-oss；公开图片桶已允许对象公开访问，私有桶仍阻止公共访问。配置缺失或存储不可用时返回 503。x-implementation-status 表示仓库实现状态；线上以部署版本为准。支付退款使用 TEST 模式；短信、真实支付和 AI 暂未接入。"},
         "servers": [{"url": "http://localhost:3000/api/v1", "description": "本地开发（示例）"},
                     {"url": "http://47.97.46.242/api/v1", "description": "staging 测试服务；可用接口以部署版本为准，协议版本以接口返回值为准"},
                     {"url": "https://api.example.com/api/v1", "description": "生产域名占位，必须替换"}],
@@ -1174,9 +1179,9 @@ def schema_link(name):
 
 
 def build_api_markdown():
-    lines = ["# 接口文档", "", "> 更新：2026-10-27。已实现认证、用户资料与后台用户管理、实物交易、购物车与内容收藏、科普／课程／专栏、会员方案购买、统一 OSS 上传与私有凭证及 B 站／飞书访问；线上以部署版本为准。当前测试服务器已配置杭州区域的 chunai-photo、chunai-private 与 ECS RAM 角色 chunai-oss；公开图片桶已允许对象公开访问，私有桶仍阻止公共访问，最新状态见统一上传说明。支付退款使用测试模式，短信及第三方收付款暂缓。",
+    lines = ["# 接口文档", "", "> 更新：2026-10-27。已实现认证、用户资料与后台用户管理、实物交易、购物车与内容收藏、科普／课程／专栏、会员方案购买、统一 OSS 上传与私有凭证、B 站／飞书访问、阿里云物流查询及站内消息短轮询；线上以部署版本为准。当前测试服务器已配置杭州区域的 chunai-photo、chunai-private 与 ECS RAM 角色 chunai-oss；公开图片桶已允许对象公开访问，私有桶仍阻止公共访问，最新状态见统一上传说明。支付退款使用测试模式，短信及第三方收付款暂缓。",
              "", "已实现接口的运行方法见 [后端启动与数据库](04-backend-auth.md)。",
-             "", "测试 API：`http://47.97.46.242/api/v1`。详见 [交易模块](06-commerce.md)、[科普与课程](08-content-courses.md)、[会员购买与用户管理](09-membership-users.md)、[统一上传](10-unified-uploads.md)、[购物车与收藏](11-cart-favorites.md) 及 [部署说明](05-deployment.md)。",
+             "", "测试 API：`http://47.97.46.242/api/v1`。详见 [交易模块](06-commerce.md)、[科普与课程](08-content-courses.md)、[会员购买与用户管理](09-membership-users.md)、[统一上传](10-unified-uploads.md)、[购物车与收藏](11-cart-favorites.md)、[物流轨迹](12-logistics.md)、[站内消息](14-messages.md) 及 [部署说明](05-deployment.md)。",
              "注册示例采用本地默认协议版本 `2026-10-01`；公网测试环境当前为 `2026-10-23-test`，提交前须读取当前环境的协议接口。",
              "", "所有下列 URL 统一加前缀 `/api/v1`。请求默认 `application/json`；返回默认使用统一响应结构，表中的响应类型指 `data`。",
              "请求及响应对象的全部字段见 [数据格式文档](02-data-models.md)，状态与联调步骤见 [业务流程文档](03-business-flows.md)。",
@@ -1241,14 +1246,14 @@ def build_data_markdown():
              "| 金额 | `integer` 人民币分，`currency=CNY`；如 9900 = ¥99.00；不传浮点金额 |",
              "| 时间 | ISO 8601 UTC，如 `2026-10-22T02:00:00Z`；界面显示上海时间 |",
              "| 分页 | `page/pageSize` 从 1 开始；数据为 `items/total/page/pageSize/hasNext`；空列表为 `[]` |",
-             "| 游标 | AI 消息用 `cursor/limit`，`nextCursor=null` 表示结束 |",
+             "| 游标 | AI 消息用 `cursor/limit`；站内消息用互斥的 `beforeSequence/afterSequence` 与 `limit`，序号与 revision 均为十进制字符串 |",
              "| 空值 | 非必填字段可省略；只有标注 nullable 的字段可为 `null`；数组无值为 `[]` |",
              "| PATCH | 未传字段保持不变；仅允许标注 nullable 的字段显式清空；管理员修改须带 version |",
              "| 校验 | 未声明的 Body/Query 字段拒绝；枚举区分大小写；Query 中 boolean 仅接受 `true/false` |",
              "| 文本 | 用户消息、通知纯文本；介绍和正文 HTML 由服务端清洗，禁止脚本、事件属性及任意 iframe |",
              "| version | 每次资源写入加 1；`WHERE id=? AND version=?` 更新，冲突返回 409 |", "",
              "## 统一成功结构", "", "```json", json.dumps(sample(success_schema("ActionResult")), ensure_ascii=False, indent=2), "```", "",
-             "所有成功 JSON API 返回 `code/message/data/requestId/timestamp`；成功 `code=OK`。创建通常 201，异步受理 202，普通查询／操作 200。删除也返回 200 和 `{success:true}`。", "",
+             "所有成功 JSON API 返回 `code/message/data/requestId/timestamp`；成功 `code=OK`。创建通常 201，异步受理 202，普通查询／操作 200。删除也返回 200；通常为 `{success:true}`，站内消息删除返回更新数量及收件箱状态。", "",
              "## 统一失败结构", "", "```json", json.dumps({"code": "VALIDATION_ERROR", "message": "请求参数不合法", "data": None,
                  "error": {"details": [{"field": "items[0].quantity", "reason": "必须大于等于 1"}]}, "requestId": "req_demo_001", "timestamp": "2026-10-22T02:00:00Z"}, ensure_ascii=False, indent=2), "```", "",
              "失败时 `data=null` 且有 `error.details`；非字段错误时 details 为 []。前端用 HTTP 与 code 决策，message 只用于展示。限流同时返回 `Retry-After` 与可选 retryAfterSeconds。", "",

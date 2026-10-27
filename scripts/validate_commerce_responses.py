@@ -10,15 +10,18 @@ samples = json.loads((Path(__file__).resolve().parents[1] / '.tmp/commerce-contr
 content_samples = Path(__file__).resolve().parents[1] / '.tmp/content-contract-responses.json'
 assert content_samples.exists(), 'Run content E2E tests before validating response contracts'
 samples += json.loads(content_samples.read_text(encoding='utf-8'))
-for suite in ('users', 'membership', 'uploads', 'uploads-business', 'cart-favorites'):
+for suite in ('users', 'membership', 'uploads', 'uploads-business', 'cart-favorites', 'messages'):
     source = Path(__file__).resolve().parents[1] / f'.tmp/{suite}-contract-responses.json'
     assert source.exists(), f'Run {suite} E2E tests before validating response contracts'
     samples += json.loads(source.read_text(encoding='utf-8'))
 assert samples, 'Run the commerce E2E suite before checking response contracts'
 checked = set()
 for sample in samples:
-    matches = [(path, methods[sample['method']]) for path, methods in spec['paths'].items()
-               if sample['method'] in methods and re.fullmatch(re.sub(r'\{[^}]+\}', '[^/]+', path), sample['path'])]
+    sample_path = sample['path'].split('?', 1)[0]
+    literal = spec['paths'].get(sample_path, {}).get(sample['method'])
+    matches = [(sample_path, literal)] if literal is not None else [
+        (path, methods[sample['method']]) for path, methods in spec['paths'].items()
+        if sample['method'] in methods and re.fullmatch(re.sub(r'\{[^}]+\}', '[^/]+', path), sample_path)]
     assert len(matches) == 1, f"Missing or ambiguous contract: {sample['method']} {sample['path']}"
     path, operation = matches[0]
     assert operation['x-implementation-status'] == 'implemented', path

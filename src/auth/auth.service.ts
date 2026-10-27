@@ -137,7 +137,7 @@ export class AuthService {
     return result.data;
   }
 
-  async authenticate(authorization?: string): Promise<Principal> {
+  async authenticate(authorization?: string, recordActivity = true): Promise<Principal> {
     const match = /^Bearer ([A-Za-z0-9_.-]+)$/i.exec(authorization ?? '');
     if (!authorization) throw new ApiException(401, 'AUTH_REQUIRED', '请先登录');
     if (!match) throw invalidToken();
@@ -165,7 +165,7 @@ export class AuthService {
       });
       throw invalidToken();
     }
-    await this.db.getRepository(AuthSession).update(session.id, { lastActiveAt: new Date() });
+    if (recordActivity) await this.db.getRepository(AuthSession).update(session.id, { lastActiveAt: new Date() });
     return { user, sessionId: session.id };
   }
 

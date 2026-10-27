@@ -1,5 +1,5 @@
 export const PERMISSIONS = ['media:write', 'content:write', 'membership:write', 'users:read', 'users:ban', 'products:write', 'orders:read', 'orders:ship',
-  'aftersales:review', 'payments:test', 'audit:read'] as const;
+  'aftersales:review', 'payments:test', 'audit:read', 'messages:write'] as const;
 export type Permission = typeof PERMISSIONS[number];
 
 export function testPaymentsEnabled() {

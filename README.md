@@ -1,6 +1,6 @@
 # 两性健康服务平台 · NestJS 后端
 
-已实现 **NestJS + TypeORM + MySQL** 用户认证、独立管理员认证、产品与 SKU、库存、实物订单、阿里云物流查询与人工录单、售后退款、图文／视频科普、付费课程访问、专栏、会员购买续期、用户资料与后台用户管理，以及统一 OSS 文件上传和私有售后凭证。科普视频可跳转 B 站，会员视频经资格校验后返回飞书网盘链接与密码，本地／OSS 私有 MP4 共用播放鉴权。注册登录不需要手机验证码。支付、退款按测试模式完成流程。
+已实现 **NestJS + TypeORM + MySQL** 用户认证、独立管理员认证、产品与 SKU、库存、实物订单、阿里云物流查询与人工录单、售后退款、图文／视频科普、付费课程访问、专栏、会员购买续期、用户资料与后台用户管理、站内消息短轮询，以及统一 OSS 文件上传和私有售后凭证。科普视频可跳转 B 站，会员视频经资格校验后返回飞书网盘链接与密码，本地／OSS 私有 MP4 共用播放鉴权。注册登录不需要手机验证码。支付、退款按测试模式完成流程。
 
 使用方法、管理员权限和业务约束见 [交易后端说明](docs/06-commerce.md) 与 [科普／课程后端说明](docs/08-content-courses.md)。内容模块附 50 条以 `cs` 开头的样本、40 个章节和 4 个专栏，支持手动重复导入。
 
@@ -41,7 +41,7 @@ npm.cmd run migration:run
 npm.cmd run start:dev
 ```
 
-默认地址：`http://localhost:3000/api/v1`。迁移创建 3 张认证表、20 张管理员与交易表、6 张内容与购买权益表、3 张会员期限／套餐／购买权益表、2 张上传与售后凭证表、2 张购物车与收藏表，以及迁移记录表；已有库只执行新增迁移，不清除业务数据。
+默认地址：`http://localhost:3000/api/v1`。迁移创建 3 张认证表、20 张管理员与交易表、6 张内容与购买权益表、3 张会员期限／套餐／购买权益表、2 张上传与售后凭证表、2 张购物车与收藏表、2 张站内消息表，以及迁移记录表；已有库只执行新增迁移，不清除业务数据。
 
 头像、内容封面、正文图片、产品图片与私有 MP4 可通过「申请 OSS 表单 → 直传 → 完成校验」生成素材 ID。当前测试服务器已配置杭州区域的公开图片 Bucket `chunai-photo`、私有 Bucket `chunai-private` 和 ECS RAM 角色 `chunai-oss`，已通过真实 OSS 上传及权限联调。OSS 全局与公开图片桶已关闭“阻止公共访问”，私有桶保持开启。配置、权限与 38 项联调检查记录见 [统一上传说明](docs/10-unified-uploads.md)。已有公开 OSS 图片仍可用原登记接口；公开图片主机为 `chunai-photo.oss-cn-hangzhou.aliyuncs.com`。
 
@@ -50,6 +50,8 @@ npm.cmd run start:dev
 本地测试交易时显式配置 `COMMERCE_TEST_PAYMENTS=true`，并按 [管理员初始化](docs/06-commerce.md#管理员初始化与权限) 创建管理员；生产环境始终禁用测试结算。
 
 购物车支持 SKU 数量与勾选、实时可购买状态及事务结算清理；图文／视频收藏支持下架失效和会员／购买权限判定。详见 [购物车与收藏](docs/11-cart-favorites.md)。
+
+站内消息使用 60 秒短轮询建议间隔，每次按主键读取本人收件箱状态，不扫描消息计数，也不写心跳。支持游标列表、批量已读、快照范围全部已读及删除；订单、发货、售后和手动会员变更在业务事务中产生消息，管理员凭 `messages:write` 可向指定用户发送通知。前端暂停隐藏页轮询、失败退避，详细接入见 [站内消息](docs/14-messages.md)。
 
 ## 文档
 
@@ -65,6 +67,7 @@ npm.cmd run start:dev
 | [统一文件上传](docs/10-unified-uploads.md) | OSS 表单直传、素材归属和清理、私有售后凭证、配置要求；[HTTP 示例](examples/uploads.http) |
 | [物流轨迹与录单](docs/12-logistics.md) | 阿里云快递查询、管理录单与纠错、权限、缓存及数据库迁移；[HTTP 示例](examples/logistics.http) |
 | [商品／科普／课程分类](docs/13-category-scopes.md) | 分类作用域、内容匹配规则、旧 CONTENT 迁移；[HTTP 示例](examples/category-scopes.http) |
+| [站内消息与短轮询](docs/14-messages.md) | 本人收件箱、未读数、管理员定向发送、业务通知、低开销轮询和数据库迁移；[HTTP 示例](examples/messages.http) |
 | [CI/CD 与服务器部署](docs/05-deployment.md) | GitHub Actions、服务器布局、更新、回滚与运维 |
 | [HTTP 请求示例](examples/auth.http) | 注册、登录、刷新、资料、改密、退出 |
 | [建表 SQL](database/schema.sql) | MySQL 字段、索引和外键 |

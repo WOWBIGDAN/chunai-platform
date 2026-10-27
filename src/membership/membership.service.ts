@@ -9,6 +9,7 @@ import { MembershipEntitlement, UserMembership } from './entities';
 import { MembershipRevokeDto, MembershipSaveDto } from './membership.dto';
 import { membershipSummary } from './membership-access';
 import { assertManualMembershipWritable } from './membership-purchase';
+import { deliverMessage } from '../messages/delivery';
 
 @Injectable()
 export class MembershipService {
@@ -67,6 +68,8 @@ export class MembershipService {
       const existing = await m.findOne(UserMembership, { where: { userId }, lock: { mode: 'pessimistic_write' } });
       if (existing) checkVersion(existing, dto.version);
       else if (dto.version !== 0) conflict('VERSION_CONFLICT', '会员记录不存在，首次开通请使用 version=0');
+      const notificationTitle = !existing || existing.revokedAt ? '会员权益已开通'
+        : expiresAt.getTime() > existing.expiresAt.getTime() ? '会员有效期已延长' : '会员有效期已调整';
       const record = existing ?? m.create(UserMembership, { id: randomUUID(), userId, version: 1 });
       record.startsAt = startsAt; record.expiresAt = expiresAt; record.revokedAt = null;
       record.reason = dto.reason.trim(); record.operatorId = actorId(actor);
@@ -74,6 +77,9 @@ export class MembershipService {
       await m.save(record);
       await this.tx.audit(m, actor, existing ? 'membership.update' : 'membership.grant', userId,
         { membershipId: record.id, version: record.version, startsAt: startsAt.toISOString(), expiresAt: expiresAt.toISOString(), reason: record.reason });
+      await deliverMessage(m, { userId, eventKey: `membership:${record.id}:saved:${record.version}`, category: 'MEMBERSHIP',
+        title: notificationTitle, body: '管理员已更新会员权益，请在会员中心查看生效时间及有效期。',
+        resourceType: 'MEMBERSHIP', resourceId: userId });
       return this.detail(m, userId);
     });
   }
@@ -91,6 +97,9 @@ export class MembershipService {
       await m.save(record);
       await this.tx.audit(m, actor, 'membership.revoke', userId,
         { membershipId: record.id, version: record.version, reason: record.reason });
+      await deliverMessage(m, { userId, eventKey: `membership:${record.id}:revoked:${record.version}`, category: 'MEMBERSHIP',
+        title: '管理员开通的会员权益已撤销', body: '管理员开通的会员权益已撤销，当前会员资格请在会员中心查看。',
+        resourceType: 'MEMBERSHIP', resourceId: userId });
       return this.detail(m, userId);
     });
   }

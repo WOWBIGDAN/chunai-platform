@@ -39,7 +39,7 @@
 | 数字退款 | 管理员可发起课程全额退款；会员仅支持尚未开始的未来完整权益段全额退款。已开始会员段的退费政策不在本版自助流程中 |
 | 收货 | 用户主动确认；快递签收不自动代表用户确认；一期无自动收货 |
 | 问答 | 登录后可用；普通用户每日默认 5 次，会员按当前生效方案额度；不支持图片提问与工具代操作 |
-| 提醒 | 站内通知；订单、物流、售后、会员事件自动通知，管理员可创建站内群发任务；短信仅用于鉴权 |
+| 提醒 | 站内消息按 60 秒建议间隔短轮询；付款、发货、售后和手动会员变更自动通知，管理员可向最多 100 个明确用户发送；无全站广播任务，短信鉴权暂缓 |
 | 客户隐私 | 注册不强制收集性别、性生活等敏感健康信息；管理用户页面不展示问答内容 |
 
 如需原生 App SDK 支付、拆单／多包裹、现金提现、付费专栏、自动续费、数字产品自助售后，可作为后续版本扩展；本版本不预设这些接口已存在。
@@ -67,7 +67,7 @@
 
 DELETE 使用 200 和 `data.success=true`，不返回 204。异步受理返回 202，并通过对应 GET 查询最终状态。客户端不得把“受理”视为“支付成功、退款成功或文件处理完成”。
 
-分页固定为 `page=1&pageSize=20`，最大 100。无记录时返回 `items=[]、total=0、hasNext=false`。AI 消息使用游标分页。所有排序增加 id 作为稳定次排序键；每个接口有自己的排序白名单。日期范围为 `createdFrom` 包含、`createdTo` 不包含，要求 from < to；同一查询两端相隔最多 366 天。
+常规分页为 `page=1&pageSize=20`，最大 100。无记录时返回 `items=[]、total=0、hasNext=false`。AI 消息使用游标分页；站内消息使用 `beforeSequence/afterSequence` 和 `limit`（默认 20、最多 50），无总数统计。消息序号在本人收件箱内唯一，作为稳定排序键；其他列表同值增加 id 排序。日期范围为 `createdFrom` 包含、`createdTo` 不包含，要求 from < to；同一查询两端相隔最多 366 天。
 
 `keyword` 只搜索公开标题、简介、标签或产品名称，不搜索受保护课程正文、手机号和 AI 会话。产品价格区间过滤要求存在同一个启用 SKU 满足整个区间；min 不得大于 max。产品价格排序采用最低可售 SKU 价。
 
@@ -105,7 +105,7 @@ JSON 数字不隐式转字符串；Body 类型严格校验。Query 的 page、�
 | users:read | 脱敏用户资料、当前会员状态 |
 | users:ban | 封禁与解封，不可设置用户为管理员 |
 | membership:write | 会员方案与启停；不允许直接编辑用户权益 |
-| notifications:write | 创建、查看站内通知投递任务 |
+| messages:write | 向明确指定的活跃用户发送站内 SYSTEM 消息，不授予查看客户私人收件箱的权限 |
 | audit:read | 读取脱敏管理审计 |
 
 权限按最小职责分配。例如内容编辑一般需要 content:write 和 media:write，发货人员需要 orders:read 和 orders:ship。媒体接口可接受两种 token，管理员分支仍要检查用途及 media:write；售后凭证读取单独检查 aftersales:review 与售后关联。
@@ -122,7 +122,7 @@ JSON 数字不隐式转字符串；Body 类型严格校验。Query 的 page、�
 
 管理员与需要版本控制的客户修改提交 version。版本冲突返回 409 VERSION_CONFLICT；拒绝静默覆盖。发货、支付、取消、售后与退款还需共享订单行锁或等效的原子条件更新，在同一事务中保持状态、库存、金额、权益和事件一致。
 
-本版内部业务事件使用事务 Outbox：先把状态变化和待发送事件写入同一数据库事务，再由任务消费者投递通知、更新搜索、查询物流。消费者按 eventId 去重，失败重试，不在数据库提交前发送“支付成功”提醒。
+站内消息与对应业务状态写入同一数据库事务，消息事件通过 `(user_id,event_key)` 唯一约束去重；删除后仍保留去重记录。当前无需 Outbox、队列或通知消费者。短轮询只读消息状态一行，不更新会话活跃时间；详情和列表不自动已读。物流同步使用独立的已有定时查询与数据库租约。具体事件范围、游标和权限见 [站内消息](14-messages.md)。
 
 ## 媒体、缓存与外部协议
 
@@ -146,7 +146,7 @@ JSON 数字不隐式转字符串；Body 类型严格校验。Query 的 page、�
 | ShipmentsModule / AfterSalesModule | 出库、物流快照、退货、退款 |
 | MembershipModule / EntitlementsModule | 方案快照、会员权益段、课程永久购买权 |
 | AiModule | 会话、消息、任务、输入输出过滤、额度与 SSE |
-| NotificationsModule / UploadsModule | 通知规划；已实现文件直传、确认、私有读取和清理，尚无转码 |
+| MessagesModule / UploadsModule | 已实现站内消息短轮询、事务业务通知和管理员定向发送；文件直传、确认、私有读取和清理，尚无转码 |
 | AuditModule / JobsModule | 审计、超时关闭、回调重试、查单、退款补偿 |
 
 使用 DTO 白名单校验、统一异常映射、响应封装、独立身份 Guard、权限 Guard 和资源归属查询。统一响应封装只包普通 JSON API；SSE、渠道 ACK 和对象存储直传必须显式绕过。认证敏感接口单独限流。渠道回调保留原始 body，避免解析重排导致验签失败。
@@ -157,7 +157,7 @@ OpenAPI 文件是本版传输契约。后续 NestJS DTO 与 Swagger 生成结果
 
 | 关系 | 约束 |
 |---|---|
-| User → Session / Address / Order / Conversation / Notification | 一对多；业务查询强制 owner 条件 |
+| User → Session / Address / Order / Conversation / UserMessage | 一对多；业务查询强制 owner 条件；消息另有每用户状态行维护序号、版本及未读数 |
 | Content → Chapter | 课程一对多；科普不创建章节；章节类型跟随课程 |
 | Content ↔ Column | 多对多；关联含 sortOrder；唯一 (columnId,contentId) |
 | Product → SKU → StockLedger | 一对多；SKU 编号全局唯一；onHand>=reserved>=0 |
@@ -167,6 +167,6 @@ OpenAPI 文件是本版传输契约。后续 NestJS DTO 与 Swagger 生成结果
 | User + Course → CourseEntitlement | 同一用户与课程最多一个 ACTIVE 独立购买权 |
 | MembershipOrder → MembershipGrant | 每单一段；方案快照、起止时间、退款撤销状态可审计 |
 | Conversation → Message / Generation | 同一会话最多一个活跃生成；(owner,conversation,clientMessageId) 唯一 |
-| ProviderTransaction / RefundRequest / OutboxEvent | 渠道交易号、商户退款号、事件 ID 均有唯一约束 |
+| ProviderTransaction / RefundRequest / UserMessage | 渠道交易号、商户退款号、用户与消息事件键均有唯一约束 |
 
 公开 DTO 不等于数据库表。数据库内部可增加支付凭据哈希、加密联系信息、事件重试次数、软删除时间和操作者等字段，不能因此自动向前端公开。

@@ -11,6 +11,7 @@ import { Actor, actorId, CommerceTransaction, checkVersion, conflict, missing, p
 import { OrdersService, addressSnapshot, carrierName, testMode } from './orders.service';
 import { CatalogService } from './catalog.service';
 import { afterSaleEvidence, bindAfterSaleEvidence } from '../uploads/references';
+import { deliverMessage } from '../messages/delivery';
 
 @Injectable()
 export class AfterSalesService {
@@ -99,6 +100,9 @@ export class AfterSalesService {
       const { order: o, sale: a } = await this.lock(m, id);
       if (a.status !== 'AWAITING_RETURN' || !a.returnDeadlineAt || a.returnDeadlineAt.getTime() > Date.now()) return;
       a.status = 'CLOSED'; a.reviewNote = 'RETURN_TIMEOUT'; touch(a); await m.save(a); await this.summary(m, o);
+      await deliverMessage(m, { userId: a.userId, eventKey: `aftersale:${a.id}:return-timeout`, category: 'AFTERSALE',
+        title: '售后申请已超时关闭', body: '未在规定时间内提交退货物流，售后申请已关闭。详情请查看售后记录。',
+        resourceType: 'AFTERSALE', resourceId: a.id });
     });
   }
   private async beginRefund(m: EntityManager, a: AfterSale, o: Order) {
@@ -121,6 +125,11 @@ export class AfterSalesService {
         a.returnAddress = addressSnapshot(dto.returnAddress); a.returnDeadlineAt = new Date(Date.now() + 7 * 86400000); a.status = 'AWAITING_RETURN';
       }
       touch(a); await m.save(a); await this.summary(m, o); await this.tx.audit(m, actor, 'aftersale.review', id, { decision: dto.decision, note: dto.note });
+      await deliverMessage(m, { userId: a.userId, eventKey: `aftersale:${a.id}:reviewed`, category: 'AFTERSALE',
+        title: dto.decision === 'REJECT' ? '售后申请未通过' : '售后申请已通过',
+        body: dto.decision === 'REJECT' ? '售后申请未通过审核，请在售后详情查看审核说明。' : a.type === 'REFUND_ONLY'
+          ? '售后申请已通过审核，退款正在处理中。' : '退货申请已通过审核，请在七天内按售后详情中的要求寄回商品并提交退货物流。',
+        resourceType: 'AFTERSALE', resourceId: a.id });
       return this.view(m, a);
     }, { key, action: `aftersale.review:${id}`, body: dto });
   }
@@ -137,7 +146,10 @@ export class AfterSalesService {
       const { order: o, sale: a } = await this.lock(m, id); checkVersion(a, dto.version);
       if (a.status !== 'RETURNING') conflict('AFTERSALE_STATE_INVALID', '只能验收已提交退货物流的申请');
       a.reviewNote = dto.note; await this.beginRefund(m, a, o); touch(a); await m.save(a); await this.summary(m, o);
-      await this.tx.audit(m, actor, 'aftersale.confirm-return', id, { note: dto.note, restocked: false }); return this.view(m, a);
+      await this.tx.audit(m, actor, 'aftersale.confirm-return', id, { note: dto.note, restocked: false });
+      await deliverMessage(m, { userId: a.userId, eventKey: `aftersale:${a.id}:return-accepted`, category: 'AFTERSALE',
+        title: '退货已验收', body: '退回商品已验收，退款正在处理中。', resourceType: 'AFTERSALE', resourceId: a.id });
+      return this.view(m, a);
     }, { key, action: `aftersale.receipt:${id}`, body: dto });
   }
   retryRefund(actor: Actor, id: string, dto: VersionDto, key?: string) {
@@ -149,7 +161,10 @@ export class AfterSalesService {
       const payment = await m.findOneByOrFail(PaymentRecord, { id: r.paymentId });
       if (payment.provider !== 'TEST') throw new ApiException(503, 'REFUND_PROVIDER_UNAVAILABLE', '真实退款重试必须先查询服务商');
       r.status = 'PROCESSING'; r.failureCode = null; await m.save(r); a.status = 'REFUNDING'; touch(a); await m.save(a); await this.summary(m, o);
-      await this.tx.audit(m, actor, 'aftersale.retry-refund', id, { refundId: r.id }); return this.view(m, a);
+      await this.tx.audit(m, actor, 'aftersale.retry-refund', id, { refundId: r.id });
+      await deliverMessage(m, { userId: a.userId, eventKey: `aftersale:${a.id}:refund-retry:${a.version}`, category: 'AFTERSALE',
+        title: '退款已重新处理', body: '管理员已重新处理退款，请等待处理结果。', resourceType: 'AFTERSALE', resourceId: a.id });
+      return this.view(m, a);
     }, { key, action: `aftersale.retry:${id}`, body: dto });
   }
   refundView(r: Refund) { return { id: r.id, orderId: r.orderId, afterSaleId: r.afterSaleId, reasonType: r.afterSaleId ? 'AFTERSALE' : 'DIGITAL_ORDER', amountCents: r.amountCents,
@@ -166,7 +181,10 @@ export class AfterSalesService {
       if (r) { r.status = 'PROCESSING'; r.failureCode = null; r.version++; }
       else r = m.create(Refund, { id: randomUUID(), orderId: id, afterSaleId: null, paymentId: payment.id, amountCents: o.paidAmountCents, status: 'PROCESSING', failureCode: null, completedAt: null, version: 1 });
       await m.save(r); o.afterSaleStatus = 'PROCESSING'; touch(o); await m.save(o);
-      await this.tx.audit(m, actor, `${o.type === 'MEMBERSHIP' ? 'membership' : 'course'}.refund-request`, id, { refundId: r.id, reason: dto.reason }); return this.refundView(r);
+      await this.tx.audit(m, actor, `${o.type === 'MEMBERSHIP' ? 'membership' : 'course'}.refund-request`, id, { refundId: r.id, reason: dto.reason });
+      await deliverMessage(m, { userId: o.userId, eventKey: `refund:${r.id}:requested:${r.version}`, category: 'AFTERSALE',
+        title: '订单退款处理中', body: '管理员已发起订单退款，请在订单详情查看处理进度。', resourceType: 'ORDER', resourceId: o.id });
+      return this.refundView(r);
     }, { key, action: `course.refund:${id}`, body: dto });
   }
   private async confirmDigitalRefund(m: EntityManager, actor: Actor, candidate: Refund, dto: TestRefundDto) {
@@ -187,7 +205,12 @@ export class AfterSalesService {
       r.completedAt = new Date(); r.failureCode = null;
     } else { r.failureCode = 'TEST_FAILURE'; }
     r.status = dto.result; r.version++; await m.save(r); touch(o); await m.save(o);
-    await this.tx.audit(m, actor, `${o.type === 'MEMBERSHIP' ? 'membership' : 'course'}.refund-test-confirm`, r.id, { result: dto.result, amountCents: r.amountCents }); return this.refundView(r);
+    await this.tx.audit(m, actor, `${o.type === 'MEMBERSHIP' ? 'membership' : 'course'}.refund-test-confirm`, r.id, { result: dto.result, amountCents: r.amountCents });
+    await deliverMessage(m, { userId: o.userId, eventKey: `refund:${r.id}:result:${r.version}`, category: 'AFTERSALE',
+      title: dto.result === 'SUCCEEDED' ? '订单退款已完成' : '订单退款处理失败',
+      body: dto.result === 'SUCCEEDED' ? '订单退款流程已完成，该订单对应的购买权益已撤销。详情请查看订单。' : '订单退款处理失败，请在订单详情查看结果并联系管理员处理。',
+      resourceType: 'ORDER', resourceId: o.id });
+    return this.refundView(r);
   }
   async refunds(q: RefundQueryDto, orderId?: string, userId?: string) {
     if (userId && (!orderId || !await this.db.getRepository(Order).existsBy({ id: orderId, userId }))) throw missing();
@@ -226,7 +249,12 @@ export class AfterSalesService {
         r.completedAt = new Date(); r.failureCode = null; a.status = 'COMPLETED';
       }
       r.version++; await m.save(r); touch(a); await m.save(a); await this.summary(m, o);
-      await this.tx.audit(m, actor, 'refund.test-confirm', id, { result: dto.result, amountCents: r.amountCents }); return this.refundView(r);
+      await this.tx.audit(m, actor, 'refund.test-confirm', id, { result: dto.result, amountCents: r.amountCents });
+      await deliverMessage(m, { userId: a.userId, eventKey: `refund:${r.id}:result:${r.version}`, category: 'AFTERSALE',
+        title: dto.result === 'SUCCEEDED' ? '售后退款已完成' : '售后退款处理失败',
+        body: dto.result === 'SUCCEEDED' ? '售后退款流程已完成，请在售后详情查看处理结果。' : '售后退款处理失败，请在售后详情查看结果并联系管理员处理。',
+        resourceType: 'AFTERSALE', resourceId: a.id });
+      return this.refundView(r);
     }, { key, action: `refund.test:${id}`, body: dto });
   }
 }

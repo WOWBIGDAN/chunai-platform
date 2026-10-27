@@ -18,6 +18,7 @@ import { membershipSummary } from '../membership/membership-access';
 import { membershipQuote, grantMembership, validateMembershipOrder } from '../membership/membership-purchase';
 import { lockManagedReference } from '../uploads/references';
 import { carrierName, logisticsConfig } from './logistics-provider';
+import { deliverMessage } from '../messages/delivery';
 export { carrierName } from './logistics-provider';
 
 export function testMode() { if (!testPaymentsEnabled()) throw new ApiException(403, 'TEST_PAYMENTS_DISABLED', '测试收付款功能未启用'); }
@@ -234,6 +235,8 @@ export class OrdersService {
       const o = await this.lockOrder(m, id);
       if (o.status !== 'PENDING_PAYMENT' || o.paymentDeadlineAt.getTime() > Date.now()) return;
       await this.release(m, o, o.userId); o.status = 'CANCELLED'; o.cancelledAt = new Date(); o.cancelReason = 'PAYMENT_TIMEOUT'; touch(o); await m.save(o);
+      await deliverMessage(m, { userId: o.userId, eventKey: `order:${o.id}:payment-timeout`, category: 'ORDER',
+        title: '订单已超时关闭', body: '订单超过付款时限，已自动取消。如仍有需要，请重新下单。', resourceType: 'ORDER', resourceId: o.id });
     });
   }
   cancel(actor: Actor, id: string, dto: CancelOrderDto, key?: string) {
@@ -264,6 +267,10 @@ export class OrdersService {
       if (o.type !== 'PRODUCT') o.completedAt = o.paidAt;
       touch(o); await m.save(o);
       await this.tx.audit(m, actor, 'payment.test-confirm', id, { transactionNo: dto.transactionNo, amountCents: o.paidAmountCents });
+      await deliverMessage(m, { userId: o.userId, eventKey: `order:${o.id}:paid`, category: 'ORDER', title: '订单付款已确认',
+        body: o.type === 'PRODUCT' ? '订单付款已确认，请等待发货。' : o.type === 'COURSE'
+          ? '课程订单付款已确认，购买权益已开通，可前往课程详情查看。' : '会员订单付款已确认，请在会员中心查看生效时间及有效期。',
+        resourceType: 'ORDER', resourceId: o.id });
       return this.view(m, o, true);
     }, { key, action: `payment.test:${id}`, body: dto });
   }
@@ -284,6 +291,8 @@ export class OrdersService {
         lastSyncAttemptAt: null, nextSyncAt: null, syncLeaseToken: null, syncLeaseUntil: null, syncFailures: 0,
         items: items.map(i => ({ orderItemId: i.id, quantity: i.quantity - i.refundedQuantity })), version: 1 });
       await m.save(s); o.status = 'PENDING_RECEIPT'; touch(o); await m.save(o); await this.tx.audit(m, actor, 'order.ship', id, { shipmentId: s.id });
+      await deliverMessage(m, { userId: o.userId, eventKey: `shipment:${s.id}:shipped`, category: 'ORDER',
+        title: '订单已发货', body: '商品已发货，可在订单详情查看快递信息和物流轨迹。', resourceType: 'ORDER', resourceId: o.id });
       return this.shipmentView(s);
     }, { key, action: `order.ship:${id}`, body: dto });
   }
@@ -315,7 +324,13 @@ export class OrdersService {
       s.syncLeaseToken = null; s.syncLeaseUntil = null; s.syncStatus = 'PENDING'; s.syncErrorCode = null;
       s.nextSyncAt = new Date(Math.max(Date.now(), (s.lastSyncAttemptAt?.getTime() ?? 0) + 60000)); s.syncFailures = 0;
       if (numberChanged) s.lastSyncedAt = null;
-      touch(s); await m.save(s); await this.tx.audit(m, actor, 'shipment.correct', id, { reason: dto.reason, oldTrackingNo, trackingNo: s.trackingNo }); return this.shipmentView(s);
+      touch(s); await m.save(s); await this.tx.audit(m, actor, 'shipment.correct', id, { reason: dto.reason, oldTrackingNo, trackingNo: s.trackingNo });
+      if (numberChanged) {
+        const o = await m.findOneByOrFail(Order, { id: s.orderId });
+        await deliverMessage(m, { userId: o.userId, eventKey: `shipment:${s.id}:corrected:${s.version}`, category: 'ORDER',
+          title: '订单物流信息已更新', body: '快递公司或运单号已调整，请在订单详情查看最新物流信息。', resourceType: 'ORDER', resourceId: o.id });
+      }
+      return this.shipmentView(s);
     });
   }
   addLogisticsEvent(actor: Actor, id: string, dto: LogisticsEventDto, key?: string) {
