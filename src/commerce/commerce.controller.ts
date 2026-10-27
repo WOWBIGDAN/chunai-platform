@@ -11,6 +11,8 @@ import { Actor, CommerceTransaction, missing, page } from './transaction';
 import { Address, AuditLog } from './entities';
 import { Permission } from './permissions';
 import * as D from './commerce.dto';
+import { LogisticsService } from './logistics.service';
+import { CARRIERS } from './logistics-provider';
 
 const uuid = new ParseUUIDPipe({ version: '4' });
 const user = (r: ApiRequest): Actor => ({ kind: 'user', principal: r.principal! });
@@ -27,7 +29,7 @@ export class CatalogController {
 @Controller()
 @UseGuards(AuthGuard)
 export class CustomerCommerceController {
-  constructor(private readonly orders: OrdersService, private readonly sales: AfterSalesService, private readonly db: DataSource) {}
+  constructor(private readonly orders: OrdersService, private readonly sales: AfterSalesService, private readonly db: DataSource, private readonly tracking: LogisticsService) {}
   @Get('me/addresses') addresses(@Req() r: ApiRequest, @Query() q: PageDto) { return this.orders.addresses(r.principal!.user.id, q); }
   @Get('me/addresses/:id') async address(@Req() r: ApiRequest, @Param('id', uuid) id: string) {
     const a = await this.db.getRepository(Address).findOneBy({ id, userId: r.principal!.user.id }); if (!a) throw missing();
@@ -44,7 +46,7 @@ export class CustomerCommerceController {
   cancel(@Req() r: ApiRequest, @Param('id', uuid) id: string, @Body() d: D.CancelOrderDto, @Headers('idempotency-key') key?: string) { return this.orders.cancel(user(r), id, d, key); }
   @Post('orders/:id/confirm-receipt') @HttpCode(200)
   receipt(@Req() r: ApiRequest, @Param('id', uuid) id: string, @Body() d: D.VersionDto, @Headers('idempotency-key') key?: string) { return this.orders.confirmReceipt(user(r), id, d, key); }
-  @Get('orders/:id/logistics') logistics(@Req() r: ApiRequest, @Param('id', uuid) id: string) { return this.orders.logistics(id, r.principal!.user.id); }
+  @Get('orders/:id/logistics') logistics(@Req() r: ApiRequest, @Param('id', uuid) id: string) { return this.tracking.read(id, r.principal!.user.id); }
   @Get('orders/:id/refunds') refunds(@Req() r: ApiRequest, @Param('id', uuid) id: string, @Query() q: D.RefundQueryDto) { return this.sales.refunds(q, id, r.principal!.user.id); }
   @Post('aftersales') saleCreate(@Req() r: ApiRequest, @Body() d: D.AfterSaleCreateDto, @Headers('idempotency-key') key?: string) { return this.sales.create(user(r), d, key); }
   @Get('aftersales') salesList(@Req() r: ApiRequest, @Query() q: D.AfterSaleQueryDto) { return this.sales.list(q, r.principal!.user.id); }
@@ -84,7 +86,7 @@ export class AdminCatalogController {
 @Controller('admin')
 @UseGuards(AdminGuard)
 export class AdminFulfilmentController {
-  constructor(private readonly orders: OrdersService, private readonly sales: AfterSalesService, private readonly db: DataSource, private readonly tx: CommerceTransaction) {}
+  constructor(private readonly orders: OrdersService, private readonly sales: AfterSalesService, private readonly db: DataSource, private readonly tx: CommerceTransaction, private readonly tracking: LogisticsService) {}
   private async auditedRead<T>(actor: Actor, action: string, id: string, read: () => Promise<T>) {
     const result = await read();
     await this.tx.run(actor, async m => { await this.tx.audit(m, actor, action, id); });
@@ -92,7 +94,9 @@ export class AdminFulfilmentController {
   }
   @Get('orders') @RequirePermission('orders:read') ordersList(@Query() q: D.AdminOrderQueryDto) { return this.orders.list(q); }
   @Get('orders/:id') @RequirePermission('orders:read') order(@Req() r: AdminRequest, @Param('id', uuid) id: string) { return this.auditedRead(admin(r, 'orders:read'), 'order.read', id, () => this.orders.getOrder(id)); }
-  @Get('orders/:id/logistics') @RequirePermission('orders:read') logistics(@Param('id', uuid) id: string) { return this.orders.logistics(id); }
+  @Get('orders/:id/logistics') @RequirePermission('orders:read') logistics(@Param('id', uuid) id: string) { return this.tracking.read(id); }
+  @Get('logistics/carriers') @RequirePermission('orders:ship') carriers() { return { items: Object.entries(CARRIERS).map(([code, c]) => ({ code, name: c.name, phoneLast4Required: c.phoneRequired })) }; }
+  @Post('shipments/:id/sync') @HttpCode(200) @RequirePermission('orders:ship') sync(@Req() r: AdminRequest, @Param('id', uuid) id: string, @Body() d: D.VersionDto) { return this.tracking.refresh(admin(r, 'orders:ship'), id, d.version); }
   @Post('orders/:id/shipment') @RequirePermission('orders:ship') ship(@Req() r: AdminRequest, @Param('id', uuid) id: string, @Body() d: D.ShipmentDto, @Headers('idempotency-key') key?: string) { return this.orders.ship(admin(r, 'orders:ship'), id, d, key); }
   @Patch('shipments/:id') @RequirePermission('orders:ship') correctShipment(@Req() r: AdminRequest, @Param('id', uuid) id: string, @Body() d: D.ShipmentPatchDto) { return this.orders.patchShipment(admin(r, 'orders:ship'), id, d); }
   @Post('shipments/:id/events') @HttpCode(200) @RequirePermission('orders:ship') event(@Req() r: AdminRequest, @Param('id', uuid) id: string, @Body() d: D.LogisticsEventDto, @Headers('idempotency-key') key?: string) { return this.orders.addLogisticsEvent(admin(r, 'orders:ship'), id, d, key); }

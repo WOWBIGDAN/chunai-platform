@@ -17,9 +17,9 @@ import { courseQuote, grantCourse, validateCourseOrder } from '../content/course
 import { membershipSummary } from '../membership/membership-access';
 import { membershipQuote, grantMembership, validateMembershipOrder } from '../membership/membership-purchase';
 import { lockManagedReference } from '../uploads/references';
+import { carrierName, logisticsConfig } from './logistics-provider';
+export { carrierName } from './logistics-provider';
 
-export const CARRIERS: Record<string, string> = { SF: '顺丰速运', YTO: '圆通速递', ZTO: '中通快递', STO: '申通快递', YUNDA: '韵达快递', EMS: '中国邮政', JD: '京东物流' };
-export function carrierName(code: string) { if (!CARRIERS[code]) throw new ApiException(400, 'CARRIER_UNSUPPORTED', '不支持的快递代码'); return CARRIERS[code]; }
 export function testMode() { if (!testPaymentsEnabled()) throw new ApiException(403, 'TEST_PAYMENTS_DISABLED', '测试收付款功能未启用'); }
 export function addressSnapshot(dto: AddressSnapshot): AddressSnapshot {
   const { recipient, phone, provinceCode, province, cityCode, city, districtCode, district, detail } = dto;
@@ -280,17 +280,25 @@ export class OrdersService {
       for (const i of items) await this.catalog.moveStock(m, skus.get(i.resourceId!)!, -(i.quantity - i.refundedQuantity), -(i.quantity - i.refundedQuantity), 'ORDER_SHIPPED', actorId(actor), id);
       const s = m.create(Shipment, { id: randomUUID(), orderId: id, carrierCode: dto.carrierCode, carrierName: name,
         trackingNo: dto.trackingNo, status: 'PENDING_PICKUP', shippedAt: new Date(), deliveredAt: null, lastSyncedAt: null,
+        queryPhoneLast4: dto.phoneLast4 ?? null, syncStatus: 'PENDING', syncErrorCode: null,
+        lastSyncAttemptAt: null, nextSyncAt: null, syncLeaseToken: null, syncLeaseUntil: null, syncFailures: 0,
         items: items.map(i => ({ orderItemId: i.id, quantity: i.quantity - i.refundedQuantity })), version: 1 });
       await m.save(s); o.status = 'PENDING_RECEIPT'; touch(o); await m.save(o); await this.tx.audit(m, actor, 'order.ship', id, { shipmentId: s.id });
       return this.shipmentView(s);
     }, { key, action: `order.ship:${id}`, body: dto });
   }
   async logistics(id: string, userId?: string) {
-    if (!await this.db.getRepository(Order).existsBy({ id, ...(userId ? { userId } : {}) })) throw missing();
-    const s = await this.db.getRepository(Shipment).findOneBy({ orderId: id });
-    if (!s) return { shipment: null, events: [], syncStatus: 'NOT_SHIPPED' };
-    const events = await this.db.getRepository(LogisticsEvent).find({ where: { shipmentId: s.id }, order: { time: 'DESC', id: 'DESC' }, take: 100 });
-    return { shipment: this.shipmentView(s), events: events.map(e => ({ time: e.time, description: e.description, location: e.location, source: e.source })), syncStatus: 'MANUAL' };
+    return this.db.transaction('REPEATABLE READ', async m => {
+      const o = await m.findOneBy(Order, { id, ...(userId ? { userId } : {}) }); if (!o) throw missing();
+      const s = await m.findOneBy(Shipment, { orderId: id });
+      if (!s) return { shipment: null, events: [], syncStatus: 'NOT_SHIPPED', syncErrorCode: null, lastSyncAttemptAt: null, nextSyncAt: null };
+      const events = await m.find(LogisticsEvent, { where: { shipmentId: s.id }, order: { time: 'DESC', id: 'DESC' }, take: 100 });
+      const config = logisticsConfig(); const enabled = config.enabled;
+      const active = enabled && !['DELIVERED', 'RETURNED'].includes(s.status) && ['PENDING_RECEIPT', 'COMPLETED'].includes(o.status) && s.shippedAt.getTime() >= Date.now() - config.maxDays * 86400000;
+      return { shipment: this.shipmentView(s), events: events.map(e => ({ time: e.time, description: e.description, location: e.location, source: e.source })),
+        syncStatus: !enabled ? 'MANUAL' : s.syncLeaseUntil && s.syncLeaseUntil.getTime() > Date.now() ? 'SYNCING' : s.syncStatus,
+        syncErrorCode: enabled ? s.syncErrorCode : null, lastSyncAttemptAt: s.lastSyncAttemptAt, nextSyncAt: active ? s.nextSyncAt : null };
+    });
   }
   private async lockShipment(m: EntityManager, id: string) {
     const candidate = await m.findOneBy(Shipment, { id }); if (!candidate) throw missing();
@@ -300,8 +308,13 @@ export class OrdersService {
   patchShipment(actor: Actor, id: string, dto: ShipmentPatchDto) {
     return this.tx.run(actor, async m => {
       const s = await this.lockShipment(m, id); checkVersion(s, dto.version);
-      if (s.status !== 'PENDING_PICKUP' || await m.countBy(LogisticsEvent, { shipmentId: id })) conflict('SHIPMENT_STATE_INVALID', '揽收后不能修改运单');
+      const numberChanged = s.carrierCode !== dto.carrierCode || s.trackingNo !== dto.trackingNo;
+      if (numberChanged && (s.status !== 'PENDING_PICKUP' || await m.countBy(LogisticsEvent, { shipmentId: id }))) conflict('SHIPMENT_STATE_INVALID', '揽收后不能修改运单');
       const oldTrackingNo = s.trackingNo; s.carrierName = carrierName(dto.carrierCode); s.carrierCode = dto.carrierCode; s.trackingNo = dto.trackingNo;
+      if (dto.phoneLast4 !== undefined) s.queryPhoneLast4 = dto.phoneLast4;
+      s.syncLeaseToken = null; s.syncLeaseUntil = null; s.syncStatus = 'PENDING'; s.syncErrorCode = null;
+      s.nextSyncAt = new Date(Math.max(Date.now(), (s.lastSyncAttemptAt?.getTime() ?? 0) + 60000)); s.syncFailures = 0;
+      if (numberChanged) s.lastSyncedAt = null;
       touch(s); await m.save(s); await this.tx.audit(m, actor, 'shipment.correct', id, { reason: dto.reason, oldTrackingNo, trackingNo: s.trackingNo }); return this.shipmentView(s);
     });
   }
@@ -310,7 +323,7 @@ export class OrdersService {
       const s = await this.lockShipment(m, id); checkVersion(s, dto.version);
       const latest = await m.findOne(LogisticsEvent, { where: { shipmentId: id }, order: { time: 'DESC' } });
       const time = new Date(dto.time);
-      const transitions: Record<string, string[]> = { PENDING_PICKUP: ['IN_TRANSIT', 'EXCEPTION'], IN_TRANSIT: ['IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'EXCEPTION'], OUT_FOR_DELIVERY: ['OUT_FOR_DELIVERY', 'DELIVERED', 'EXCEPTION'], EXCEPTION: ['IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'EXCEPTION'], DELIVERED: [] };
+      const transitions: Record<string, string[]> = { PENDING_PICKUP: ['IN_TRANSIT', 'EXCEPTION'], IN_TRANSIT: ['IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'EXCEPTION'], OUT_FOR_DELIVERY: ['OUT_FOR_DELIVERY', 'DELIVERED', 'EXCEPTION'], EXCEPTION: ['IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'EXCEPTION'], DELIVERED: [], RETURNED: [] };
       if (!transitions[s.status].includes(dto.status) || time.getTime() < s.shippedAt.getTime() || time.getTime() > Date.now() + 60000 || (latest && time < latest.time)) conflict('SHIPMENT_STATE_INVALID', '物流状态或事件时间不合法');
       await m.insert(LogisticsEvent, { id: randomUUID(), shipmentId: id, time, description: dto.description, location: dto.location ?? null, source: 'MANUAL' });
       s.status = dto.status; if (dto.status === 'DELIVERED') s.deliveredAt = time;

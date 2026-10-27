@@ -9,7 +9,9 @@ import { DataSource } from 'typeorm';
 import request from 'supertest';
 import { setupApp } from '../../src/setup-app';
 import { PasswordService } from '../../src/auth/password.service';
-import { AdminAccount, AdminSession, AfterSale, Order, Refund, Sku } from '../../src/commerce/entities';
+import { AdminAccount, AdminSession, AfterSale, Order, Refund, Sku, Shipment, LogisticsEvent } from '../../src/commerce/entities';
+import { LogisticsProvider, LogisticsProviderError, TrackingResult } from '../../src/commerce/logistics-provider';
+import { LogisticsService } from '../../src/commerce/logistics.service';
 import { PERMISSIONS } from '../../src/commerce/permissions';
 import { CommerceMaintenance } from '../../src/commerce/maintenance.service';
 
@@ -311,6 +313,130 @@ describe('commerce permissions and real MySQL business transactions', () => {
     await post(`/admin/shipments/${s.id}/events`, full, { version: transit.version, status: 'DELIVERED', time: new Date().toISOString(), description: '人工确认签收' }).expect(200);
     expect(data(await call('get', `/orders/${o.id}`, customer).expect(200)).status).toBe('PENDING_RECEIPT');
     const logistics = data(await call('get', `/orders/${o.id}/logistics`, customer).expect(200)); expect(logistics.syncStatus).toBe('MANUAL'); expect(logistics.events).toHaveLength(2); expect(logistics.events[0].source).toBe('MANUAL');
+  });
+  describe('automatic logistics with isolated provider responses', () => {
+    let provider: jest.SpyInstance;
+    const tracking = (status: TrackingResult['status'] = 'IN_TRANSIT'): TrackingResult => ({ status, events: [
+      { time: new Date(Date.now() - 1000), description: 'cs物流测试轨迹' },
+    ] });
+    const current = (id: string) => db.getRepository(Shipment).findOneByOrFail({ id });
+    const due = (id: string) => db.getRepository(Shipment).update(id, { nextSyncAt: new Date(0), lastSyncAttemptAt: new Date(0) });
+    async function shipped(extra = {}) {
+      const f = await fixture(); const o = await paidOrder(f.sku);
+      const s = data(await post(`/admin/orders/${o.id}/shipment`, full, { carrierCode: 'SF', trackingNo: randomUUID(), orderVersion: o.version, ...extra }).expect(201));
+      return { o, s };
+    }
+    beforeEach(() => {
+      process.env.LOGISTICS_PROVIDER = 'ALIYUN'; process.env.LOGISTICS_APPCODE = 'fakeAppCodeForTests123456';
+      provider = jest.spyOn(app.get(LogisticsProvider), 'query').mockResolvedValue(tracking());
+    });
+    afterEach(() => { provider.mockRestore(); delete process.env.LOGISTICS_PROVIDER; delete process.env.LOGISTICS_APPCODE; });
+    it('checks owner/admin permissions before querying; offers a carrier list', async () => {
+      const { o, s } = await shipped();
+      await call('get', `/orders/${o.id}/logistics`, stranger).expect(404);
+      await call('get', `/orders/${o.id}/logistics`).expect(401);
+      await post(`/admin/shipments/${s.id}/sync`, customer, { version: s.version }).expect(401);
+      await post(`/admin/shipments/${s.id}/sync`, reader, { version: s.version }).expect(403);
+      await call('get', '/admin/logistics/carriers', reader).expect(403);
+      const carriers = data(await call('get', '/admin/logistics/carriers', full).expect(200));
+      expect(carriers.items).toContainEqual({ code: 'SF', name: '顺丰速运', phoneLast4Required: true });
+      expect(provider).not.toHaveBeenCalled();
+      const read = data(await call('get', `/orders/${o.id}/logistics`, customer).expect(200));
+      expect(read.syncStatus).toBe('UP_TO_DATE'); expect(read.events[0].source).toBe('ALIYUN');
+      expect(provider).toHaveBeenCalledWith('SF', s.trackingNo, '0000');
+      expect(read.shipment).not.toHaveProperty('queryPhoneLast4'); expect(JSON.stringify(read)).not.toContain('fakeAppCode');
+    });
+    it('caches, deduplicates events, enforces cooldown and handles stale versions', async () => {
+      const { o, s } = await shipped({ phoneLast4: '9876' }); const result = tracking(); provider.mockResolvedValue({ ...result, events: [...result.events, ...result.events] });
+      await call('get', `/orders/${o.id}/logistics`, customer).expect(200);
+      await call('get', `/admin/orders/${o.id}/logistics`, full).expect(200);
+      expect(provider).toHaveBeenCalledTimes(1); expect(provider).toHaveBeenCalledWith('SF', s.trackingNo, '9876');
+      await post(`/admin/shipments/${s.id}/sync`, full, { version: s.version }).expect(409);
+      await post(`/admin/shipments/${s.id}/sync`, full, { version: (await current(s.id)).version }).expect(429);
+      await due(s.id);
+      const refreshed = data(await post(`/admin/shipments/${s.id}/sync`, full, { version: (await current(s.id)).version }).expect(200));
+      expect(refreshed.events).toHaveLength(1); expect(provider).toHaveBeenCalledTimes(2);
+      expect(await db.getRepository(LogisticsEvent).countBy({ shipmentId: s.id })).toBe(1);
+    });
+    it('reports no data and provider errors without losing prior events/status', async () => {
+      const { o, s } = await shipped(); provider.mockRejectedValue(new LogisticsProviderError('LOGISTICS_NO_DATA'));
+      let result = data(await call('get', `/orders/${o.id}/logistics`, customer).expect(200));
+      expect(result.syncStatus).toBe('NO_DATA'); expect(result.shipment.status).toBe('PENDING_PICKUP');
+      await call('get', `/orders/${o.id}/logistics`, customer).expect(200); expect(provider).toHaveBeenCalledTimes(1);
+      provider.mockResolvedValue(tracking()); await due(s.id);
+      result = data(await call('get', `/orders/${o.id}/logistics`, customer).expect(200)); const lastSyncedAt = result.shipment.lastSyncedAt;
+      provider.mockRejectedValue(new LogisticsProviderError('LOGISTICS_AUTH_FAILED')); await due(s.id);
+      result = data(await call('get', `/orders/${o.id}/logistics`, customer).expect(200));
+      expect(result.syncStatus).toBe('FAILED'); expect(result.syncErrorCode).toBe('LOGISTICS_AUTH_FAILED');
+      expect(result.events).toHaveLength(1); expect(result.shipment.status).toBe('IN_TRANSIT'); expect(result.shipment.lastSyncedAt).toBe(lastSyncedAt);
+      expect(new Date(result.nextSyncAt).getTime() - Date.now()).toBeGreaterThan(5 * 3600000);
+    });
+    it('serializes concurrent requests with a database lease and recovers expired leases', async () => {
+      const { o, s } = await shipped(); let release!: (value: TrackingResult) => void;
+      let started!: () => void; const waiting = new Promise<void>(resolve => { started = resolve; });
+      provider.mockImplementation(() => { started(); return new Promise<TrackingResult>(resolve => { release = resolve; }); });
+      const first = call('get', `/orders/${o.id}/logistics`, customer).then(r => r);
+      await waiting;
+      const second = data(await call('get', `/orders/${o.id}/logistics`, customer).expect(200));
+      expect(second.syncStatus).toBe('SYNCING'); expect(provider).toHaveBeenCalledTimes(1);
+      release(tracking()); expect((await first).status).toBe(200);
+      await due(s.id); await db.getRepository(Shipment).update(s.id, { syncLeaseToken: randomUUID(), syncLeaseUntil: new Date(0) });
+      provider.mockResolvedValue(tracking());
+      await call('get', `/orders/${o.id}/logistics`, customer).expect(200); expect(provider).toHaveBeenCalledTimes(2);
+    });
+    it('discards an in-flight response when the admin corrects the tracking number', async () => {
+      const { o, s } = await shipped(); let release!: (value: TrackingResult) => void;
+      let started!: () => void; const waiting = new Promise<void>(resolve => { started = resolve; });
+      provider.mockImplementation(() => { started(); return new Promise<TrackingResult>(resolve => { release = resolve; }); });
+      const first = call('get', `/orders/${o.id}/logistics`, customer).then(r => r); await waiting;
+      const corrected = data(await call('patch', `/admin/shipments/${s.id}`, full, { version: s.version, carrierCode: 'YTO', trackingNo: 'CSNEW123', reason: 'cs纠正单号', phoneLast4: null }).expect(200));
+      release(tracking('DELIVERED')); expect((await first).status).toBe(200);
+      expect((await current(s.id)).trackingNo).toBe('CSNEW123'); expect((await current(s.id)).status).toBe('PENDING_PICKUP');
+      expect(await db.getRepository(LogisticsEvent).countBy({ shipmentId: s.id })).toBe(0); expect(corrected.version).toBe(2);
+    });
+    it('does not overwrite a concurrent manual event or let an old provider event regress state', async () => {
+      const { o, s } = await shipped(); let release!: (value: TrackingResult) => void;
+      let started!: () => void; const waiting = new Promise<void>(resolve => { started = resolve; });
+      provider.mockImplementation(() => { started(); return new Promise<TrackingResult>(resolve => { release = resolve; }); });
+      const first = call('get', `/orders/${o.id}/logistics`, customer).then(r => r); await waiting;
+      const manual = data(await post(`/admin/shipments/${s.id}/events`, full, { version: s.version, status: 'IN_TRANSIT', time: new Date().toISOString(), description: 'cs人工揽收' }).expect(200));
+      release(tracking('DELIVERED')); await first;
+      expect((await current(s.id)).status).toBe('IN_TRANSIT'); expect(await db.getRepository(LogisticsEvent).countBy({ shipmentId: s.id })).toBe(1);
+      await post(`/admin/shipments/${s.id}/events`, full, { version: manual.version, status: 'OUT_FOR_DELIVERY', time: new Date().toISOString(), description: 'cs派送' }).expect(200);
+      provider.mockResolvedValue(tracking('IN_TRANSIT')); await due(s.id);
+      const result = data(await call('get', `/orders/${o.id}/logistics`, customer).expect(200));
+      expect(result.shipment.status).toBe('OUT_FOR_DELIVERY');
+    });
+    it.each(['DELIVERED', 'RETURNED'] as const)('stops automatic polling for %s without changing order/payment or restoring stock', async status => {
+      const { o, s } = await shipped(); provider.mockResolvedValue(tracking(status));
+      let result = data(await call('get', `/orders/${o.id}/logistics`, customer).expect(200));
+      expect(result.shipment.status).toBe(status); expect(result.nextSyncAt).toBeNull();
+      expect((await db.getRepository(Order).findOneByOrFail({ id: o.id })).status).toBe('PENDING_RECEIPT');
+      await due(s.id); await call('get', `/orders/${o.id}/logistics`, customer).expect(200); expect(provider).toHaveBeenCalledTimes(1);
+      provider.mockResolvedValue(tracking());
+      result = data(await post(`/admin/shipments/${s.id}/sync`, full, { version: (await current(s.id)).version }).expect(200));
+      expect(result.shipment.status).toBe(status);
+    });
+    it('supports phone correction after pickup and rejects number correction after pickup', async () => {
+      const { o, s } = await shipped(); await call('get', `/orders/${o.id}/logistics`, customer).expect(200);
+      const version = (await current(s.id)).version;
+      await call('patch', `/admin/shipments/${s.id}`, full, { version, carrierCode: 'SF', trackingNo: 'WRONG', reason: 'cs纠错' }).expect(409);
+      await call('patch', `/admin/shipments/${s.id}`, full, { version, carrierCode: 'SF', trackingNo: s.trackingNo, reason: 'cs尾号纠错', phoneLast4: '4321' }).expect(200);
+      await due(s.id); await call('get', `/orders/${o.id}/logistics`, customer).expect(200);
+      expect(provider).toHaveBeenLastCalledWith('SF', s.trackingNo, '4321');
+      await call('patch', `/admin/shipments/${s.id}`, full, { version: (await current(s.id)).version, carrierCode: 'SF', trackingNo: s.trackingNo, reason: 'cs格式检查', phoneLast4: '12345' }).expect(400);
+    });
+    it('background sweep ignores closed/expired orders and manual refresh requires enabled service', async () => {
+      const active = await shipped(), old = await shipped(), closed = await shipped();
+      await db.getRepository(Shipment).update(old.s.id, { shippedAt: new Date(Date.now() - 31 * 86400000) });
+      await db.getRepository(Order).update(closed.o.id, { status: 'CLOSED' });
+      await app.get(LogisticsService).sweep();
+      expect(provider.mock.calls.some(c => c[1] === active.s.trackingNo)).toBe(true);
+      expect(provider.mock.calls.some(c => [old.s.trackingNo, closed.s.trackingNo].includes(c[1]))).toBe(false);
+      await post(`/admin/shipments/${closed.s.id}/sync`, full, { version: closed.s.version }).expect(409);
+      process.env.LOGISTICS_PROVIDER = 'NONE';
+      await post(`/admin/shipments/${old.s.id}/sync`, full, { version: old.s.version }).expect(503);
+    });
   });
   it('publishes CORS permissions for PATCH and Idempotency-Key without exposing credentials', async () => {
     const r = await api().options('/api/v1/admin/products').set('Origin', 'http://localhost:5173')

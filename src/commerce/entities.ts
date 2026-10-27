@@ -162,6 +162,14 @@ export class Shipment extends Versioned {
   @Column({ name: 'shipped_at', type: 'datetime', precision: 3 }) shippedAt!: Date;
   @Column({ name: 'delivered_at', type: 'datetime', precision: 3, nullable: true }) deliveredAt!: Date | null;
   @Column({ name: 'last_synced_at', type: 'datetime', precision: 3, nullable: true }) lastSyncedAt!: Date | null;
+  @Column({ name: 'query_phone_last4', type: 'char', length: 4, nullable: true }) queryPhoneLast4!: string | null;
+  @Column({ name: 'sync_status', type: 'varchar', length: 16, default: 'PENDING' }) syncStatus!: string;
+  @Column({ name: 'sync_error_code', type: 'varchar', length: 64, nullable: true }) syncErrorCode!: string | null;
+  @Column({ name: 'last_sync_attempt_at', type: 'datetime', precision: 3, nullable: true }) lastSyncAttemptAt!: Date | null;
+  @Column({ name: 'next_sync_at', type: 'datetime', precision: 3, nullable: true }) nextSyncAt!: Date | null;
+  @Column({ name: 'sync_lease_token', type: 'varchar', length: 36, nullable: true }) syncLeaseToken!: string | null;
+  @Column({ name: 'sync_lease_until', type: 'datetime', precision: 3, nullable: true }) syncLeaseUntil!: Date | null;
+  @Column({ name: 'sync_failures', type: 'int', unsigned: true, default: 0 }) syncFailures!: number;
   @Column({ type: 'json' }) items!: { orderItemId: string; quantity: number }[];
 }
 @Entity('logistics_events')
@@ -171,6 +179,7 @@ export class LogisticsEvent extends RecordBase {
   @Column({ type: 'varchar', length: 500 }) description!: string;
   @Column({ type: 'varchar', length: 100, nullable: true }) location!: string | null;
   @Column({ type: 'varchar', length: 16, default: 'MANUAL' }) source!: string;
+  @Column({ name: 'event_key', type: 'char', length: 64, nullable: true }) eventKey!: string | null;
 }
 export const ACTIVE_AFTERSALES = ['PENDING_REVIEW', 'AWAITING_RETURN', 'RETURNING', 'REFUNDING', 'REFUND_FAILED'];
 export const AFTERSALE_STATUSES = [...ACTIVE_AFTERSALES, 'REJECTED', 'CANCELLED', 'CLOSED', 'COMPLETED'];

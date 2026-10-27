@@ -772,7 +772,7 @@ PRODUCT、COURSE、MEMBERSHIP 三选一。会员只传 type 和 planId；单份�
 
 **实现状态：** 已实现
 
-未发货返回空包裹；已发货返回人工登记物流，syncStatus=MANUAL，lastSyncedAt=null。尚未接入第三方快递查询。
+用户仅查本人；管理端需 orders:read。启用物流服务后按缓存到期同步，再返回最近 100 条轨迹；默认 30 分钟查询间隔，并发查询复用数据库租约。后台每分钟批量扫描，默认自动追踪发货后 30 天；已签收、退件签收或关闭订单停止自动查询。上游故障仍返回已有轨迹和 FAILED，暂无轨迹为 NO_DATA。未配置服务仍支持人工轨迹。快递签收不会自动完成订单。
 
 | 位置 | 名称 | 类型 | 必填 | 说明与约束 |
 |---|---|---|---|---|
@@ -2384,6 +2384,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 | [A152](#a152) | 测试确认退款结果 | `POST` | `/admin/refunds/{id}/test-result` | 是 | 是 | `payments:test` | [TestRefundInput](02-data-models.md#testrefundinput) | [Refund](02-data-models.md#refund) | 200 |
 | [A153](#a153) | 登记人工物流轨迹 | `POST` | `/admin/shipments/{id}/events` | 是 | 是 | `orders:ship` | [ManualLogisticsInput](02-data-models.md#manuallogisticsinput) | [Shipment](02-data-models.md#shipment) | 200 |
 | [A154](#a154) | 交易审计日志 | `GET` | `/admin/commerce-audit-logs` | 是 | 是 | `audit:read` | — | [PageCommerceAuditLog](02-data-models.md#pagecommerceauditlog) | 200 |
+| [A155](#a155) | 查询可用快递公司 | `GET` | `/admin/logistics/carriers` | 是 | 是 | `orders:ship` | — | [LogisticsCarriers](02-data-models.md#logisticscarriers) | 200 |
+| [A156](#a156) | 主动同步出库物流轨迹 | `POST` | `/admin/shipments/{id}/sync` | 是 | 是 | `orders:ship` | [VersionInput](02-data-models.md#versioninput) | [LogisticsResult](02-data-models.md#logisticsresult) | 200 |
 
 ### 参数与业务约束
 
@@ -2430,7 +2432,7 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 **实现状态：** 已实现
 
-未发货返回空包裹；已发货返回人工登记物流，syncStatus=MANUAL，lastSyncedAt=null。尚未接入第三方快递查询。
+用户仅查本人；管理端需 orders:read。启用物流服务后按缓存到期同步，再返回最近 100 条轨迹；默认 30 分钟查询间隔，并发查询复用数据库租约。后台每分钟批量扫描，默认自动追踪发货后 30 天；已签收、退件签收或关闭订单停止自动查询。上游故障仍返回已有轨迹和 FAILED，暂无轨迹为 NO_DATA。未配置服务仍支持人工轨迹。快递签收不会自动完成订单。
 
 | 位置 | 名称 | 类型 | 必填 | 说明与约束 |
 |---|---|---|---|---|
@@ -2445,7 +2447,7 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 
 **实现状态：** 已实现
 
-仅 PENDING_SHIPMENT 且不存在活跃售后／退款；一期一单一包裹，所有剩余未退款行一次发出。使用行锁与售后申请互斥，防止边退款边发货。
+仅 PENDING_SHIPMENT 且不存在活跃售后／退款；一期一单一包裹，所有剩余未退款行一次发出。使用行锁与售后申请互斥，防止边退款边发货。 可选 phoneLast4；只能填四位数字，单号不含冒号或电话。发货提交不等待外部服务；后台或物流详情读取触发首次查询。
 
 **必填请求头：** `Idempotency-Key`，16–64 位字母、数字、下划线或连字符；相同业务意图重试复用。
 
@@ -2463,6 +2465,8 @@ provider=wechat 或 alipay。读取原始 body；验证渠道签名、证书／�
 `PATCH /api/v1/admin/shipments/{id}`
 
 **实现状态：** 已实现
+
+揽收前且无轨迹才可改公司/单号；同一公司/单号可单独纠正查询手机尾号。省略尾号保留旧值，null 恢复使用订单收件手机尾号。需 version 和原因。纠错使旧查询结果失效；尾号不写审计或响应。
 
 | 位置 | 名称 | 类型 | 必填 | 说明与约束 |
 |---|---|---|---|---|
@@ -2669,29 +2673,57 @@ COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整�
 
 成功：HTTP `200`，`data` 为 [PageCommerceAuditLog](02-data-models.md#pagecommerceauditlog)。
 
+<a id="a155"></a>
+#### A155 查询可用快递公司
+
+`GET /api/v1/admin/logistics/carriers`
+
+**实现状态：** 已实现
+
+无额外参数或请求体。
+
+成功：HTTP `200`，`data` 为 [LogisticsCarriers](02-data-models.md#logisticscarriers)。
+
+<a id="a156"></a>
+#### A156 主动同步出库物流轨迹
+
+`POST /api/v1/admin/shipments/{id}/sync`
+
+**实现状态：** 已实现
+
+提交当前 shipment.version。只允许已发货实物订单（PENDING_RECEIPT/COMPLETED）。同运单至少间隔 60 秒，过频 429；已有查询执行中返回 SYNCING。HTTP 200 中的 syncStatus=FAILED/NO_DATA 表示上游失败/暂无轨迹；保留既有轨迹，不能当作签收。无需幂等键，数据库租约阻止并发计费。未配置服务 503。可补查已签收、退回或超过自动追踪期的单据。
+
+| 位置 | 名称 | 类型 | 必填 | 说明与约束 |
+|---|---|---|---|---|
+| path | `id` | string | 是 | 不透明业务 ID；前端必须按字符串保存。 最短: `1`；最长: `64`；正则: `^[A-Za-z0-9_-]{1,64}$` |
+
+请求体：[VersionInput](02-data-models.md#versioninput)，完整字段及必填规则见对应对象。
+
+成功：HTTP `200`，`data` 为 [LogisticsResult](02-data-models.md#logisticsresult)。
+
 
 <a id="module-17"></a>
 ## 17 用户与会员管理
 
 | 编号 | 接口名称 | 方法 | URL | 是否登录 | 是否管理员 | 额外权限 | 请求体 | 成功 data | HTTP |
 |---|---|---|---|---|---|---|---|---|---|
-| [A155](#a155) | 查询用户及会员状态 | `GET` | `/admin/users` | 是 | 是 | `users:read` | — | [PageAdminUser](02-data-models.md#pageadminuser) | 200 |
-| [A156](#a156) | 用户详情及会员信息 | `GET` | `/admin/users/{id}` | 是 | 是 | `users:read` | — | [AdminUser](02-data-models.md#adminuser) | 200 |
-| [A157](#a157) | 用户会员权益详情 | `GET` | `/admin/users/{id}/membership` | 是 | 是 | `membership:write` | — | [MembershipDetail](02-data-models.md#membershipdetail) | 200 |
-| [A158](#a158) | 封禁用户 | `POST` | `/admin/users/{id}/ban` | 是 | 是 | `users:ban` | [UserBanInput](02-data-models.md#userbaninput) | [AdminUser](02-data-models.md#adminuser) | 200 |
-| [A159](#a159) | 解除用户封禁 | `POST` | `/admin/users/{id}/unban` | 是 | 是 | `users:ban` | [UserUnbanInput](02-data-models.md#userunbaninput) | [AdminUser](02-data-models.md#adminuser) | 200 |
-| [A160](#a160) | 管理会员方案 | `GET` | `/admin/membership-plans` | 是 | 是 | `membership:write` | — | [PageAdminMembershipPlan](02-data-models.md#pageadminmembershipplan) | 200 |
-| [A161](#a161) | 创建会员方案（停用） | `POST` | `/admin/membership-plans` | 是 | 是 | `membership:write` | [MembershipPlanCreate](02-data-models.md#membershipplancreate) | [AdminMembershipPlan](02-data-models.md#adminmembershipplan) | 201 |
-| [A162](#a162) | 会员方案详情 | `GET` | `/admin/membership-plans/{id}` | 是 | 是 | `membership:write` | — | [AdminMembershipPlan](02-data-models.md#adminmembershipplan) | 200 |
-| [A163](#a163) | 修改／启停会员方案 | `PATCH` | `/admin/membership-plans/{id}` | 是 | 是 | `membership:write` | [MembershipPlanPatch](02-data-models.md#membershipplanpatch) | [AdminMembershipPlan](02-data-models.md#adminmembershipplan) | 200 |
-| [A164](#a164) | 开通／续期网站会员 | `PUT` | `/admin/users/{id}/membership` | 是 | 是 | `membership:write` | [MembershipWrite](02-data-models.md#membershipwrite) | [MembershipDetail](02-data-models.md#membershipdetail) | 200 |
-| [A165](#a165) | 撤销网站会员 | `POST` | `/admin/users/{id}/membership/revoke` | 是 | 是 | `membership:write` | [MembershipRevoke](02-data-models.md#membershiprevoke) | [MembershipDetail](02-data-models.md#membershipdetail) | 200 |
-| [A166](#a166) | 用户会员购买权益段 | `GET` | `/admin/users/{id}/membership/periods` | 是 | 是 | `membership:write` | — | [PageMembershipPeriod](02-data-models.md#pagemembershipperiod) | 200 |
+| [A157](#a157) | 查询用户及会员状态 | `GET` | `/admin/users` | 是 | 是 | `users:read` | — | [PageAdminUser](02-data-models.md#pageadminuser) | 200 |
+| [A158](#a158) | 用户详情及会员信息 | `GET` | `/admin/users/{id}` | 是 | 是 | `users:read` | — | [AdminUser](02-data-models.md#adminuser) | 200 |
+| [A159](#a159) | 用户会员权益详情 | `GET` | `/admin/users/{id}/membership` | 是 | 是 | `membership:write` | — | [MembershipDetail](02-data-models.md#membershipdetail) | 200 |
+| [A160](#a160) | 封禁用户 | `POST` | `/admin/users/{id}/ban` | 是 | 是 | `users:ban` | [UserBanInput](02-data-models.md#userbaninput) | [AdminUser](02-data-models.md#adminuser) | 200 |
+| [A161](#a161) | 解除用户封禁 | `POST` | `/admin/users/{id}/unban` | 是 | 是 | `users:ban` | [UserUnbanInput](02-data-models.md#userunbaninput) | [AdminUser](02-data-models.md#adminuser) | 200 |
+| [A162](#a162) | 管理会员方案 | `GET` | `/admin/membership-plans` | 是 | 是 | `membership:write` | — | [PageAdminMembershipPlan](02-data-models.md#pageadminmembershipplan) | 200 |
+| [A163](#a163) | 创建会员方案（停用） | `POST` | `/admin/membership-plans` | 是 | 是 | `membership:write` | [MembershipPlanCreate](02-data-models.md#membershipplancreate) | [AdminMembershipPlan](02-data-models.md#adminmembershipplan) | 201 |
+| [A164](#a164) | 会员方案详情 | `GET` | `/admin/membership-plans/{id}` | 是 | 是 | `membership:write` | — | [AdminMembershipPlan](02-data-models.md#adminmembershipplan) | 200 |
+| [A165](#a165) | 修改／启停会员方案 | `PATCH` | `/admin/membership-plans/{id}` | 是 | 是 | `membership:write` | [MembershipPlanPatch](02-data-models.md#membershipplanpatch) | [AdminMembershipPlan](02-data-models.md#adminmembershipplan) | 200 |
+| [A166](#a166) | 开通／续期网站会员 | `PUT` | `/admin/users/{id}/membership` | 是 | 是 | `membership:write` | [MembershipWrite](02-data-models.md#membershipwrite) | [MembershipDetail](02-data-models.md#membershipdetail) | 200 |
+| [A167](#a167) | 撤销网站会员 | `POST` | `/admin/users/{id}/membership/revoke` | 是 | 是 | `membership:write` | [MembershipRevoke](02-data-models.md#membershiprevoke) | [MembershipDetail](02-data-models.md#membershipdetail) | 200 |
+| [A168](#a168) | 用户会员购买权益段 | `GET` | `/admin/users/{id}/membership/periods` | 是 | 是 | `membership:write` | — | [PageMembershipPeriod](02-data-models.md#pagemembershipperiod) | 200 |
 
 ### 参数与业务约束
 
-<a id="a155"></a>
-#### A155 查询用户及会员状态
+<a id="a157"></a>
+#### A157 查询用户及会员状态
 
 `GET /api/v1/admin/users`
 
@@ -2712,8 +2744,8 @@ COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整�
 
 成功：HTTP `200`，`data` 为 [PageAdminUser](02-data-models.md#pageadminuser)。
 
-<a id="a156"></a>
-#### A156 用户详情及会员信息
+<a id="a158"></a>
+#### A158 用户详情及会员信息
 
 `GET /api/v1/admin/users/{id}`
 
@@ -2727,8 +2759,8 @@ COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整�
 
 成功：HTTP `200`，`data` 为 [AdminUser](02-data-models.md#adminuser)。
 
-<a id="a157"></a>
-#### A157 用户会员权益详情
+<a id="a159"></a>
+#### A159 用户会员权益详情
 
 `GET /api/v1/admin/users/{id}/membership`
 
@@ -2742,8 +2774,8 @@ COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整�
 
 成功：HTTP `200`，`data` 为 [MembershipDetail](02-data-models.md#membershipdetail)。
 
-<a id="a158"></a>
-#### A158 封禁用户
+<a id="a160"></a>
+#### A160 封禁用户
 
 `POST /api/v1/admin/users/{id}/ban`
 
@@ -2761,8 +2793,8 @@ COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整�
 
 成功：HTTP `200`，`data` 为 [AdminUser](02-data-models.md#adminuser)。
 
-<a id="a159"></a>
-#### A159 解除用户封禁
+<a id="a161"></a>
+#### A161 解除用户封禁
 
 `POST /api/v1/admin/users/{id}/unban`
 
@@ -2780,8 +2812,8 @@ COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整�
 
 成功：HTTP `200`，`data` 为 [AdminUser](02-data-models.md#adminuser)。
 
-<a id="a160"></a>
-#### A160 管理会员方案
+<a id="a162"></a>
+#### A162 管理会员方案
 
 `GET /api/v1/admin/membership-plans`
 
@@ -2798,8 +2830,8 @@ COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整�
 
 成功：HTTP `200`，`data` 为 [PageAdminMembershipPlan](02-data-models.md#pageadminmembershipplan)。
 
-<a id="a161"></a>
-#### A161 创建会员方案（停用）
+<a id="a163"></a>
+#### A163 创建会员方案（停用）
 
 `POST /api/v1/admin/membership-plans`
 
@@ -2809,8 +2841,8 @@ COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整�
 
 成功：HTTP `201`，`data` 为 [AdminMembershipPlan](02-data-models.md#adminmembershipplan)。
 
-<a id="a162"></a>
-#### A162 会员方案详情
+<a id="a164"></a>
+#### A164 会员方案详情
 
 `GET /api/v1/admin/membership-plans/{id}`
 
@@ -2822,8 +2854,8 @@ COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整�
 
 成功：HTTP `200`，`data` 为 [AdminMembershipPlan](02-data-models.md#adminmembershipplan)。
 
-<a id="a163"></a>
-#### A163 修改／启停会员方案
+<a id="a165"></a>
+#### A165 修改／启停会员方案
 
 `PATCH /api/v1/admin/membership-plans/{id}`
 
@@ -2837,8 +2869,8 @@ COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整�
 
 成功：HTTP `200`，`data` 为 [AdminMembershipPlan](02-data-models.md#adminmembershipplan)。
 
-<a id="a164"></a>
-#### A164 开通／续期网站会员
+<a id="a166"></a>
+#### A166 开通／续期网站会员
 
 `PUT /api/v1/admin/users/{id}/membership`
 
@@ -2854,8 +2886,8 @@ COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整�
 
 成功：HTTP `200`，`data` 为 [MembershipDetail](02-data-models.md#membershipdetail)。
 
-<a id="a165"></a>
-#### A165 撤销网站会员
+<a id="a167"></a>
+#### A167 撤销网站会员
 
 `POST /api/v1/admin/users/{id}/membership/revoke`
 
@@ -2871,8 +2903,8 @@ COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整�
 
 成功：HTTP `200`，`data` 为 [MembershipDetail](02-data-models.md#membershipdetail)。
 
-<a id="a166"></a>
-#### A166 用户会员购买权益段
+<a id="a168"></a>
+#### A168 用户会员购买权益段
 
 `GET /api/v1/admin/users/{id}/membership/periods`
 
@@ -2894,15 +2926,15 @@ COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整�
 
 | 编号 | 接口名称 | 方法 | URL | 是否登录 | 是否管理员 | 额外权限 | 请求体 | 成功 data | HTTP |
 |---|---|---|---|---|---|---|---|---|---|
-| [A167](#a167) | 通知任务列表 | `GET` | `/admin/notification-tasks` | 是 | 是 | `notifications:write` | — | [PageNotificationTask](02-data-models.md#pagenotificationtask) | 200 |
-| [A168](#a168) | 创建站内通知任务 | `POST` | `/admin/notification-tasks` | 是 | 是 | `notifications:write` | [NotificationTaskInput](02-data-models.md#notificationtaskinput) | [NotificationTask](02-data-models.md#notificationtask) | 202 |
-| [A169](#a169) | 通知投递结果 | `GET` | `/admin/notification-tasks/{id}` | 是 | 是 | `notifications:write` | — | [NotificationTask](02-data-models.md#notificationtask) | 200 |
-| [A170](#a170) | 操作审计查询 | `GET` | `/admin/audit-logs` | 是 | 是 | `audit:read` | — | [PageAuditLog](02-data-models.md#pageauditlog) | 200 |
+| [A169](#a169) | 通知任务列表 | `GET` | `/admin/notification-tasks` | 是 | 是 | `notifications:write` | — | [PageNotificationTask](02-data-models.md#pagenotificationtask) | 200 |
+| [A170](#a170) | 创建站内通知任务 | `POST` | `/admin/notification-tasks` | 是 | 是 | `notifications:write` | [NotificationTaskInput](02-data-models.md#notificationtaskinput) | [NotificationTask](02-data-models.md#notificationtask) | 202 |
+| [A171](#a171) | 通知投递结果 | `GET` | `/admin/notification-tasks/{id}` | 是 | 是 | `notifications:write` | — | [NotificationTask](02-data-models.md#notificationtask) | 200 |
+| [A172](#a172) | 操作审计查询 | `GET` | `/admin/audit-logs` | 是 | 是 | `audit:read` | — | [PageAuditLog](02-data-models.md#pageauditlog) | 200 |
 
 ### 参数与业务约束
 
-<a id="a167"></a>
-#### A167 通知任务列表
+<a id="a169"></a>
+#### A169 通知任务列表
 
 `GET /api/v1/admin/notification-tasks`
 
@@ -2915,8 +2947,8 @@ COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整�
 
 成功：HTTP `200`，`data` 为 [PageNotificationTask](02-data-models.md#pagenotificationtask)。
 
-<a id="a168"></a>
-#### A168 创建站内通知任务
+<a id="a170"></a>
+#### A170 创建站内通知任务
 
 `POST /api/v1/admin/notification-tasks`
 
@@ -2928,8 +2960,8 @@ COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整�
 
 成功：HTTP `202`，`data` 为 [NotificationTask](02-data-models.md#notificationtask)。
 
-<a id="a169"></a>
-#### A169 通知投递结果
+<a id="a171"></a>
+#### A171 通知投递结果
 
 `GET /api/v1/admin/notification-tasks/{id}`
 
@@ -2941,8 +2973,8 @@ COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整�
 
 成功：HTTP `200`，`data` 为 [NotificationTask](02-data-models.md#notificationtask)。
 
-<a id="a170"></a>
-#### A170 操作审计查询
+<a id="a172"></a>
+#### A172 操作审计查询
 
 `GET /api/v1/admin/audit-logs`
 
@@ -2966,19 +2998,19 @@ COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整�
 
 | 编号 | 接口名称 | 方法 | URL | 是否登录 | 是否管理员 | 额外权限 | 请求体 | 成功 data | HTTP |
 |---|---|---|---|---|---|---|---|---|---|
-| [A171](#a171) | 查询本人购物车 | `GET` | `/me/cart` | 是 | 否 | `—` | — | [PageCartItem](02-data-models.md#pagecartitem) | 200 |
-| [A172](#a172) | 加入购物车／设置数量和勾选 | `PUT` | `/me/cart/items/{skuId}` | 是 | 否 | `—` | [CartItemPut](02-data-models.md#cartitemput) | [CartItem](02-data-models.md#cartitem) | 200 |
-| [A173](#a173) | 移除本人购物车条目 | `DELETE` | `/me/cart/items/{skuId}` | 是 | 否 | `—` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
-| [A174](#a174) | 购物车结算试算 | `POST` | `/me/cart/quote` | 是 | 否 | `—` | [CartQuoteCreate](02-data-models.md#cartquotecreate) | [OrderQuote](02-data-models.md#orderquote) | 201 |
-| [A175](#a175) | 查询本人收藏 | `GET` | `/me/favorites` | 是 | 否 | `—` | — | [PageContentFavorite](02-data-models.md#pagecontentfavorite) | 200 |
-| [A176](#a176) | 查询本人收藏状态 | `GET` | `/me/favorites/{contentId}` | 是 | 否 | `—` | — | [FavoriteState](02-data-models.md#favoritestate) | 200 |
-| [A177](#a177) | 收藏图文／视频／整门课程 | `PUT` | `/me/favorites/{contentId}` | 是 | 否 | `—` | — | [ContentFavorite](02-data-models.md#contentfavorite) | 200 |
-| [A178](#a178) | 取消本人收藏 | `DELETE` | `/me/favorites/{contentId}` | 是 | 否 | `—` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
+| [A173](#a173) | 查询本人购物车 | `GET` | `/me/cart` | 是 | 否 | `—` | — | [PageCartItem](02-data-models.md#pagecartitem) | 200 |
+| [A174](#a174) | 加入购物车／设置数量和勾选 | `PUT` | `/me/cart/items/{skuId}` | 是 | 否 | `—` | [CartItemPut](02-data-models.md#cartitemput) | [CartItem](02-data-models.md#cartitem) | 200 |
+| [A175](#a175) | 移除本人购物车条目 | `DELETE` | `/me/cart/items/{skuId}` | 是 | 否 | `—` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
+| [A176](#a176) | 购物车结算试算 | `POST` | `/me/cart/quote` | 是 | 否 | `—` | [CartQuoteCreate](02-data-models.md#cartquotecreate) | [OrderQuote](02-data-models.md#orderquote) | 201 |
+| [A177](#a177) | 查询本人收藏 | `GET` | `/me/favorites` | 是 | 否 | `—` | — | [PageContentFavorite](02-data-models.md#pagecontentfavorite) | 200 |
+| [A178](#a178) | 查询本人收藏状态 | `GET` | `/me/favorites/{contentId}` | 是 | 否 | `—` | — | [FavoriteState](02-data-models.md#favoritestate) | 200 |
+| [A179](#a179) | 收藏图文／视频／整门课程 | `PUT` | `/me/favorites/{contentId}` | 是 | 否 | `—` | — | [ContentFavorite](02-data-models.md#contentfavorite) | 200 |
+| [A180](#a180) | 取消本人收藏 | `DELETE` | `/me/favorites/{contentId}` | 是 | 否 | `—` | — | [ActionResult](02-data-models.md#actionresult) | 200 |
 
 ### 参数与业务约束
 
-<a id="a171"></a>
-#### A171 查询本人购物车
+<a id="a173"></a>
+#### A173 查询本人购物车
 
 `GET /api/v1/me/cart`
 
@@ -2993,8 +3025,8 @@ COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整�
 
 成功：HTTP `200`，`data` 为 [PageCartItem](02-data-models.md#pagecartitem)。
 
-<a id="a172"></a>
-#### A172 加入购物车／设置数量和勾选
+<a id="a174"></a>
+#### A174 加入购物车／设置数量和勾选
 
 `PUT /api/v1/me/cart/items/{skuId}`
 
@@ -3010,8 +3042,8 @@ COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整�
 
 成功：HTTP `200`，`data` 为 [CartItem](02-data-models.md#cartitem)。
 
-<a id="a173"></a>
-#### A173 移除本人购物车条目
+<a id="a175"></a>
+#### A175 移除本人购物车条目
 
 `DELETE /api/v1/me/cart/items/{skuId}`
 
@@ -3026,8 +3058,8 @@ COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整�
 
 成功：HTTP `200`，`data` 为 [ActionResult](02-data-models.md#actionresult)。
 
-<a id="a174"></a>
-#### A174 购物车结算试算
+<a id="a176"></a>
+#### A176 购物车结算试算
 
 `POST /api/v1/me/cart/quote`
 
@@ -3039,8 +3071,8 @@ COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整�
 
 成功：HTTP `201`，`data` 为 [OrderQuote](02-data-models.md#orderquote)。
 
-<a id="a175"></a>
-#### A175 查询本人收藏
+<a id="a177"></a>
+#### A177 查询本人收藏
 
 `GET /api/v1/me/favorites`
 
@@ -3057,8 +3089,8 @@ COURSE 或 MEMBERSHIP 全额退款。会员只允许未来尚未开始的完整�
 
 成功：HTTP `200`，`data` 为 [PageContentFavorite](02-data-models.md#pagecontentfavorite)。
 
-<a id="a176"></a>
-#### A176 查询本人收藏状态
+<a id="a178"></a>
+#### A178 查询本人收藏状态
 
 `GET /api/v1/me/favorites/{contentId}`
 
@@ -3072,8 +3104,8 @@ favorite=null 表示未收藏，包含不存在的内容 UUID；不能指定其�
 
 成功：HTTP `200`，`data` 为 [FavoriteState](02-data-models.md#favoritestate)。
 
-<a id="a177"></a>
-#### A177 收藏图文／视频／整门课程
+<a id="a179"></a>
+#### A179 收藏图文／视频／整门课程
 
 `PUT /api/v1/me/favorites/{contentId}`
 
@@ -3087,8 +3119,8 @@ favorite=null 表示未收藏，包含不存在的内容 UUID；不能指定其�
 
 成功：HTTP `200`，`data` 为 [ContentFavorite](02-data-models.md#contentfavorite)。
 
-<a id="a178"></a>
-#### A178 取消本人收藏
+<a id="a180"></a>
+#### A180 取消本人收藏
 
 `DELETE /api/v1/me/favorites/{contentId}`
 
@@ -3108,6 +3140,10 @@ favorite=null 表示未收藏，包含不存在的内容 UUID；不能指定其�
 
 | HTTP | code | 含义 | 前端处理 |
 |---|---|---|---|
+| 400 | `CARRIER_UNSUPPORTED` | 快递公司代码不支持 | 读取管理端快递公司列表 |
+| 409 | `SHIPMENT_STATE_INVALID` | 当前物流或订单状态不允许操作 | 刷新物流并检查揽收状态 |
+| 429 | `LOGISTICS_REFRESH_TOO_FREQUENT` | 同一运单主动查询不足 60 秒间隔 | 稍后读取缓存或重试 |
+| 503 | `LOGISTICS_NOT_CONFIGURED` | 物流供应商未启用 | 在服务器配置 LOGISTICS_PROVIDER 和 LOGISTICS_APPCODE |
 | 409 | `PRODUCT_UNAVAILABLE` | 商品未上架、SKU 停用或分类不可用，不能购买 | 刷新商品状态 |
 | 409 | `CATEGORY_UNAVAILABLE` | 所关联分类当前不可用 | 选择启用的分类或等待恢复 |
 | 409 | `STOCK_INSUFFICIENT` | 保存或购买数量超过当前可售库存 | 刷新库存并减少数量 |

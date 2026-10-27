@@ -1,0 +1,39 @@
+@baseUrl = http://47.97.46.242/api/v1
+@adminToken = replace-with-admin-access-token
+@userToken = replace-with-user-access-token
+@orderId = replace-with-order-uuid
+@shipmentId = replace-with-shipment-uuid
+
+### Company dropdown (orders:ship)
+GET {{baseUrl}}/admin/logistics/carriers
+Authorization: Bearer {{adminToken}}
+
+### Ship a paid order. Use the latest order version and a new unique idempotency key.
+POST {{baseUrl}}/admin/orders/{{orderId}}/shipment
+Authorization: Bearer {{adminToken}}
+Idempotency-Key: replace-with-unique-key-0001
+Content-Type: application/json
+
+{"carrierCode":"ZTO","trackingNo":"CSDEMO123456","orderVersion":2,"phoneLast4":"1234"}
+
+### Customer: own order only; refreshes expired cache
+GET {{baseUrl}}/orders/{{orderId}}/logistics
+Authorization: Bearer {{userToken}}
+
+### Administrator: orders:read
+GET {{baseUrl}}/admin/orders/{{orderId}}/logistics
+Authorization: Bearer {{adminToken}}
+
+### Correct before pickup. After pickup, keep number/carrier and only correct phoneLast4.
+PATCH {{baseUrl}}/admin/shipments/{{shipmentId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"version":1,"carrierCode":"ZTO","trackingNo":"CSDEMO123456","phoneLast4":"4321","reason":"cs修正查询尾号"}
+
+### Explicit refresh: latest shipment.version; at least 60 seconds since last query
+POST {{baseUrl}}/admin/shipments/{{shipmentId}}/sync
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"version":2}

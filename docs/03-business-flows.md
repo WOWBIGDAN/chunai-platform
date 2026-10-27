@@ -4,7 +4,7 @@
 
 以下请求路径均包含 `/api/v1`。示例 ID、验证码、支付地址和令牌为占位。所有请求与响应字段以 [数据格式](02-data-models.md) 和 [OpenAPI](openapi.json) 为准。
 
-测试 API 地址为 `http://47.97.46.242/api/v1`。仓库已实现认证、产品、实物订单、人工物流与售后，新增模块须发布本次代码后才可在公网使用。用户确认本次采用测试收付款，不接入第三方服务。本文的真实支付回调、对账、通知、数字权益与对象存储仍为后续设计；当前可运行流程见 [交易后端说明](06-commerce.md)，部署和运维见 [服务器说明](05-deployment.md)。
+测试 API 地址为 `http://47.97.46.242/api/v1`。已实现认证、产品、订单、物流查询、售后、课程/会员权益及 OSS 上传；支付退款仍为测试模式。真实支付回调、对账和通知仍为后续设计；当前交易流程见 [交易后端说明](06-commerce.md)，部署和运维见 [服务器说明](05-deployment.md)。物流录单 → 缓存/定时同步 → 用户查看 → 单独确认收货，详见 [物流轨迹](12-logistics.md)。
 
 ## 内容访问与发布
 
@@ -208,7 +208,7 @@ Content-Type: application/json
 
 服务端仅发出“原购买数量－已退款数量”的商品；整单已退款不允许发货。发货后为 PENDING_RECEIPT，系统产生物流通知。快递代码的允许值由物流适配器配置，示例 SF 不代表固定只接一家。
 
-客户端 GET /orders/{id}/logistics。未发货时返回 shipment=null、events=[]、syncStatus=NOT_SHIPPED。当前发货后返回人工事件，syncStatus=MANUAL、lastSyncedAt=null；外部查询的 UP_TO_DATE／FAILED 为后续适配器设计。
+客户端 GET /orders/{id}/logistics。未发货时返回 shipment=null、events=[]、syncStatus=NOT_SHIPPED。已发货按缓存到期同步阿里云轨迹，成功 UP_TO_DATE、暂无轨迹 NO_DATA、失败 FAILED，故障保留旧轨迹；来源为 ALIYUN 或 MANUAL。未配置外部服务时为 MANUAL。同步不自动确认收货，详见 [物流轨迹](12-logistics.md)。
 
 确认收货 POST /orders/{id}/confirm-receipt，请求体带最新 version，幂等头必填。已确认或售后并发导致状态变化时重新获取订单，不用前端强制覆盖状态。
 
@@ -384,4 +384,4 @@ data: {"generationId":"gen_10001","assistantMessageId":"msg_10002","finishReason
 | 群发任务消费者重试 | 每用户同任务只产生一条消息 |
 | 鉴权内容走公共 CDN 缓存 | 不允许跨用户缓存已授权正文／播放地址 |
 
-实施时需补充供应商沙箱联调：短信挑战、OSS 表单 POST 与私有读取、支付下单／回调验签／退款、快递查询和 AI 流式输出。当前不提供视频转码，上传前准备浏览器可播放的 MP4。本文结构校验不能替代真实渠道测试。
+后续短信挑战、真实支付下单／回调验签／退款和 AI 流式输出需供应商联调；OSS 已完成真实上传与读取验证，快递查询已接入并用真实运单验证。当前不提供视频转码，上传前准备浏览器可播放的 MP4。本文结构校验不能替代真实渠道测试。

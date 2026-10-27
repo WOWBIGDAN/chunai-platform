@@ -14,6 +14,7 @@ import { CreateContent1792886400000 } from './migrations/1792886400000-CreateCon
 import { uploadEntities } from '../uploads/entities';
 import { UnifiedUploads1793145600000 } from './migrations/1793145600000-UnifiedUploads';
 import { CartFavorites1793232000000 } from './migrations/1793232000000-CartFavorites';
+import { LogisticsTracking1793318400000 } from './migrations/1793318400000-LogisticsTracking';
 
 export function databaseOptions(): DataSourceOptions {
   if (!process.env.DB_PASSWORD) throw new Error('DB_PASSWORD is required');
@@ -29,7 +30,7 @@ export function databaseOptions(): DataSourceOptions {
     charset: 'utf8mb4_unicode_ci',
     timezone: 'Z',
     entities: [User, AuthSession, RefreshToken, ...membershipEntities, ...commerceEntities, ...contentEntities, ...uploadEntities],
-    migrations: [CreateAuth1792713600000, CreateCommerce1792800000000, CreateContent1792886400000, ExternalMediaMembership1792972800000, MembershipPurchasesUsers1793059200000, UnifiedUploads1793145600000, CartFavorites1793232000000],
+    migrations: [CreateAuth1792713600000, CreateCommerce1792800000000, CreateContent1792886400000, ExternalMediaMembership1792972800000, MembershipPurchasesUsers1793059200000, UnifiedUploads1793145600000, CartFavorites1793232000000, LogisticsTracking1793318400000],
     migrationsTableName: 'schema_migrations',
     synchronize: false,
     migrationsRun: false,

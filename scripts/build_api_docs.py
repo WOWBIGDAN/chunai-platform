@@ -924,6 +924,8 @@ from uploads_contract import apply_uploads_contract, finalize_uploads_spec
 apply_uploads_contract(globals())
 from cart_favorites_contract import apply_cart_favorites_contract
 apply_cart_favorites_contract(globals())
+from logistics_contract import apply_logistics_contract
+apply_logistics_contract(globals())
 
 AUTH_LABELS = {
     "public": ("否", "否"), "optional": ("可选", "否"), "user": ("是", "否"),
@@ -933,6 +935,10 @@ AUTH_LABELS = {
 }
 
 ERRORS = [
+    (400, 'CARRIER_UNSUPPORTED', '快递公司代码不支持', '读取管理端快递公司列表'),
+    (409, 'SHIPMENT_STATE_INVALID', '当前物流或订单状态不允许操作', '刷新物流并检查揽收状态'),
+    (429, 'LOGISTICS_REFRESH_TOO_FREQUENT', '同一运单主动查询不足 60 秒间隔', '稍后读取缓存或重试'),
+    (503, 'LOGISTICS_NOT_CONFIGURED', '物流供应商未启用', '在服务器配置 LOGISTICS_PROVIDER 和 LOGISTICS_APPCODE'),
     (409, 'PRODUCT_UNAVAILABLE', '商品未上架、SKU 停用或分类不可用，不能购买', '刷新商品状态'),
     (409, 'CATEGORY_UNAVAILABLE', '所关联分类当前不可用', '选择启用的分类或等待恢复'),
     (409, 'STOCK_INSUFFICIENT', '保存或购买数量超过当前可售库存', '刷新库存并减少数量'),
@@ -1057,7 +1063,7 @@ def operation_id(operation):
 def make_spec():
     spec = {
         "openapi": "3.0.3",
-        "info": {"title": "两性健康服务平台 API", "version": "1.7.0",
+        "info": {"title": "两性健康服务平台 API", "version": "1.8.0",
                  "description": "已实现认证、用户资料与后台用户管理、实物交易、购物车与内容收藏、科普与课程、专栏、会员方案购买与期限管理、统一 OSS 上传与私有售后凭证、B 站／飞书视频授权。当前测试服务器已配置杭州区域的 chunai-photo、chunai-private 与 ECS RAM 角色 chunai-oss；公开图片桶已允许对象公开访问，私有桶仍阻止公共访问。配置缺失或存储不可用时返回 503。x-implementation-status 表示仓库实现状态；线上以部署版本为准。支付退款使用 TEST 模式；短信、真实支付、AI、通知和第三方物流暂未接入。"},
         "servers": [{"url": "http://localhost:3000/api/v1", "description": "本地开发（示例）"},
                     {"url": "http://47.97.46.242/api/v1", "description": "staging 测试服务；可用接口以部署版本为准，协议版本以接口返回值为准"},
@@ -1312,7 +1318,7 @@ def finish_examples():
         example = sample(SCHEMAS[name])
         example["address"] = sample(ref("AddressSnapshot"))
         SCHEMAS[name]["example"] = example
-    SCHEMAS["LogisticsResult"]["example"] = {"shipment": None, "events": [], "syncStatus": "NOT_SHIPPED"}
+    SCHEMAS["LogisticsResult"]["example"] = {"shipment": None, "events": [], "syncStatus": "NOT_SHIPPED", "syncErrorCode": None, "lastSyncAttemptAt": None, "nextSyncAt": None}
 
 
 def validate_value(value, schema, location="value"):

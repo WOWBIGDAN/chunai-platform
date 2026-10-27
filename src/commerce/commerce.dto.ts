@@ -132,6 +132,7 @@ export class ShipmentDto {
   @IsString() @Matches(/^[A-Z0-9_]{1,32}$/) carrierCode!: string;
   @IsString() @Matches(/^[A-Za-z0-9-]{1,64}$/) trackingNo!: string;
   @IsInt() @Min(1) @Max(2147483647) orderVersion!: number;
+  @Optional() @IsString() @Matches(/^\d{4}$/) phoneLast4?: string;
 }
 export class ReturnShipmentDto extends VersionDto {
   @IsString() @Matches(/^[A-Z0-9_]{1,32}$/) carrierCode!: string;
@@ -139,6 +140,7 @@ export class ReturnShipmentDto extends VersionDto {
 }
 export class ShipmentPatchDto extends ReturnShipmentDto {
   @IsString() @Length(1, 200) @Matches(/\S/) reason!: string;
+  @ValidateIf((_o, v) => v !== undefined && v !== null) @IsString() @Matches(/^\d{4}$/) phoneLast4?: string | null;
 }
 export class LogisticsEventDto extends VersionDto {
   @IsIn(['IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'EXCEPTION']) status!: string;

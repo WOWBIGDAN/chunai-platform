@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "两性健康服务平台 · 已实现认证、交易与内容 API",
-    "version": "1.7.0",
+    "version": "1.8.0",
     "description": "已实现认证、用户资料与后台用户管理、实物交易、购物车与内容收藏、科普与课程、专栏、会员方案购买与期限管理、统一 OSS 上传与私有售后凭证、B 站／飞书视频授权。当前测试服务器已配置杭州区域的 chunai-photo、chunai-private 与 ECS RAM 角色 chunai-oss；公开图片桶已允许对象公开访问，私有桶仍阻止公共访问。配置缺失或存储不可用时返回 503。x-implementation-status 表示仓库实现状态；线上以部署版本为准。支付退款使用 TEST 模式；短信、真实支付、AI、通知和第三方物流暂未接入。"
   },
   "servers": [
@@ -4428,9 +4428,10 @@
           },
           "source": {
             "type": "string",
-            "description": "人工记录来源。",
+            "description": "来源：人工登记或阿里云物流服务。",
             "enum": [
-              "MANUAL"
+              "MANUAL",
+              "ALIYUN"
             ],
             "example": "MANUAL"
           }
@@ -4484,13 +4485,14 @@
           },
           "status": {
             "type": "string",
-            "description": "物流状态；不等于订单已确认收货。",
+            "description": "物流状态；RETURNED 是退件签收，不是买家签收，也不会自动退款或入库。",
             "enum": [
               "PENDING_PICKUP",
               "IN_TRANSIT",
               "OUT_FOR_DELIVERY",
               "DELIVERED",
-              "EXCEPTION"
+              "EXCEPTION",
+              "RETURNED"
             ],
             "example": "PENDING_PICKUP"
           },
@@ -4589,13 +4591,14 @@
               },
               "status": {
                 "type": "string",
-                "description": "物流状态；不等于订单已确认收货。",
+                "description": "物流状态；RETURNED 是退件签收，不是买家签收，也不会自动退款或入库。",
                 "enum": [
                   "PENDING_PICKUP",
                   "IN_TRANSIT",
                   "OUT_FOR_DELIVERY",
                   "DELIVERED",
-                  "EXCEPTION"
+                  "EXCEPTION",
+                  "RETURNED"
                 ],
                 "example": "PENDING_PICKUP"
               },
@@ -4657,26 +4660,54 @@
           },
           "syncStatus": {
             "type": "string",
-            "description": "当前未发货为 NOT_SHIPPED，发货后为 MANUAL；其他值预留外部物流适配器。",
+            "description": "未发货、未配置服务、待查询、查询中、查询成功、无轨迹或查询失败；失败时保留已有轨迹。",
             "enum": [
               "NOT_SHIPPED",
               "MANUAL",
-              "UP_TO_DATE",
               "PENDING",
+              "SYNCING",
+              "UP_TO_DATE",
+              "NO_DATA",
               "FAILED"
             ],
             "example": "NOT_SHIPPED"
+          },
+          "syncErrorCode": {
+            "type": "string",
+            "description": "查询失败的稳定错误代码，见物流文档；不包含供应商原文或凭证。",
+            "example": "LOGISTICS_NO_DATA",
+            "nullable": true
+          },
+          "lastSyncAttemptAt": {
+            "type": "string",
+            "description": "UTC 时间；未发生时为 null。",
+            "format": "date-time",
+            "example": "2026-10-22T02:00:00Z",
+            "nullable": true
+          },
+          "nextSyncAt": {
+            "type": "string",
+            "description": "最早自动重查时间；终态、超出自动追踪期限、关闭订单或未配置服务时为 null。调度可能延后。",
+            "format": "date-time",
+            "example": "2026-10-22T02:00:00Z",
+            "nullable": true
           }
         },
         "required": [
           "shipment",
           "events",
-          "syncStatus"
+          "syncStatus",
+          "syncErrorCode",
+          "lastSyncAttemptAt",
+          "nextSyncAt"
         ],
         "example": {
           "shipment": null,
           "events": [],
-          "syncStatus": "NOT_SHIPPED"
+          "syncStatus": "NOT_SHIPPED",
+          "syncErrorCode": null,
+          "lastSyncAttemptAt": null,
+          "nextSyncAt": null
         }
       },
       "ShipmentCreate": {
@@ -4703,6 +4734,12 @@
             "description": "乐观锁版本；写操作必须提交最近读取的版本。",
             "minimum": 1,
             "example": 1
+          },
+          "phoneLast4": {
+            "type": "string",
+            "description": "可选收/寄件人手机号后四位；省略时发货默认使用订单收件手机尾号。查询时按公司要求附加，返回体不回显。",
+            "pattern": "^\\d{4}$",
+            "example": "1234"
           }
         },
         "required": [
@@ -4713,7 +4750,7 @@
       },
       "ShipmentPatch": {
         "type": "object",
-        "description": "仅 PENDING_PICKUP 且无揽收事件时允许纠错。",
+        "description": "揽收前且无轨迹才可改公司/单号；同一公司/单号可单独纠正查询手机尾号。省略尾号保留旧值，null 恢复使用订单收件手机尾号。需 version 和原因。",
         "additionalProperties": false,
         "properties": {
           "carrierCode": {
@@ -4742,6 +4779,13 @@
             "description": "乐观锁版本；写操作必须提交最近读取的版本。",
             "minimum": 1,
             "example": 1
+          },
+          "phoneLast4": {
+            "type": "string",
+            "description": "可选收/寄件人手机号后四位；省略时发货默认使用订单收件手机尾号。查询时按公司要求附加，返回体不回显。",
+            "pattern": "^\\d{4}$",
+            "example": "1234",
+            "nullable": true
           }
         },
         "required": [
@@ -9069,6 +9113,50 @@
           "page",
           "pageSize",
           "hasNext"
+        ]
+      },
+      "LogisticsCarrier": {
+        "type": "object",
+        "description": "平台支持的公司与查询要求；前端应使用此列表。",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "平台快递代码。",
+            "example": "SF"
+          },
+          "name": {
+            "type": "string",
+            "description": "公司名称。",
+            "example": "顺丰速运"
+          },
+          "phoneLast4Required": {
+            "type": "boolean",
+            "description": "服务商是否要求手机尾号；不传则使用订单地址快照的手机尾号。",
+            "example": true
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "phoneLast4Required"
+        ]
+      },
+      "LogisticsCarriers": {
+        "type": "object",
+        "description": "当前支持的快递公司。",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LogisticsCarrier"
+            },
+            "description": "公司列表"
+          }
+        },
+        "required": [
+          "items"
         ]
       },
       "ContentCategory": {
@@ -19442,7 +19530,7 @@
       "get": {
         "operationId": "get_orders_id_logistics",
         "summary": "本人订单物流",
-        "description": "未发货返回空包裹；已发货返回人工登记物流，syncStatus=MANUAL，lastSyncedAt=null。尚未接入第三方快递查询。",
+        "description": "用户仅查本人；管理端需 orders:read。启用物流服务后按缓存到期同步，再返回最近 100 条轨迹；默认 30 分钟查询间隔，并发查询复用数据库租约。后台每分钟批量扫描，默认自动追踪发货后 30 天；已签收、退件签收或关闭订单停止自动查询。上游故障仍返回已有轨迹和 FAILED，暂无轨迹为 NO_DATA。未配置服务仍支持人工轨迹。快递签收不会自动完成订单。",
         "tags": [
           "05 订单、支付与物流"
         ],
@@ -19545,7 +19633,10 @@
                   "data": {
                     "shipment": null,
                     "events": [],
-                    "syncStatus": "NOT_SHIPPED"
+                    "syncStatus": "NOT_SHIPPED",
+                    "syncErrorCode": null,
+                    "lastSyncAttemptAt": null,
+                    "nextSyncAt": null
                   },
                   "requestId": "req_demo_001",
                   "timestamp": "2026-10-22T02:00:00Z"
@@ -40745,7 +40836,7 @@
       "get": {
         "operationId": "get_admin_orders_id_logistics",
         "summary": "查询订单物流",
-        "description": "未发货返回空包裹；已发货返回人工登记物流，syncStatus=MANUAL，lastSyncedAt=null。尚未接入第三方快递查询。",
+        "description": "用户仅查本人；管理端需 orders:read。启用物流服务后按缓存到期同步，再返回最近 100 条轨迹；默认 30 分钟查询间隔，并发查询复用数据库租约。后台每分钟批量扫描，默认自动追踪发货后 30 天；已签收、退件签收或关闭订单停止自动查询。上游故障仍返回已有轨迹和 FAILED，暂无轨迹为 NO_DATA。未配置服务仍支持人工轨迹。快递签收不会自动完成订单。",
         "tags": [
           "16 订单、物流与售后管理"
         ],
@@ -40850,7 +40941,10 @@
                   "data": {
                     "shipment": null,
                     "events": [],
-                    "syncStatus": "NOT_SHIPPED"
+                    "syncStatus": "NOT_SHIPPED",
+                    "syncErrorCode": null,
+                    "lastSyncAttemptAt": null,
+                    "nextSyncAt": null
                   },
                   "requestId": "req_demo_001",
                   "timestamp": "2026-10-22T02:00:00Z"
@@ -40985,7 +41079,7 @@
       "post": {
         "operationId": "post_admin_orders_id_shipment",
         "summary": "订单发货",
-        "description": "仅 PENDING_SHIPMENT 且不存在活跃售后／退款；一期一单一包裹，所有剩余未退款行一次发出。使用行锁与售后申请互斥，防止边退款边发货。",
+        "description": "仅 PENDING_SHIPMENT 且不存在活跃售后／退款；一期一单一包裹，所有剩余未退款行一次发出。使用行锁与售后申请互斥，防止边退款边发货。 可选 phoneLast4；只能填四位数字，单号不含冒号或电话。发货提交不等待外部服务；后台或物流详情读取触发首次查询。",
         "tags": [
           "16 订单、物流与售后管理"
         ],
@@ -41266,7 +41360,7 @@
       "patch": {
         "operationId": "patch_admin_shipments_id",
         "summary": "纠正出库物流单号",
-        "description": "纠正出库物流单号",
+        "description": "揽收前且无轨迹才可改公司/单号；同一公司/单号可单独纠正查询手机尾号。省略尾号保留旧值，null 恢复使用订单收件手机尾号。需 version 和原因。纠错使旧查询结果失效；尾号不写审计或响应。",
         "tags": [
           "16 订单、物流与售后管理"
         ],
@@ -44682,6 +44776,492 @@
                     "page": 1,
                     "pageSize": 20,
                     "hasNext": false
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/logistics/carriers": {
+      "get": {
+        "operationId": "get_admin_logistics_carriers",
+        "summary": "查询可用快递公司",
+        "description": "查询可用快递公司",
+        "tags": [
+          "16 订单、物流与售后管理"
+        ],
+        "security": [
+          {
+            "AdminBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": true,
+        "x-auth-mode": "admin",
+        "x-permissions": [
+          "orders:ship"
+        ],
+        "x-idempotency-required": false,
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/LogisticsCarriers"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "items": [
+                      {
+                        "code": "SF",
+                        "name": "顺丰速运",
+                        "phoneLast4Required": true
+                      }
+                    ]
+                  },
+                  "requestId": "req_demo_001",
+                  "timestamp": "2026-10-22T02:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参见业务错误码表。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/shipments/{id}/sync": {
+      "post": {
+        "operationId": "post_admin_shipments_id_sync",
+        "summary": "主动同步出库物流轨迹",
+        "description": "提交当前 shipment.version。只允许已发货实物订单（PENDING_RECEIPT/COMPLETED）。同运单至少间隔 60 秒，过频 429；已有查询执行中返回 SYNCING。HTTP 200 中的 syncStatus=FAILED/NO_DATA 表示上游失败/暂无轨迹；保留既有轨迹，不能当作签收。无需幂等键，数据库租约阻止并发计费。未配置服务 503。可补查已签收、退回或超过自动追踪期的单据。",
+        "tags": [
+          "16 订单、物流与售后管理"
+        ],
+        "security": [
+          {
+            "AdminBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "不透明业务 ID；前端必须按字符串保存。",
+            "schema": {
+              "type": "string",
+              "description": "不透明业务 ID；前端必须按字符串保存。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "id_10001"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "追踪号；服务端校验后回传或重新生成。",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "example": "req_demo_001"
+            }
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-login-required": true,
+        "x-admin-required": true,
+        "x-auth-mode": "admin",
+        "x-permissions": [
+          "orders:ship"
+        ],
+        "x-idempotency-required": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionInput"
+              },
+              "example": {
+                "version": 1
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功；data 类型见 schema。",
+            "headers": {
+              "X-Request-ID": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "请求追踪号。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "requestId",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "成功码。",
+                      "enum": [
+                        "OK"
+                      ],
+                      "example": "OK"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "提示。",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/LogisticsResult"
+                    },
+                    "requestId": {
+                      "type": "string",
+                      "description": "追踪号。",
+                      "example": "req_demo_001"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "description": "UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。",
+                      "format": "date-time",
+                      "example": "2026-10-22T02:00:00Z"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "shipment": null,
+                    "events": [],
+                    "syncStatus": "NOT_SHIPPED",
+                    "syncErrorCode": null,
+                    "lastSyncAttemptAt": null,
+                    "nextSyncAt": null
                   },
                   "requestId": "req_demo_001",
                   "timestamp": "2026-10-22T02:00:00Z"

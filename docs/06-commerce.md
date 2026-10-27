@@ -2,7 +2,7 @@
 
 购物车已接入现有商品试算与订单事务：加入不占库存，结算再次校验状态和数量，下单成功仅清理未被再次修改的本次条目。接口和数据库结构见 [购物车与收藏](11-cart-favorites.md)。
 
-更新：2026-10-24。实现基于 NestJS、TypeORM 和 MySQL，支持实物商品的完整测试交易流程。用户已确认暂不接入第三方支付、退款和快递查询。
+更新：2026-10-27。实现基于 NestJS、TypeORM 和 MySQL，支持实物商品的完整测试交易流程。支付、退款暂按测试模式；物流已接入阿里云查询服务，详见 [物流轨迹与管理录单](12-logistics.md)。
 
 实物交易模块已部署到测试服务 `http://47.97.46.242/api/v1`。2026-10-25 新增课程数字订单与退款、内容和专栏，见 [课程后端说明](08-content-courses.md)。
 
@@ -26,7 +26,7 @@ npm.cmd start
 | `products`、`product_skus`、`stock_movements` | 产品、规格与价格、实物及预占库存流水 |
 | `user_addresses`、`order_quotes` | 本人地址、十分钟有效报价快照 |
 | `commerce_orders`、`order_items` | 订单与商品成交快照 |
-| `shipments`、`logistics_events` | 一单一包裹、实际发货数量、人工轨迹 |
+| `shipments`、`logistics_events` | 一单一包裹、实际发货数量、自动/人工轨迹、同步状态与租约 |
 | `after_sales`、`after_sale_items` | 售后单与申请数量、退款金额 |
 | `payment_records`、`refunds` | 测试付款和退款台账 |
 | `idempotency_records`、`commerce_audit_logs` | 持久化幂等结果与操作审计 |
@@ -74,7 +74,7 @@ sudo systemd-run --quiet --wait --pty --collect \
 | `users:ban` | 按版本封禁和解封用户；封禁同步撤销全部客户端会话 |
 | `products:write` | 图片登记、产品与 SKU 维护、上下架、库存调整和流水查询 |
 | `orders:read` | 查询订单和物流；订单列表不返回收货地址，详情返回履约地址并记审计 |
-| `orders:ship` | 发货、揽收前改运单、录入人工物流事件 |
+| `orders:ship` | 发货、揽收前改运单、纠正查询尾号、主动同步、录入人工物流事件 |
 | `aftersales:review` | 查询、审核、验收售后、重试失败退款；敏感详情读取记审计 |
 | `payments:test` | 在显式开启的测试环境确认测试付款／退款结果 |
 | `audit:read` | 查询交易审计日志 |
@@ -162,9 +162,9 @@ Content-Type: application/json
 
 发货只允许已付款待发货且没有活跃售后的订单，每单一个包裹，一次发出所有“购买数量－已退款数量”。发货事务同时减少实物库存和预占库存，并保存实际发货行数量。已下架产品的既有订单仍可发货。
 
-当前快递代码：`SF`、`YTO`、`ZTO`、`STO`、`YUNDA`、`EMS`、`JD`。运单号只能包含字母、数字和短横线。揽收前且无物流事件时可纠错，必须提供原因和版本。
+快递代码从 `GET /admin/logistics/carriers` 获取，兼容原有 SF/YTO/ZTO/STO/YUNDA/EMS/JD，并增加极兔、德邦、邮政包裹等。运单号只含字母、数字和短横线；手机号尾号使用独立可选 `phoneLast4`，默认取订单收件手机后四位。揽收前且无轨迹可纠错单号，揽收后可保持公司/单号仅改查询尾号，需原因和版本。
 
-`POST /admin/shipments/{id}/events` 由有发货权限的管理员填写人工轨迹；事件 `source=MANUAL`，查询 `syncStatus=MANUAL`，`lastSyncedAt=null`。不将人工记录表示成快递服务同步结果。轨迹按时间倒序返回最近 100 条。揽收后不能改运单，签收后不能倒退物流状态；快递签收不会自动确认收货。
+物流详情到期自动查询；后台默认每分钟扫描、同单 30 分钟缓存，主动刷新 `POST /admin/shipments/{id}/sync` 需 `orders:ship` 和包裹版本，至少间隔 60 秒。查询故障保留上次轨迹；并发及纠错使用数据库租约和版本防止重复调用、写入旧单号结果。自动事件 `source=ALIYUN`；原 `POST /admin/shipments/{id}/events` 保留人工事件 `source=MANUAL`，未配置外部服务时 `syncStatus=MANUAL`。时间倒序返回最近 100 条。快递签收不自动确认收货，退件签收 `RETURNED` 不自动退款或入库；售后退货单仍独立管理。
 
 售后规则：
 

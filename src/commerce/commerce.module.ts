@@ -9,9 +9,11 @@ import { CommerceTransaction } from './transaction';
 import { CommerceMaintenance } from './maintenance.service';
 import { CartController } from './cart.controller';
 import { CartService } from './cart.service';
+import { LogisticsProvider } from './logistics-provider';
+import { LogisticsService } from './logistics.service';
 
 @Module({ imports: [AuthModule, AdminAuthModule],
   controllers: [CatalogController, CustomerCommerceController, AdminCatalogController, AdminFulfilmentController, CartController],
-  providers: [CommerceTransaction, CatalogService, OrdersService, AfterSalesService, CommerceMaintenance, CartService],
+  providers: [CommerceTransaction, CatalogService, OrdersService, AfterSalesService, CommerceMaintenance, CartService, LogisticsProvider, LogisticsService],
   exports: [CommerceTransaction, CatalogService] })
 export class CommerceModule {}

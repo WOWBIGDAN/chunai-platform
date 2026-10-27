@@ -243,6 +243,8 @@
 - [FavoriteState](#favoritestate)
 - [PageCartItem](#pagecartitem)
 - [PageContentFavorite](#pagecontentfavorite)
+- [LogisticsCarrier](#logisticscarrier)
+- [LogisticsCarriers](#logisticscarriers)
 - [ContentCategory](#contentcategory)
 - [ProductCategory](#productcategory)
 - [CourseSummary](#coursesummary)
@@ -2663,7 +2665,7 @@ SKU 的规格维度。
 | `time` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
 | `description` | string | 是 | 物流描述。 |  |
 | `location` | string / null | 是 | 位置。 |  |
-| `source` | string | 是 | 人工记录来源。 | 枚举: `MANUAL` |
+| `source` | string | 是 | 来源：人工登记或阿里云物流服务。 | 枚举: `MANUAL, ALIYUN` |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
@@ -2689,7 +2691,7 @@ SKU 的规格维度。
 | `carrierCode` | string | 是 | 快递公司代码。 | 最短: `1`；最长: `32` |
 | `carrierName` | string | 是 | 快递公司名称。 |  |
 | `trackingNo` | string | 是 | 运单号。 | 最短: `1`；最长: `64` |
-| `status` | string | 是 | 物流状态；不等于订单已确认收货。 | 枚举: `PENDING_PICKUP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, EXCEPTION` |
+| `status` | string | 是 | 物流状态；RETURNED 是退件签收，不是买家签收，也不会自动退款或入库。 | 枚举: `PENDING_PICKUP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, EXCEPTION, RETURNED` |
 | `shippedAt` | string | 是 | UTC 时间，ISO 8601；界面按 Asia/Shanghai 展示。 | 格式: `date-time` |
 | `deliveredAt` | string / null | 是 | UTC 时间；未发生时为 null。 | 格式: `date-time` |
 | `lastSyncedAt` | string / null | 是 | UTC 时间；未发生时为 null。 | 格式: `date-time` |
@@ -2729,7 +2731,10 @@ SKU 的规格维度。
 |---|---|---|---|---|
 | `shipment` | object / null | 是 | 一期每笔实物订单一个包裹，全部行一次性发货。 |  |
 | `events` | [LogisticsEvent[]](#logisticsevent) | 是 | 最近物流事件 |  |
-| `syncStatus` | string | 是 | 当前未发货为 NOT_SHIPPED，发货后为 MANUAL；其他值预留外部物流适配器。 | 枚举: `NOT_SHIPPED, MANUAL, UP_TO_DATE, PENDING, FAILED` |
+| `syncStatus` | string | 是 | 未发货、未配置服务、待查询、查询中、查询成功、无轨迹或查询失败；失败时保留已有轨迹。 | 枚举: `NOT_SHIPPED, MANUAL, PENDING, SYNCING, UP_TO_DATE, NO_DATA, FAILED` |
+| `syncErrorCode` | string / null | 是 | 查询失败的稳定错误代码，见物流文档；不包含供应商原文或凭证。 |  |
+| `lastSyncAttemptAt` | string / null | 是 | UTC 时间；未发生时为 null。 | 格式: `date-time` |
+| `nextSyncAt` | string / null | 是 | 最早自动重查时间；终态、超出自动追踪期限、关闭订单或未配置服务时为 null。调度可能延后。 | 格式: `date-time` |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
@@ -2737,7 +2742,10 @@ SKU 的规格维度。
 {
   "shipment": null,
   "events": [],
-  "syncStatus": "NOT_SHIPPED"
+  "syncStatus": "NOT_SHIPPED",
+  "syncErrorCode": null,
+  "lastSyncAttemptAt": null,
+  "nextSyncAt": null
 }
 ```
 
@@ -2752,6 +2760,7 @@ SKU 的规格维度。
 | `carrierCode` | string | 是 | 快递公司代码。 | 最短: `1`；最长: `32` |
 | `trackingNo` | string | 是 | 运单号。 | 最短: `1`；最长: `64` |
 | `orderVersion` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1` |
+| `phoneLast4` | string | 否 | 可选收/寄件人手机号后四位；省略时发货默认使用订单收件手机尾号。查询时按公司要求附加，返回体不回显。 | 正则: `^\d{4}$` |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
@@ -2767,7 +2776,7 @@ SKU 的规格维度。
 <a id="shipmentpatch"></a>
 ## ShipmentPatch
 
-仅 PENDING_PICKUP 且无揽收事件时允许纠错。
+揽收前且无轨迹才可改公司/单号；同一公司/单号可单独纠正查询手机尾号。省略尾号保留旧值，null 恢复使用订单收件手机尾号。需 version 和原因。
 
 | 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
 |---|---|---|---|---|
@@ -2775,6 +2784,7 @@ SKU 的规格维度。
 | `trackingNo` | string | 是 | 运单号。 | 最短: `1`；最长: `64` |
 | `reason` | string | 是 | 纠错原因。 | 最短: `1`；最长: `200` |
 | `version` | integer | 是 | 乐观锁版本；写操作必须提交最近读取的版本。 | 最小: `1` |
+| `phoneLast4` | string / null | 否 | 可选收/寄件人手机号后四位；省略时发货默认使用订单收件手机尾号。查询时按公司要求附加，返回体不回显。 | 正则: `^\d{4}$` |
 
 示例（仅结构示意，不作为可用业务 ID）：
 
@@ -6346,6 +6356,52 @@ ContentFavorite 的分页结果。固定按白名单排序；同值用 id 排序
   "page": 1,
   "pageSize": 20,
   "hasNext": false
+}
+```
+
+
+<a id="logisticscarrier"></a>
+## LogisticsCarrier
+
+平台支持的公司与查询要求；前端应使用此列表。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `code` | string | 是 | 平台快递代码。 |  |
+| `name` | string | 是 | 公司名称。 |  |
+| `phoneLast4Required` | boolean | 是 | 服务商是否要求手机尾号；不传则使用订单地址快照的手机尾号。 |  |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "code": "SF",
+  "name": "顺丰速运",
+  "phoneLast4Required": true
+}
+```
+
+
+<a id="logisticscarriers"></a>
+## LogisticsCarriers
+
+当前支持的快递公司。
+
+| 字段 | 类型 | 必填 | 说明 | 约束／枚举 |
+|---|---|---|---|---|
+| `items` | [LogisticsCarrier[]](#logisticscarrier) | 是 | 公司列表 |  |
+
+示例（仅结构示意，不作为可用业务 ID）：
+
+```json
+{
+  "items": [
+    {
+      "code": "SF",
+      "name": "顺丰速运",
+      "phoneLast4Required": true
+    }
+  ]
 }
 ```
 
